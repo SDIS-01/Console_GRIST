@@ -1855,6 +1855,7 @@ body:not(.mob) .app-nav button.actif{color:#1c2f6b;border-bottom-color:#F5A623;}
 body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo):not(.btn-pf):not(.btn-xlsx){
   background:#fff;color:#1c2f6b;border-color:#c5cfe8;}
 body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo):not(.btn-pf):not(.btn-xlsx):hover{background:#dbe4f7;}
+.fil-impr{margin-left:auto;}
 </style>
 </head>
 <body>
@@ -1887,7 +1888,7 @@ body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo)
     title="Exporter en Excel les échéances en retard et à venir des projets affichés">Échéances (Excel)</button>
   <button class="btn-top" id="btn-vue-mobile" hidden
     title="Revenir à l'affichage adapté au téléphone">📱 Vue mobile</button>
-  <button class="btn-top btn-editions" id="btn-editions" aria-haspopup="true">Éditions ▾</button>
+  <button class="btn-top btn-editions" id="btn-editions" aria-haspopup="true">Admin ▾</button>
   <button class="btn-top" id="btn-actualiser">Actualiser</button>
 </div>
 <div class="menu-editions" id="menu-editions" hidden></div>
@@ -16293,8 +16294,10 @@ function rendreFil(){
       '<span class="fil-chemin">'+esc(nom)+(p?' › <b>'+esc(lire(S.cfg.tblMain,p,S.cfg.colLibelle)||"(sans libellé)")+'</b>':'')+'</span>'+
       '<span class="fil-esp"></span>'+(p?'<div class="fil-sous">'+
       [["fiche","Fiche"],["planning","Planning"],["etats","États"]].map(([k,l])=>
-        '<button type="button" data-fsous="'+k+'" class="'+(APP.ficheSous===k?"actif":"")+'">'+l+'</button>').join("")+'</div>':'');
+        '<button type="button" data-fsous="'+k+'" class="'+(APP.ficheSous===k?"actif":"")+'">'+l+'</button>').join("")+'</div>'+
+        '<button type="button" class="anx-pdf fil-impr" id="fil-impr" title="Note CODIR ou dossier projet ('+(S.cfg.pdfVisible?"PDF · diaporama":"diaporama")+')">🖨 Note CODIR / dossier projet</button>':'');
     $("#fil-retour").onclick=retourDepuisFiche;
+    const bi=$("#fil-impr"); if(bi) bi.onclick=()=>ouvrirImpression();
     f.querySelectorAll("[data-fsous]").forEach(x=>x.onclick=()=>{ APP.ficheSous=x.dataset.fsous; rendreApp(); });
     return;
   }
@@ -16869,10 +16872,7 @@ function menuEditionsHtml(){
     '<span>'+lib+'</span><small>'+detail+'</small></button>';
   const p=S.projetSel;
   const offProjet = APP.vue!=="fiche" || !p ? "Ouvrez d'abord la fiche d'un projet" : "";
-  let h='<div class="ed-t">'+(p&&APP.vue==="fiche"?"Ce projet":"Projet")+'</div>';
-  if(S.cfg.pdfVisible) h+=it("fiche","fiche","Note CODIR ou dossier projet","PDF · diaporama",offProjet);
-  else h+=it("fiche","fiche","Note CODIR ou dossier projet","diaporama",offProjet);
-  h+='<div class="ed-sep"></div><div class="ed-t">Accès protégés</div>'+
+  let h='<div class="ed-t">Accès protégés</div>'+
     it("revues","revues","🔒 Revues (annuelle, P2A…)","mot de passe")+
     it("","reglages-etat","🔒 Réglages de l'état","mot de passe");
   return h;
