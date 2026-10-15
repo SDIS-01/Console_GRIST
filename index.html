@@ -1698,6 +1698,23 @@ body.app-revues .panneau{display:none;}
 .mt-choix{display:inline-flex;align-items:center;gap:6px;color:var(--gris);font-size:12px;}
 .mt-choix select{padding:3px 6px;border:1px solid var(--trait);border-radius:5px;}
 .mt-vu{color:#9a5a12;font-weight:bold;}
+/* Mon travail remplace le bouton Notifications (ordinateur) */
+body:not(.mob) #btn-notif{display:none!important;}
+.nav-badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:#F5A623;color:#3d2600;
+  font-size:11px;line-height:17px;text-align:center;font-weight:bold;}
+.nav-badge[hidden]{display:none;}
+.nav-badge.anime{animation:navPulse 1s ease-in-out 3;}
+@keyframes navPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
+.mt-ident{max-width:640px;margin:0 auto;line-height:1.6;}
+.mt-ident select{padding:4px 6px;border:1px solid var(--trait);border-radius:5px;margin:0 6px;}
+.mt-notif-outils{display:flex;align-items:center;gap:6px;padding:7px 12px;border-bottom:1px solid #eef0f3;}
+.mt-chip{border:1px solid var(--trait);background:#fff;border-radius:14px;padding:3px 10px;font-size:12px;color:var(--gris);cursor:pointer;}
+.mt-chip.on{background:var(--bleu-clair);border-color:#c5cfe8;color:var(--bleu);font-weight:bold;}
+.mt-ic{flex:0 0 22px;height:22px;border-radius:50%;background:var(--bleu-clair);color:var(--bleu);font-size:11px;font-weight:bold;
+  display:flex;align-items:center;justify-content:center;}
+.mt-notif.lu{border-left-color:transparent;opacity:.7;}
+.mt-lu{flex:0 0 auto;border:1px solid var(--trait);background:#fff;border-radius:6px;color:var(--gris);padding:2px 8px;cursor:pointer;}
+.mt-lu:hover{background:var(--bleu-clair);color:var(--bleu);}
 </style>
 </head>
 <body>
@@ -1710,7 +1727,7 @@ body.app-revues .panneau{display:none;}
   <div class="marque">Suivi des projets et actions — SDIS de l'Ain</div>
   <nav class="app-nav" aria-label="Navigation">
     <button type="button" data-vue="portefeuille">Portefeuille</button>
-    <button type="button" data-vue="travail">Mon travail</button>
+    <button type="button" data-vue="travail">Mon travail<span class="nav-badge" id="nav-badge-travail" hidden></span></button>
   </nav>
   <button class="btn-top btn-notif" id="btn-notif" hidden aria-expanded="false" aria-controls="notif-pan"
     aria-label="Notifications" title="Notifications"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"
@@ -3931,6 +3948,7 @@ function majCloche(){
     mb.setAttribute("aria-label",b.getAttribute("aria-label"));
   }
   if(!$("#notif-pan").hidden) rendreNotifs();
+  majBadgeTravail();
 }
 
 const NT_GENRES={
@@ -4291,7 +4309,7 @@ function ouvrirNotif(n){
 const ONGLETS=[["synthese","Synthèse"],["analyse","Analyse"],["strategie","Stratégie"],["actions","Actions"],["taches","Tâches"],
                ["instances","Instances"],["planning","Planning"],
                ["journal","Journal de bord"],["notes","Notes"],
-               ["budget","Budget"],["ressources","Ressources"],["historique","Historique"]];
+               ["budget","Budget"],["ressources","Ressources"]];
 
 /* table des fonctions de rendu, partagée par l'affichage et l'impression */
 const VUES={};   // remplie plus bas, une fois les fonctions vueXxx déclarées
@@ -5252,7 +5270,7 @@ function recapHtml(p){
            (delai?'<div class="recap-delai">Délai d\'exécution : '+esc(delai)+'</div>':'')+'</div>';
   });
   const auteur=[...new Set(lot.map(h=>auteurHm(p,h)).filter(Boolean))].join(", ");
-  return '<div class="recap-modifs" title="Détail dans l\'onglet Historique">'+
+  return '<div class="recap-modifs" title="Détail dans la table d\'historique de Grist">'+
     '<div class="recap-tete">Le '+esc(dateHm(lot[0]).replace(" "," à "))+(auteur?' — '+esc(auteur):'')+'</div>'+
     entrees.join("")+'</div>';
 }
@@ -16063,8 +16081,10 @@ function rendreFil(){
     const agents=(S.data.agents||[]).filter(a=>nomAgent(a)).sort((a,b)=>nomAgent(a).localeCompare(nomAgent(b),"fr"));
     let h = vu
       ? '<b>Travail de '+esc(nomAgent(vu))+'</b><span class="fil-chemin mt-vu">👁 vue d\'un autre agent</span>'
-      : '<b>Mon travail</b>'+(moi?'<span class="fil-chemin">— '+esc(nomAgent(moi))+'</span>':'');
+      : '<b>Mon travail</b>'+(moi?'<span class="fil-chemin">— '+esc(nomAgent(moi))+'</span>'+
+          (S.agentParCompte?'':'<button type="button" class="fil-lien" id="mt-changer">Ce n\'est pas vous ?</button>'):'');
     h+='<span class="fil-esp"></span>';
+    if(notifsPossibles()) h+='<button type="button" class="fil-lien" id="mt-recap" title="Notifications non lues de tous les agents, remise à zéro">🔒 Récapitulatif administrateur</button>';
     if(APP.choixAgent || vu){
       h+='<label class="mt-choix">Voir comme <select id="mt-agent"><option value="">— choisir un agent —</option>'+
         agents.map(a=>'<option value="'+a.id+'"'+(vu&&vu.id===a.id?' selected':'')+'>'+esc(nomAgent(a))+'</option>').join("")+'</select></label>';
@@ -16073,6 +16093,13 @@ function rendreFil(){
       h+='<button type="button" class="fil-lien" id="mt-voir">🔒 Voir comme un autre agent</button>';
     }
     f.innerHTML=h;
+    const ch=$("#mt-changer");
+    if(ch) ch.onclick=()=>{ lsEcrire(NT_AGENT,""); calculerNotifs(); rendreApp(); };
+    const rc=$("#mt-recap");
+    if(rc) rc.onclick=async()=>{
+      if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
+      ouvrirRecapNotifs();
+    };
     const bv=$("#mt-voir");
     if(bv) bv.onclick=async()=>{
       if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
@@ -16178,9 +16205,19 @@ function rendreTravail(){
   const autre=!!APP.agentVu;
   const ag=APP.agentVu||S.notifAgent||agentCourant();
   if(!ag){
-    z.innerHTML='<div class="app-vide">Indiquez qui vous êtes pour retrouver vos projets, actions et tâches.<br><br>'+
-      '<button class="btn" id="mt-qui">Choisir mon nom</button></div>';
-    $("#mt-qui").onclick=()=>ouvrirNotifs();
+    const agents=(S.data.agents||[]).slice().sort((a,b)=>nomAgent(a).localeCompare(nomAgent(b),"fr"));
+    z.innerHTML='<div class="app-vide mt-ident"><p>'+(S.moiEmail
+        ? 'Votre compte (<b>'+esc(S.moiEmail)+'</b>) n\'est rattaché à aucun agent. Renseignez-le dans la colonne « '+
+          esc(c.colAgentCompte||"Compte_Grist")+' » de la table des agents, ou indiquez qui vous êtes :'
+        : 'La console n\'a pas pu reconnaître votre compte Grist. Indiquez qui vous êtes :')+'</p>'+
+      '<label>Je suis <select id="mt-moi"><option value="">Choisir…</option>'+
+      agents.map(a=>'<option value="'+a.id+'">'+esc(nomAgent(a)||"(sans nom)")+'</option>').join("")+'</select></label> '+
+      '<button class="btn" id="mt-moi-ok">Valider</button></div>';
+    $("#mt-moi-ok").onclick=()=>{
+      const v=$("#mt-moi").value;
+      if(!v){ toast("Choisissez votre nom.",true); return; }
+      lsEcrire(NT_AGENT,v); calculerNotifs(); rendreApp();
+    };
     return;
   }
   const M=autre?"Ses ":"Mes ";
@@ -16209,8 +16246,12 @@ function rendreTravail(){
     bloc(M+"actions en cours",acts.length,acts,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
     bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
     (dem.length?bloc("Demandes du journal",dem.length,dem,(n,i)=>it(n,i,dateHtml(n.ech))):"")+
-    bloc("Notifications",autre?nl.length+" en cours":nl.length+" non lue"+(nl.length>1?"s":""),nl,(n,i)=>'<div class="mt-it mt-notif" data-i="'+i+'" data-notif="1"><div class="mt-x">'+esc(n.lib||"")+'<small>'+esc(lire(c.tblMain,n.p,c.colLibelle))+'</small></div></div>')+
+    carteNotifs(ag,autre,nl,tous)+
   '</div>';
+  const ntout=$("#mt-tout-lu");
+  if(ntout) ntout.onclick=()=>{ const k=nl.length; marquerLues(nl); toast(k+" notification"+(k>1?"s":"")+" marquée"+(k>1?"s":"")+" comme lue"+(k>1?"s":"")); };
+  z.querySelectorAll("[data-mtf]").forEach(b=>b.onclick=()=>{ APP.filtreNotifs=b.dataset.mtf; rendreTravail(); });
+  z.querySelectorAll("[data-mtlu]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const n=tous[Number(b.dataset.mtlu)]; if(n) marquerLues([n]); });
   z.querySelectorAll(".mt-it").forEach(e=>e.onclick=()=>{
     const n=tous[Number(e.dataset.i)];
     if(!n) return;
@@ -16218,6 +16259,45 @@ function rendreTravail(){
     ouvrirFiche(n.p, n.genre==="projet"?null:(n.genre==="journal"?"journal":"actions"));
     if(n.genre==="action" && n.a) setTimeout(()=>{ try{ ouvrirFenetreAction(n.a.id); }catch(err){} },50);
   });
+}
+
+/* carte « Notifications » de Mon travail (remplace le bouton de la barre) */
+function carteNotifs(ag,autre,nl,tous){
+  const c=S.cfg;
+  const filtre=autre ? "toutes" : (APP.filtreNotifs||"nonlues");
+  const toutes=autre ? nl : (S.notifs||[]);
+  const xs=(filtre==="nonlues" ? nl : toutes).slice().sort((a,b)=>(a.ech||9e12)-(b.ech||9e12));
+  const lues=autre ? new Set() : notifsLues();
+  let h='<div class="mt-carte mt-carte-notifs"><h3>Notifications<span>'+
+    (autre ? toutes.length+" en cours" : nl.length+" non lue"+(nl.length>1?"s":""))+'</span></h3>';
+  if(!autre){
+    h+='<div class="mt-notif-outils">'+[["nonlues","Non lues",nl.length],["toutes","Toutes",toutes.length]].map(([k,l,n])=>
+      '<button type="button" class="mt-chip'+(filtre===k?" on":"")+'" data-mtf="'+k+'">'+l+' <b>'+n+'</b></button>').join("")+
+      '<span class="fil-esp"></span><button type="button" class="fil-lien" id="mt-tout-lu"'+(nl.length?"":" disabled")+'>Tout marquer comme lu</button></div>';
+  }
+  if(!xs.length) h+='<div class="mt-vide">'+(filtre==="nonlues"?"Rien de nouveau.":"Aucune notification.")+'</div>';
+  xs.slice(0,30).forEach(n=>{
+    tous.push(n); const i=tous.length-1;
+    const g=NT_GENRES[n.genre]||{phrase:"",ic:"•"}, e=etatNotif(n.ech), lu=lues.has(n.cle);
+    const texte=(n.lib||"").length>140?(n.lib||"").slice(0,140)+"…":(n.lib||"");
+    h+='<div class="mt-it mt-notif'+(lu?" lu":"")+'" data-i="'+i+'" data-notif="1"><span class="mt-ic">'+g.ic+'</span><div class="mt-x">'+
+      (n.genre==="journal" ? '<b>Désigné dans le journal</b> · '+esc(texte||"(entrée sans commentaire)") : esc(texte||"(sans libellé)"))+
+      '<small>'+esc(lire(c.tblMain,n.p,c.colLibelle))+(n.a&&n.genre!=="action"?' · '+esc(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte):'')+
+      (e?' · <span class="'+(e.k==="depasse"?"app-ret":"")+'">'+esc(e.t)+'</span>':'')+'</small></div>'+
+      (!autre && !lu ? '<button type="button" class="mt-lu" data-mtlu="'+i+'" title="Marquer comme lu">✓</button>' : '')+'</div>';
+  });
+  return h+'</div>';
+}
+/* pastille du nombre de non-lues sur l'onglet Mon travail ; elle s'anime une fois par session */
+function majBadgeTravail(){
+  const b=$("#nav-badge-travail");
+  if(!b) return;
+  const n=(notifsPossibles() && S.notifAgent) ? nonLues().length : 0;
+  b.hidden=!n;
+  b.textContent=n>99?"99+":String(n);
+  const nav=b.closest("button");
+  if(nav) nav.title=n ? n+" notification"+(n>1?"s":"")+" non lue"+(n>1?"s":"") : "";
+  if(n && !APP.badgeAnime){ APP.badgeAnime=true; b.classList.add("anime"); setTimeout(()=>b.classList.remove("anime"),4000); }
 }
 
 /* ---------- modules (planning, état, revue) ---------- */
