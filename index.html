@@ -1814,6 +1814,30 @@ body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!impo
 .anx-pop-liste label[hidden]{display:none;}
 .anx-pop-pied{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #eef0f3;padding-top:7px;margin-top:6px;}
 .mt-anx-tout{display:block;padding:8px 12px;text-align:left;}
+/* onglet États simplifié */
+.et-outils{display:flex;align-items:center;gap:8px;padding:10px 16px;flex-wrap:wrap;}
+.et-lab{color:#6b7484;font-size:12px;}
+.et-outils select{padding:4px 8px;border:1px solid var(--trait);border-radius:6px;background:#fff;}
+.et-kpi{border-bottom:0;padding-top:0;}
+.et-rep{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:0 16px;}
+.et-leg{font-size:11px;color:#6b7484;margin:5px 16px 10px;}
+.et-leg i{display:inline-block;width:8px;height:8px;margin:0 4px 0 10px;vertical-align:0;}
+.et-leg i:first-child{margin-left:0;}
+.et-defil{overflow:auto;}
+.et-table td{font-size:12px;}
+.et-grp td{background:#eef1f6;font-weight:bold;border-top:2px solid #c5cfe8;cursor:default;}
+.et-grp small{font-weight:normal;color:#6b7484;margin-left:8px;}
+.et-projet .et-lib{font-weight:bold;color:#1c2330;}
+.et-chev{display:inline-block;width:14px;color:#9aa3b2;cursor:pointer;}
+.et-action .et-lib{padding-left:34px;color:#3c4a6b;}
+.et-tache .et-lib{padding-left:54px;color:#6b7484;}
+.et-t{font-size:10px;font-weight:bold;text-transform:uppercase;color:#6b7484;margin-right:6px;}
+.et-pop label{display:flex;gap:7px;align-items:center;padding:4px 2px;}
+.et-pop select{width:100%;padding:4px;border:1px solid var(--trait);border-radius:5px;}
+.et-pop-t{font-size:11px;font-weight:bold;text-transform:uppercase;color:#6b7484;margin-bottom:4px;}
+.et-pop-l{font-size:11.5px;color:#6b7484;margin:6px 0 3px;}
+.anx-cliquable{cursor:pointer!important;}
+.anx-cliquable:hover td{background:var(--bleu-survol)!important;}
 </style>
 </head>
 <body>
@@ -1881,6 +1905,14 @@ body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!impo
           <button type="button" class="msel-btn"></button>
           <div class="msel-pan" hidden></div>
         </div>
+        <div class="msel" id="m-origine" hidden>
+          <button type="button" class="msel-btn"></button>
+          <div class="msel-pan" hidden></div>
+        </div>
+        <div class="msel" id="m-service" hidden>
+          <button type="button" class="msel-btn"></button>
+          <div class="msel-pan" hidden></div>
+        </div>
         <div class="msel" id="m-avct">
           <button type="button" class="msel-btn"></button>
           <div class="msel-pan" hidden></div>
@@ -1917,6 +1949,7 @@ body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!impo
       <div id="zone-planning" class="zone-mod" hidden></div>
       <div id="zone-etats" class="zone-mod" hidden></div>
       <div id="zone-annexes" class="zone-app" hidden></div>
+      <div id="zone-etats-app" class="zone-app" hidden></div>
       <div id="zone-revues" class="zone-mod" hidden></div>
     </div>
     <div id="entete" class="entete"></div>
@@ -3500,6 +3533,8 @@ const MENUS={
   "m-porteur":{tous:"Tous porteurs", sel:[], opts:[]},
   "m-priorite":{tous:"Toutes priorités", sel:[], opts:[]},
   "m-millesime":{tous:"Millésimes P2A", sel:[], opts:[]},
+  "m-origine":{tous:"Toutes origines", sel:[], opts:[]},
+  "m-service":{tous:"Tous services", sel:[], opts:[]},
   "m-etat":{tous:"Tous états", sel:[], opts:[
     ["encours","En cours"],["termine","Terminés"],["afaire","À engager"],["interrompu","Interrompus"]]},
   "m-avct":{tous:"Tout avancement", sel:[], opts:[
@@ -3527,7 +3562,7 @@ function majEtiquetteMenu(id){
   else btn.textContent=court+" ▾";
 }
 const MENUS_COURTS={"m-groupement":"Groupement","m-sponsor":"Sponsor CODIR","m-porteur":"Porteur","m-priorite":"Priorité",
-  "m-etat":"État","m-millesime":"Millésime P2A","m-avct":"Avancement"};
+  "m-etat":"État","m-millesime":"Millésime P2A","m-avct":"Avancement","m-origine":"Origine","m-service":"Service"};
 
 function rendreMenu(id){
   const m=MENUS[id], wrap=$("#"+id);
@@ -3703,6 +3738,14 @@ function remplirFiltres(){
   MENUS["m-millesime"].opts=trierMillesimes([...new Set(ps.flatMap(p=>[...millesimesProjet(p)]))]).map(v=>[v,v]);
   MENUS["m-millesime"].sel=MENUS["m-millesime"].sel.filter(v=>MENUS["m-millesime"].opts.some(o=>o[0]===v));
   const wm=$("#m-millesime"); if(wm) wm.hidden=!c.colMillesime;
+  /* Origine : celle du projet ; Service : celui du projet ou de ses actions */
+  const co=colOrigineApp(), cs=colServiceApp();
+  MENUS["m-origine"].opts=co?uniq(p=>lire(c.tblMain,p,co)).map(v=>[v,v]):[];
+  MENUS["m-origine"].sel=MENUS["m-origine"].sel.filter(v=>MENUS["m-origine"].opts.some(o=>o[0]===v));
+  MENUS["m-service"].opts=cs?[...new Set(ps.flatMap(p=>servicesProjetApp(p)))].sort((a,b)=>a.localeCompare(b,"fr")).map(v=>[v,v]):[];
+  MENUS["m-service"].sel=MENUS["m-service"].sel.filter(v=>MENUS["m-service"].opts.some(o=>o[0]===v));
+  const wo=$("#m-origine"); if(wo) wo.hidden=!MENUS["m-origine"].opts.length;
+  const wsv=$("#m-service"); if(wsv) wsv.hidden=!MENUS["m-service"].opts.length;
   Object.keys(MENUS).forEach(rendreMenu);
 }
 
@@ -3754,6 +3797,9 @@ function projetsFiltres(){
       if(!mi.some(v=>ms.has(v))) return false;
     }
     if(et.length && !et.includes(etatDe(p))) return false;
+    const fo=MENUS["m-origine"].sel, fsv=MENUS["m-service"].sel;
+    if(fo.length && !fo.includes(lire(c.tblMain,p,colOrigineApp()))) return false;
+    if(fsv.length && !servicesProjetApp(p).some(v=>fsv.includes(v))) return false;
     const a=pct(p[c.colAvancement]);
     if(av.length && !av.some(code=>dansTranche(a,code))) return false;
     if(ecDu!==null || ecAu!==null){
@@ -9537,12 +9583,13 @@ function bdgTableauHtml(){
    13 px de marge et 1 px de bordure : 54 px en tout. Réglage propre au poste. */
 const BDG_ECRANS=[[360,"360 px (Android)"],[390,"390 px (iPhone)"],[412,"412 px (Android grand)"],[430,"430 px (iPhone Max)"]];
 const BDG_MARGE_MOBILE=54;
+let BDG_REPERE_ON=false;   // allumé pour la session seulement
 function bdgRepere(){
   try{ const o=JSON.parse(localStorage.getItem("cp-bdg-repere")||"{}");
-       return {on:!!o.on, l:BDG_ECRANS.some(e=>e[0]===o.l)?o.l:390}; }
-  catch(e){ return {on:false,l:390}; }
+       return {on:BDG_REPERE_ON, l:BDG_ECRANS.some(e=>e[0]===o.l)?o.l:390}; }
+  catch(e){ return {on:BDG_REPERE_ON,l:390}; }
 }
-function bdgRepereEnr(o){ try{ localStorage.setItem("cp-bdg-repere",JSON.stringify(o)); }catch(e){} }
+function bdgRepereEnr(o){ BDG_REPERE_ON=!!o.on; try{ localStorage.setItem("cp-bdg-repere",JSON.stringify({l:o.l})); }catch(e){} }
 function bdgPlacerRepere(racine){
   const rep=racine.querySelector(".bdg-repere"), ed=racine.querySelector("#bdg-ed");
   if(!rep||!ed) return;
@@ -16137,6 +16184,7 @@ function allerVue(vue,sous){
   /* quitter « Mon travail » (autrement que pour une fiche) referme la vue d'un autre agent */
   if(vue!=="travail"){ APP.agentVu=null; APP.choixAgent=false; }
   if(vue!=="fiche") APP.ficheSous="fiche";
+  if(sous && sous!=="etats" && APP.etat) APP.etat.avance=false;
   APP.vue=vue;
   if(sous) APP.sous=sous;
   rendreApp();
@@ -16174,7 +16222,7 @@ function rendreApp(){
     }
     /* planning ou état du seul projet ouvert */
     va.hidden=false;
-    ["liste","travail","planning","etats","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
+    ["liste","travail","planning","etats","etats-app","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
     $("#kpi-app").hidden=true;
     if(APP.ficheSous==="planning"){ $("#zone-planning").hidden=false; chargerModule("planning"); }
     else { $("#zone-etats").hidden=false; chargerModule("etat"); }
@@ -16183,13 +16231,14 @@ function rendreApp(){
     return;
   }
   va.hidden=false;
-  ["liste","travail","planning","etats","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
+  ["liste","travail","planning","etats","etats-app","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
   $("#kpi-app").hidden=true;
   if(APP.vue==="travail") $("#zone-travail").hidden=false;
   else if(APP.vue==="revues") $("#zone-revues").hidden=false;
   else if(APP.sous==="liste"){ $("#kpi-app").hidden=false; $("#zone-liste").hidden=false; }
   else if(APP.sous==="planning"){ $("#kpi-app").hidden=false; $("#zone-planning").hidden=false; chargerModule("planning"); }
   else if(APP.sous==="annexes"){ $("#zone-annexes").hidden=false; }
+  else if(!APP.etat.avance){ $("#zone-etats-app").hidden=false; }
   else { $("#zone-etats").hidden=false; chargerModule("etat"); }
   rendreListe();          // compteur, cloche ; puis rafraichirVueApp() dessine la vue active
 }
@@ -16260,6 +16309,10 @@ function rendreFil(){
     [["liste","Liste"],["planning","Planning"],["etats","États"],["annexes","MEC · PAPRIPACT"]].map(([k,l])=>
       '<button type="button" data-sous="'+k+'" class="'+(APP.sous===k?"actif":"")+'">'+l+'</button>').join("")+'</div>';
   f.querySelectorAll("[data-sous]").forEach(x=>x.onclick=()=>allerVue("portefeuille",x.dataset.sous));
+  if(APP.sous==="etats" && APP.etat && APP.etat.avance){
+    const b=document.createElement("button"); b.type="button"; b.className="fil-lien"; b.id="et-simple"; b.textContent="← Vue simplifiée de l'état";
+    f.appendChild(b); b.onclick=()=>{ APP.etat.avance=false; rendreApp(); };
+  }
 }
 
 /* ---------- chiffres-clés ---------- */
@@ -16667,6 +16720,7 @@ function rafraichirVueApp(){
   if(APP.vue==="portefeuille"){
     if(APP.sous==="liste") rendreListeApp();
     else if(APP.sous==="annexes") rendreAnnexes();
+    else if(APP.sous==="etats" && !APP.etat.avance) rendreEtatsApp();
     else if(APP.sous==="planning") rendreKpi(projetsFiltres());
   } else if(APP.vue==="travail") rendreTravail();
   notifierModules();   // planning et état déjà chargés suivent les filtres, même masqués
@@ -17239,8 +17293,8 @@ async function rendreAnnexes(){
 }
 
 /* ---------- sous la liste des projets, quand un groupement ou un sponsor est filtré ---------- */
-async function annexesSousListe(){
-  const zl=$("#zone-liste");
+async function annexesSousListe(cont){
+  const zl=cont||$("#zone-liste");
   const f=anxFiltres();
   if(!f.g.length && !f.sp.length) return;
   const d=document.createElement("div"); d.id="liste-annexes"; d.className="anx-sous-liste";
@@ -17262,6 +17316,12 @@ async function annexesSousListe(){
       d._anx=d._anx||{}; d._anx[fam]={T,sec,idx};
     });
     d.innerHTML=h;
+    /* clic sur une ligne : onglet MEC · PAPRIPACT correspondant (mêmes filtres) */
+    d.querySelectorAll(".anx-bloc").forEach((bl,k)=>{
+      const fam=Object.keys(d._anx||{})[k];
+      bl.querySelectorAll(".anx-table tbody tr").forEach(tr=>{ tr.classList.add("anx-cliquable"); tr.title="Ouvrir dans l'onglet MEC · PAPRIPACT";
+        tr.onclick=()=>{ ANX.onglet=fam; APP.retour=null; allerVue("portefeuille","annexes"); }; });
+    });
     d.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=()=>{ toast("Préparation de l'état…"); anxImprimer(b.dataset.pdf).catch(e=>toast("État PDF impossible : "+e.message,true)); });
     d.querySelectorAll("[data-xl]").forEach(b=>b.onclick=()=>{ const o=d._anx[b.dataset.xl];
       anxExporter(o.T,o.sec,o.idx,ANX_FAMILLES[b.dataset.xl].titre).catch(e=>toast("Export impossible : "+e.message,true)); });
@@ -17324,6 +17384,184 @@ async function annexesMonTravail(ag, grille){
   }catch(e){
     cartes.forEach(d=>{ if(d.isConnected) d.querySelector(".mt-vide") && (d.querySelector(".mt-vide").textContent="Lignes du groupement indisponibles : "+e.message); });
   }
+}
+
+/* =======================================================================
+   Onglet États simplifié : présentation de la Liste (projets, actions MEO,
+   tâches), filtres de la barre du haut, MEC 2023 / PAPRIPACT en bas.
+   Les éditions (PDF, PDF tous, Excel) restent produites par le moteur de
+   l'état, chargé en arrière-plan et réglé sur les filtres de la console.
+   La vue complète de l'état reste accessible (options avancées).
+   ======================================================================= */
+APP.etat={grp:"porteur", meo:false, taches:false, ouverts:new Set(), avance:false,
+  opts:{rappel:true, termine:false, interrompu:false, perimetre:"implication"}};
+
+/* colonnes Origine et Service de la table principale (si elles existent) */
+function colOrigineApp(){ const c=S.cfg; return ["Origine"].find(k=>infoCol(c.tblMain,k))||""; }
+function colServiceApp(){ const c=S.cfg; return ["Service","Service_Porteur"].find(k=>infoCol(c.tblMain,k))||""; }
+function servicesProjetApp(p){
+  const cs=colServiceApp(); if(!cs) return [];
+  const c=S.cfg;
+  return [...new Set([p].concat(actionsDe(p)).map(x=>txt(lire(c.tblMain,x,cs)).trim()).filter(Boolean))];
+}
+
+/* ---------- présentation ---------- */
+function etStatutHtml(texte, av, inter){
+  const t=texte || (inter?"Interrompu":av>=100?"Terminé":av>0?"En cours":"À engager");
+  const k=inter?"gris":av>=100?"vert":av>0?"orange":"rouge";
+  const c={vert:["#4E7D2A","#9BBB59"],orange:["#A2551A","#F79646"],rouge:["#C0504D","#C0504D"],gris:["#55554F","#9A948E"]}[k];
+  return '<span class="anx-st" style="color:'+c[0]+'"><i style="background:'+c[1]+'"></i>'+esc(t)+'</span>';
+}
+function etBarre(a){
+  const coul=a==null?"#e8ecf2":a>=76?"#9BBB59":a>=26?"#FFCC00":a>=1?"#F79646":"#C0504D";
+  return '<div class="app-av"><div class="app-av-b"><i style="width:'+Math.max(0,Math.min(100,a||0))+'%;background:'+coul+'"></i></div><span>'+(a==null?"–":a+" %")+'</span></div>';
+}
+function etEch(t, fini){
+  if(!t) return "";
+  return '<span class="'+(t<aujourdHuiUTC()&&!fini?"app-ret":"")+'">'+dateVersFR(t)+'</span>';
+}
+function etLigneMain(r, genre, p){
+  const c=S.cfg, co=colOrigineApp(), cs=colServiceApp();
+  const a=pct(r[c.colAvancement]), inter=interrompu(r), e=Number(r[c.colEch])||null;
+  const ouvert=APP.etat.ouverts.has(p.id) || APP.etat.meo || APP.etat.taches;
+  let lib;
+  if(genre==="projet"){
+    const n=actionsDe(p).length+etNbTaches(p);
+    lib='<span class="et-chev" data-chev="'+p.id+'">'+(n?(ouvert?"▾":"▸"):"")+'</span>'+libelleProjetHtml(lire(c.tblMain,r,c.colLibelle));
+  } else {
+    const d=decouperLibelleAction(lire(c.tblMain,r,c.colActKey)||lire(c.tblMain,r,c.colLibelle));
+    const d2=d.num?d:decouperLibelleAction(lire(c.tblMain,r,c.colLibelle));
+    lib='<span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(d2.num?d2.texte:lire(c.tblMain,r,c.colLibelle));
+  }
+  return '<tr class="et-'+genre+'" data-p="'+p.id+'"'+(genre==="action"?' data-a="'+r.id+'"':'')+'><td class="et-lib">'+lib+'</td>'+
+    '<td>'+esc(natureDe(r))+'</td><td>'+esc(c.colMillesime?lire(c.tblMain,r,c.colMillesime):"")+'</td>'+
+    '<td>'+esc(co?lire(c.tblMain,r,co):"")+'</td><td>'+esc(cs?lire(c.tblMain,r,cs):"")+'</td>'+
+    '<td>'+esc(lire(c.tblMain,r,c.colPorteur))+'</td>'+
+    '<td>'+etStatutHtml(lire(c.tblMain,r,c.colStatut),a,inter)+'</td><td>'+etBarre(a)+'</td><td>'+etEch(e,a>=100||inter)+'</td></tr>';
+}
+function etNbTaches(p){ try{ return tachesDe(p).length+actionsDe(p).reduce((s,a)=>s+tachesDe(a).length,0); }catch(e){ return 0; } }
+function etLigneTache(t, p){
+  const c=S.cfg;
+  const a=pct(t[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,t,c.colTacheStatut), e=Number(t[c.colTacheFin])||null;
+  return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+'</td>'+
+    '<td></td><td></td><td></td><td></td><td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td>'+
+    '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",a||0,inter)+'</td><td>'+(a==null?"":etBarre(a))+'</td><td>'+etEch(e,a>=100||inter)+'</td></tr>';
+}
+
+function rendreEtatsApp(){
+  const z=$("#zone-etats-app"); if(!z) return;
+  const c=S.cfg, E=APP.etat, ps=projetsFiltres();
+  /* chiffres-clés et répartition */
+  let nbA=0, nbT=0; const rep={rouge:0,orange:0,vert:0,gris:0};
+  const classe=(a,inter)=>inter?"gris":a>=100?"vert":a>0?"orange":"rouge";
+  ps.forEach(p=>{
+    rep[classe(pct(p[c.colAvancement]),interrompu(p))]++;
+    actionsDe(p).forEach(a=>{ nbA++; rep[classe(pct(a[c.colAvancement]),interrompu(a))]++; });
+    let ts=[]; try{ ts=tachesDe(p).concat(...actionsDe(p).map(a=>tachesDe(a))); }catch(e){}
+    ts.forEach(t=>{ nbT++; rep[classe(pct(t[c.colTacheAvancement]),statutInterrompu(c.tblTache,t,c.colTacheStatut))]++; });
+  });
+  const tot=rep.rouge+rep.orange+rep.vert+rep.gris||1;
+  const sponsorFiltre=(MENUS["m-sponsor"]||{sel:[]}).sel.length>0;
+  /* regroupement */
+  const cleGrp=p=>E.grp==="porteur"?(lire(c.tblMain,p,c.colPorteur)||"Sans porteur"):E.grp==="groupement"?(lire(c.tblMain,p,c.colGroupement)||"Sans groupement"):"";
+  const groupes=new Map();
+  [...ps].sort((a,b)=>(Number(a[c.colEch])||9e12)-(Number(b[c.colEch])||9e12)).forEach(p=>{ const k=cleGrp(p); if(!groupes.has(k)) groupes.set(k,[]); groupes.get(k).push(p); });
+  const cles=[...groupes.keys()].sort((a,b)=>a.localeCompare(b,"fr"));
+  let corps="";
+  cles.forEach(k=>{
+    const l=groupes.get(k);
+    if(E.grp){
+      const na=l.reduce((s,p)=>s+actionsDe(p).length,0);
+      corps+='<tr class="et-grp"><td colspan="9">'+esc(k)+'<small>'+l.length+' projet'+(l.length>1?"s":"")+(na?' · '+na+' action'+(na>1?"s":""):"")+'</small></td></tr>';
+    }
+    l.forEach(p=>{
+      corps+=etLigneMain(p,"projet",p);
+      const ouvert=E.ouverts.has(p.id), voirA=E.meo||ouvert, voirT=E.taches||ouvert;
+      let tp=[]; try{ tp=tachesDe(p); }catch(e){}
+      if(voirT) tp.forEach(t=>{ corps+=etLigneTache(t,p); });
+      if(voirA || voirT) actionsDe(p).forEach(a=>{
+        if(voirA) corps+=etLigneMain(a,"action",p);
+        if(voirT){ let ta=[]; try{ ta=tachesDe(a); }catch(e){} ta.forEach(t=>{ corps+=etLigneTache(t,p); }); }
+      });
+    });
+  });
+  const chip=(k,l)=>'<button type="button" class="mt-chip'+(E[k]?" on":"")+'" data-etchip="'+k+'">'+(E[k]?"☑":"☐")+' '+l+'</button>';
+  z.innerHTML=
+    '<div class="et-outils"><span class="et-lab">Regrouper par</span><select id="et-grp">'+
+      [["porteur","Porteur"],["groupement","Groupement"],["","Aucun"]].map(([v,l])=>'<option value="'+v+'"'+(E.grp===v?" selected":"")+'>'+l+'</option>').join("")+'</select>'+
+      chip("meo","Actions MEO")+chip("taches","Tâches")+
+      '<span class="fil-esp"></span>'+
+      '<button type="button" class="fil-lien" id="et-opts">⚙ Options d\'édition ▾</button>'+
+      '<button type="button" class="anx-pdf" id="et-pdf">🖨 État PDF</button>'+
+      '<button type="button" class="anx-pdf" id="et-pdf-tous">PDF tous '+(sponsorFiltre?"sponsors":"groupements")+'</button>'+
+      '<button type="button" class="anx-xl" id="et-xl">⬇ Excel</button>'+
+      '<button type="button" class="anx-pdf" id="et-xl-tous">Excel tous</button></div>'+
+    '<div class="kpi-app et-kpi"><div><b>'+ps.length+'</b><span>projets</span></div><div><b>'+nbA+'</b><span>actions MEO</span></div><div><b>'+nbT+'</b><span>tâches</span></div></div>'+
+    '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([k])=>rep[k]).map(([k,col])=>'<i style="flex:'+rep[k]+';background:'+col+'"></i>').join("")+'</div>'+
+    '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([k])=>rep[k]).map(([k,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[k]).join("")+'</div>'+
+    (ps.length ? '<div class="et-defil"><table class="app-table et-table"><thead><tr><th>Projet / action / tâche</th><th>Nat.</th><th>P2A</th><th>Origine</th><th>Service</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Échéance</th></tr></thead><tbody>'+corps+'</tbody></table></div>'
+               : '<div class="app-vide">Aucun projet ne correspond aux filtres.</div>');
+  /* interactions */
+  $("#et-grp").onchange=e=>{ E.grp=e.target.value; rendreEtatsApp(); };
+  z.querySelectorAll("[data-etchip]").forEach(b=>b.onclick=()=>{ E[b.dataset.etchip]=!E[b.dataset.etchip]; rendreEtatsApp(); });
+  z.querySelectorAll("[data-chev]").forEach(s=>s.onclick=ev=>{ ev.stopPropagation(); const id=Number(s.dataset.chev);
+    if(E.ouverts.has(id)) E.ouverts.delete(id); else E.ouverts.add(id); rendreEtatsApp(); });
+  z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>{
+    const p=S.data.main.find(r=>r.id===Number(tr.dataset.p));
+    ouvrirFiche(p, tr.dataset.a?"actions":(tr.classList.contains("et-tache")?"taches":null));
+  });
+  $("#et-opts").onclick=e=>{ e.stopPropagation(); etPopupOptions(e.currentTarget); };
+  const lancer=(fn,msg)=>{ toast(msg); fn().catch(er=>toast("Édition impossible : "+er.message,true)); };
+  $("#et-pdf").onclick=()=>lancer(()=>etImprimer(false),"Préparation de l'état…");
+  $("#et-pdf-tous").onclick=()=>lancer(()=>etImprimer(true),"Préparation de l'état complet…");
+  $("#et-xl").onclick=()=>lancer(()=>etExcel(false),"Préparation du fichier Excel…");
+  $("#et-xl-tous").onclick=()=>lancer(()=>etExcel(true),"Préparation du fichier Excel complet…");
+  /* MEC 2023 et PAPRIPACT rattachés, comme sous la Liste */
+  if(typeof annexesSousListe==="function") annexesSousListe(z);
+}
+
+/* réglages transmis à l'état : filtres de la console + options d'édition */
+function etOptionsEtat(){
+  const c=S.cfg, E=APP.etat, un=id=>(MENUS[id]&&MENUS[id].sel.length===1)?MENUS[id].sel[0]:"";
+  return Object.assign({}, E.opts, {
+    g:MENUS["m-groupement"].sel.slice(), sp:(MENUS["m-sponsor"]||{sel:[]}).sel.slice(),
+    porteur:un("m-porteur"), origine:un("m-origine"), service:un("m-service"), recherche:$("#q").value.trim()
+  });
+}
+async function etImprimer(tous){
+  const w=await anxEtatPret();
+  if(!w.htmlEtatConsole) throw new Error("état trop ancien");
+  const html=w.htmlEtatConsole(etOptionsEtat(), tous);
+  if(!html) throw new Error("rien à imprimer");
+  const fr=document.createElement("iframe");
+  fr.style.cssText="position:fixed;left:-12000px;top:0;width:1120px;height:800px;border:0;";
+  document.body.appendChild(fr);
+  fr.onload=()=>{ setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast("Impression impossible : "+e.message,true); }
+    setTimeout(()=>fr.remove(),60000); },200); };
+  fr.srcdoc=html;
+}
+async function etExcel(tous){
+  const w=await anxEtatPret();
+  if(!w.excelEtatConsole) throw new Error("état trop ancien");
+  w.excelEtatConsole(etOptionsEtat(), tous);
+}
+function etPopupOptions(bouton){
+  document.querySelectorAll(".anx-pop").forEach(x=>x.remove());
+  const O=APP.etat.opts;
+  const pop=document.createElement("div"); pop.className="anx-pop et-pop";
+  pop.innerHTML='<div class="et-pop-t">Options d\'édition (PDF / Excel)</div>'+
+    '<label><input type="checkbox" data-o="rappel"'+(O.rappel?" checked":"")+'> Rappel des définitions en tête</label>'+
+    '<label><input type="checkbox" data-o="termine"'+(O.termine?" checked":"")+'> Inclure les éléments terminés</label>'+
+    '<label><input type="checkbox" data-o="interrompu"'+(O.interrompu?" checked":"")+'> Inclure les éléments interrompus</label>'+
+    '<div class="et-pop-l">Périmètre (groupement)</div><select data-o="perimetre"><option value="implication"'+(O.perimetre==="implication"?" selected":"")+'>Tout ce qui implique le groupement</option>'+
+    '<option value="portage"'+(O.perimetre==="portage"?" selected":"")+'>Projets portés par le groupement</option></select>'+
+    '<div class="anx-pop-pied"><button type="button" class="fil-lien" id="et-avance">Options avancées (colonnes, en-tête…) →</button></div>';
+  document.body.appendChild(pop);
+  const r=bouton.getBoundingClientRect();
+  pop.style.top=(r.bottom+4)+"px"; pop.style.left=Math.max(8,Math.min(window.innerWidth-pop.offsetWidth-8,r.left-80))+"px";
+  pop.querySelectorAll("[data-o]").forEach(el=>el.onchange=()=>{ O[el.dataset.o]= el.type==="checkbox" ? el.checked : el.value; });
+  pop.querySelector("#et-avance").onclick=()=>{ pop.remove(); APP.etat.avance=true; rendreApp(); };
+  setTimeout(()=>{ const fermer=e=>{ if(!pop.contains(e.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
@@ -25434,6 +25672,49 @@ if (INTEGRE){
   }, true);
 }
 window.etatPret = () => !!D.pretes;
+/* ---- Pour l'onglet États de la console : réglage de l'état puis édition (PDF ou Excel) ----
+   o = {g, sp, porteur, origine, service, recherche, termine, interrompu, rappel, perimetre} */
+window.preparerEtatConsole = o => {
+  if (!D.pretes) return false;
+  o = o || {};
+  const fixer = (id, v) => { const el = document.getElementById(id); if (!el) return;
+    if (el.type === "checkbox") el.checked = !!v; else { el.value = v || ""; if (el.tagName === "SELECT" && el.value !== (v || "")) el.value = ""; } };
+  const g = o.g || [], sp = o.sp || [];
+  if (!g.length && !sp.length){
+    if (vue === "sponsor") changerVue("groupement");
+    groupementCourant = TOUS; const sg = document.getElementById("selGroupement"); if (sg) sg.value = TOUS;
+    sponsorDeConsole = false;
+  }
+  window.appliquerFiltreConsole(g, sp, null);
+  fixer("selProjet", ""); fixer("recherche", o.recherche); fixer("chkTermine", o.termine); fixer("chkInterrompu", o.interrompu);
+  fixer("chkRappel", o.rappel !== false); if (o.perimetre) fixer("selPerimetre", o.perimetre);
+  afficher();                                   // remplit les listes Origine / Service / Collaborateur
+  fixer("selOrigine", o.origine); fixer("selService", o.service); fixer("selCollaborateur", o.porteur);
+  afficher();
+  return true;
+};
+function documentEtatConsole(contenu, titre){
+  const styles = Array.from(document.querySelectorAll("style")).map(x => x.outerHTML).join("");
+  return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + echapper(titre || "État") + "</title>" + styles
+    + "<style>@page{size:A4 landscape;margin:10mm}body{background:#fff}</style></head><body><div id=\"contenu\" class=\"contenu\">"
+    + contenu + "</div></body></html>";
+}
+window.htmlEtatConsole = (o, tous) => {
+  if (!window.preparerEtatConsole(o)) return null;
+  const zone = document.getElementById("contenu");
+  let html = zone.innerHTML;
+  if (tous){
+    const orig = window.print;
+    window.print = () => { html = zone.innerHTML; };
+    try { if (vue === "sponsor") imprimerTousSponsors(); else imprimerTous(); } finally { window.print = orig; }
+  }
+  return documentEtatConsole(html, document.title);
+};
+window.excelEtatConsole = (o, tous) => {
+  if (!window.preparerEtatConsole(o)) return false;
+  exporterExcel(!!tous);
+  return true;
+};
 /* Pour la console (Mon travail) : groupement d'un agent, lu dans la table des collaborateurs
    (nom identique, ou mêmes mots dans un autre ordre). */
 window.groupementCollaborateur = nom => {
