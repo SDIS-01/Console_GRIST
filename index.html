@@ -1741,6 +1741,16 @@ body:not(.app-hors-fiche) .app-filtres, body.app-revues .app-filtres{display:non
 .fil-app .fil-chemin{max-width:calc(50% - 200px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* dans un projet : ni barre de filtres ni chiffres-clés (le projet est le filtre) */
 body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!important;}
+/* Mon travail : notifications regroupées, type, délai */
+.mt-grp{padding:6px 12px 4px;font-size:10.5px;font-weight:bold;text-transform:uppercase;letter-spacing:.03em;background:#fafbfc;border-bottom:1px solid #eef0f3;}
+.mt-grp-retard{color:#C0504D;}.mt-grp-proche{color:#A2551A;}.mt-grp-tard{color:#6b7484;}
+.mt-genre{display:inline-block;font-size:10px;font-weight:bold;text-transform:uppercase;color:#3c4a6b;background:#e8ecf7;border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:1px;}
+.mt-notif .mt-lib{font-weight:600;}
+.mt-notif.lu .mt-lib{font-weight:normal;}
+.mt-notif{border-left:3px solid var(--bleu);}
+.mt-delai{flex:0 0 auto;font-size:11px;font-weight:bold;border-radius:9px;padding:2px 8px;white-space:nowrap;}
+.mt-delai.r{background:#FBEBEB;color:#993333;}.mt-delai.p{background:#FDEBD8;color:#A2551A;}.mt-delai.a{color:#6b7484;font-weight:normal;}
+.mt-x small .code-projet{font-size:10px;padding:0 5px;margin-right:5px;}
 </style>
 </head>
 <body>
@@ -3871,6 +3881,12 @@ function notifsDe(ag){
       }));
     }
   });
+  /* rappel de ses propres demandes du journal, en retard ou à moins de 15 jours */
+  if(typeof demandesDe==="function") demandesDe(ag).forEach(n=>{
+    const e=etatNotif(n.ech);
+    if(e && (e.k==="retard"||e.k==="proche") && !out.some(o=>o.genre==="journal" && o.j.id===n.j.id))
+      out.push(Object.assign({},n,{genre:"rappel",cle:"rappel:"+n.j.id}));
+  });
   /* ce qui existait à la dernière remise à zéro est réputé lu pour cet agent */
   const B=baseNotifs();
   return B.size ? out.filter(n=>!B.has(ag.id+"|"+n.cle)) : out;
@@ -3991,7 +4007,8 @@ function majCloche(){
 const NT_GENRES={
   action:{lib:"Actions",ic:"A",phrase:"Vous êtes porteur de l'action"},
   tache:{lib:"Tâches",ic:"T",phrase:"Vous êtes porteur de la tâche"},
-  journal:{lib:"Journal de bord",ic:"J",phrase:"Vous êtes désigné dans le journal de bord"}};
+  journal:{lib:"Journal de bord",ic:"J",phrase:"Vous êtes désigné dans le journal de bord"},
+  rappel:{lib:"Rappels",ic:"R",phrase:"Rappel de votre demande"}};
 function etatNotif(ts){
   if(!ts) return null;
   const j=Math.round((ts-aujourdHuiUTC())/86400);
@@ -4108,7 +4125,7 @@ function ouvrirNotifMobile(n){
   const m=S.mob;
   m.ecran="fiche";
   let cible=null;
-  if(n.genre==="journal"){
+  if(n.genre==="journal" || n.genre==="rappel"){
     m.onglet="journal";
     rendreMobile(); window.scrollTo(0,0);
     const b=document.querySelector('#mb-corps [data-mbrep="'+n.j.id+'"], #mb-corps [data-mbclore="'+n.j.id+'"]');
@@ -16251,6 +16268,55 @@ function elementsDeAgent(ag){
   const ancien=S.notifBase; S.notifBase=null;
   try{ return notifsDe(ag); } finally{ S.notifBase=ancien; }
 }
+/* ---------- demandes du journal dont l'agent est l'auteur ---------- */
+const motsTries=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort().join(" ");
+function auteurEst(j,ag){
+  const c=S.cfg;
+  if(!c.colJnlAuteur || !ag) return false;
+  if(designe(c.tblJournal,j,c.colJnlAuteur,ag)) return true;
+  const a=motsTries(lire(c.tblJournal,j,c.colJnlAuteur)), n=motsTries(nomAgent(ag));
+  return !!a && a===n;
+}
+function demandesDe(ag){
+  const c=S.cfg, out=[];
+  if(!ag || !c.tblJournal || !c.colJnlLien || !c.colJnlAuteur || !c.colJnlDelai) return out;
+  const vus=new Set();
+  S.data.main.filter(r=>estProjet(r) && !estArchive(r)).forEach(p=>{
+    [p].concat(actionsDe(p)).forEach(x=>journalDe(x).forEach(j=>{
+      if(vus.has(j.id)) return;
+      vus.add(j.id);
+      const ech=Number(j[c.colJnlDelai])||null;
+      if(!ech || (c.colJnlTraite && j[c.colJnlTraite]===true) || !auteurEst(j,ag)) return;
+      out.push({cle:"demande:"+j.id, genre:"demande", p, a:x.id!==p.id?x:null, j, ech,
+        lib:txt(lire(c.tblJournal,j,c.colJnlTexte)).trim(),
+        date:Number(j[c.colJnlDate])||null,
+        collab:c.colJnlCollab?lire(c.tblJournal,j,c.colJnlCollab):""});
+    }));
+  });
+  return out.sort((a,b)=>a.ech-b.ech);
+}
+/* ligne grise : projet (code en étiquette), puis action parente si elle n'est pas le sujet ;
+   jamais ce qui répète l'intitulé */
+function sousLigneTravail(n){
+  const c=S.cfg, norme=x=>String(x||"").replace(/\s+/g," ").trim().toLowerCase();
+  const lib=norme(n.lib), vus=new Set([lib]), parts=[];
+  const ajoute=(t,html)=>{ const k=norme(t); if(k && !vus.has(k) && !(lib && (lib.indexOf(k)===0 || k.indexOf(lib)===0))){ vus.add(k); parts.push(html||esc(t)); } };
+  const pl=lire(c.tblMain,n.p,c.colLibelle);
+  ajoute(pl, libelleProjetHtml(pl));
+  if(n.a && n.genre!=="action") ajoute(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte);
+  return parts.join(" · ");
+}
+/* pastille de délai : rouge en retard, orange à moins de 15 jours, date grise sinon */
+function delaiHtml(ts){
+  const e=etatNotif(ts);
+  if(!e) return "";
+  const j=Math.round((ts-aujourdHuiUTC())/86400);
+  if(e.k==="retard") return '<span class="mt-delai r" title="Échéance '+dateVersFR(ts)+'">+'+(-j)+' j</span>';
+  if(e.k==="proche") return '<span class="mt-delai p" title="Échéance '+dateVersFR(ts)+'">'+(j===0?"aujourd'hui":"dans "+j+" j")+'</span>';
+  return '<span class="mt-delai a">'+dateVersFR(ts)+'</span>';
+}
+const MT_GENRE={action:"Action",tache:"Tâche",journal:"Journal",rappel:"Rappel",demande:"Journal",projet:"Projet"};
+
 function rendreTravail(){
   const z=$("#zone-travail"), c=S.cfg;
   if(!notifsPossibles()){
@@ -16289,18 +16355,14 @@ function rendreTravail(){
   /* notifications : non lues pour soi ; pour un autre agent, celles en cours (sans toucher à leur lecture) */
   const L=notifsLues(), nl=autre ? notifsDe(ag) : (S.notifs||[]).filter(n=>!L.has(n.cle));
   const dateHtml=t=>'<span class="'+(t<auj?"app-ret":"app-mut")+'">'+dateVersFR(t)+'</span>';
-  /* ligne grise : projet, puis action parente d'une tâche ; jamais ce qui répète l'intitulé */
-  const norme=x=>String(x||"").replace(/\s+/g," ").trim().toLowerCase();
-  const sousLigne=n=>{
-    const lib=norme(n.lib), vus=new Set([lib]), parts=[];
-    const ajoute=t=>{ const k=norme(t); if(k && !vus.has(k) && !(lib && (lib.indexOf(k)===0 || k.indexOf(lib)===0))){ vus.add(k); parts.push(t); } };
-    ajoute(lire(c.tblMain,n.p,c.colLibelle));
-    if(n.a && n.genre!=="action") ajoute(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte);
-    return parts.join(" · ");
-  };
-  const it=(n,i,droite)=>{ const sl=sousLigne(n);
+  const it=(n,i,droite)=>{ const sl=sousLigneTravail(n);
     return '<div class="mt-it" data-i="'+i+'"><div class="mt-x">'+esc(n.lib||"(sans libellé)")+
-      (sl?'<small>'+esc(sl)+'</small>':'')+'</div>'+(droite||"")+'</div>'; };
+      (sl?'<small>'+sl+'</small>':'')+'</div>'+(droite||"")+'</div>'; };
+  const demandes=demandesDe(ag);
+  const itDemande=(n,i)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x"><span class="mt-genre">Journal</span><b class="mt-lib">'+
+    esc((n.lib||"(entrée sans commentaire)").length>120?n.lib.slice(0,120)+"…":(n.lib||"(entrée sans commentaire)"))+'</b>'+
+    '<small>'+(n.collab?'Demandé à <b>'+esc(n.collab)+'</b>':'Sans collaborateur désigné')+(n.date?' le '+dateVersFR(n.date).slice(0,5):'')+
+    ' · '+libelleProjetHtml(lire(c.tblMain,n.p,c.colLibelle))+'</small></div>'+delaiHtml(n.ech)+'</div>';
   const tous=[];
   const bloc=(titre,compte,items,rendu)=>{
     const h='<div class="mt-carte"><h3>'+titre+'<span>'+compte+'</span></h3>'+
@@ -16314,6 +16376,7 @@ function rendreTravail(){
     bloc(M+"actions en cours",acts.length,acts,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
     bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
     (dem.length?bloc("Demandes du journal",dem.length,dem,(n,i)=>it(n,i,dateHtml(n.ech))):"")+
+    (S.cfg.colJnlAuteur && S.cfg.colJnlDelai ? bloc(M+"demandes à suivre",demandes.length+" en attente",demandes,itDemande) : "")+
     carteNotifs(ag,autre,nl,tous)+
   '</div>';
   const ntout=$("#mt-tout-lu");
@@ -16324,14 +16387,13 @@ function rendreTravail(){
     const n=tous[Number(e.dataset.i)];
     if(!n) return;
     if(e.dataset.notif && !autre){ basculerFiche(); ouvrirNotif(n); rendreApp(); return; }
-    ouvrirFiche(n.p, n.genre==="projet"?null:(n.genre==="journal"?"journal":"actions"));
+    ouvrirFiche(n.p, n.genre==="projet"?null:((n.genre==="journal"||n.genre==="demande")?"journal":"actions"));
     if(n.genre==="action" && n.a) setTimeout(()=>{ try{ ouvrirFenetreAction(n.a.id); }catch(err){} },50);
   });
 }
 
 /* carte « Notifications » de Mon travail (remplace le bouton de la barre) */
 function carteNotifs(ag,autre,nl,tous){
-  const c=S.cfg;
   const filtre=autre ? "toutes" : (APP.filtreNotifs||"nonlues");
   const toutes=autre ? nl : (S.notifs||[]);
   const xs=(filtre==="nonlues" ? nl : toutes).slice().sort((a,b)=>(a.ech||9e12)-(b.ech||9e12));
@@ -16343,16 +16405,27 @@ function carteNotifs(ag,autre,nl,tous){
       '<button type="button" class="mt-chip'+(filtre===k?" on":"")+'" data-mtf="'+k+'">'+l+' <b>'+n+'</b></button>').join("")+
       '<span class="fil-esp"></span><button type="button" class="fil-lien" id="mt-tout-lu"'+(nl.length?"":" disabled")+'>Tout marquer comme lu</button></div>';
   }
-  if(!xs.length) h+='<div class="mt-vide">'+(filtre==="nonlues"?"Rien de nouveau.":"Aucune notification.")+'</div>';
-  xs.slice(0,30).forEach(n=>{
-    tous.push(n); const i=tous.length-1;
-    const g=NT_GENRES[n.genre]||{phrase:"",ic:"•"}, e=etatNotif(n.ech), lu=lues.has(n.cle);
-    const texte=(n.lib||"").length>140?(n.lib||"").slice(0,140)+"…":(n.lib||"");
-    h+='<div class="mt-it mt-notif'+(lu?" lu":"")+'" data-i="'+i+'" data-notif="1"><span class="mt-ic">'+g.ic+'</span><div class="mt-x">'+
-      (n.genre==="journal" ? '<b>Désigné dans le journal</b> · '+esc(texte||"(entrée sans commentaire)") : esc(texte||"(sans libellé)"))+
-      '<small>'+esc(lire(c.tblMain,n.p,c.colLibelle))+(n.a&&n.genre!=="action"?' · '+esc(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte):'')+
-      (e?' · <span class="'+(e.k==="depasse"?"app-ret":"")+'">'+esc(e.t)+'</span>':'')+'</small></div>'+
-      (!autre && !lu ? '<button type="button" class="mt-lu" data-mtlu="'+i+'" title="Marquer comme lu">✓</button>' : '')+'</div>';
+  if(!xs.length){ h+='<div class="mt-vide">'+(filtre==="nonlues"?"Rien de nouveau.":"Aucune notification.")+'</div>'; return h+'</div>'; }
+  const groupe=n=>{ const e=etatNotif(n.ech); return e&&e.k==="retard" ? "retard" : e&&e.k==="proche" ? "proche" : "tard"; };
+  const titres={retard:"En retard",proche:"Dans les 15 jours",tard:"Plus tard"};
+  const vus=xs.slice(0,40);
+  ["retard","proche","tard"].forEach(g=>{
+    const ls=vus.filter(n=>groupe(n)===g);
+    if(!ls.length) return;
+    h+='<div class="mt-grp mt-grp-'+g+'">'+titres[g]+' · '+ls.length+'</div>';
+    ls.forEach(n=>{
+      tous.push(n); const i=tous.length-1;
+      const lu=lues.has(n.cle);
+      let texte=(n.lib||"").length>140?(n.lib||"").slice(0,140)+"…":(n.lib||"");
+      if(n.genre==="journal") texte=texte||"(entrée sans commentaire)";
+      const avant = n.genre==="journal" ? (n.auteur?'Désigné par <b>'+esc(n.auteur)+'</b> · ':'Désigné dans le journal · ')
+        : n.genre==="rappel" ? (n.collab?'Votre demande à <b>'+esc(n.collab)+'</b> · ':'Votre demande · ') : '';
+      const sl=sousLigneTravail(n);
+      h+='<div class="mt-it mt-notif'+(lu?" lu":"")+'" data-i="'+i+'" data-notif="1"><div class="mt-x">'+
+        '<span class="mt-genre">'+(MT_GENRE[n.genre]||"")+'</span><b class="mt-lib">'+esc(texte||"(sans libellé)")+'</b>'+
+        '<small>'+avant+sl+'</small></div>'+delaiHtml(n.ech)+
+        (!autre && !lu ? '<button type="button" class="mt-lu" data-mtlu="'+i+'" title="Marquer comme lu">✓</button>' : '')+'</div>';
+    });
   });
   return h+'</div>';
 }
