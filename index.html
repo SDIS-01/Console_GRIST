@@ -1667,7 +1667,9 @@ body.app-revues .panneau{display:none;}
 .app-table td{padding:7px 10px;border-bottom:1px solid #eef0f3;vertical-align:middle;}
 .app-table tbody tr{cursor:pointer;}
 .app-table tbody tr:hover td{background:var(--bleu-survol);}
-.app-nom{font-weight:bold;color:var(--rouge);position:relative;padding-left:16px!important;}
+.code-projet{display:inline-block;font-size:10.5px;color:#7f6f6c;background:#F1EEE9;border-radius:4px;padding:1px 6px;
+  margin-right:7px;vertical-align:1px;font-weight:bold;letter-spacing:.02em;}
+.app-nom{font-weight:bold;color:#26221F;position:relative;padding-left:16px!important;}
 .app-liseret{position:absolute;left:0;top:6px;bottom:6px;width:5px;border-radius:0 2px 2px 0;}
 .app-sous{font-weight:normal;color:var(--gris);font-size:11.5px;}
 .app-mut{color:var(--gris);font-weight:normal;}
@@ -1689,10 +1691,13 @@ body.app-revues .panneau{display:none;}
 .mt-it:hover{background:var(--bleu-survol);}
 .mt-x{flex:1;min-width:0;}
 .mt-x small{display:block;color:var(--gris);font-size:11.5px;}
-.mt-projet{color:var(--rouge);position:relative;padding-left:12px;display:block;}
+.mt-projet{color:#26221F;position:relative;padding-left:12px;display:block;}
 .mt-projet .app-liseret{top:1px;bottom:1px;}
 .mt-notif{border-left:3px solid var(--bleu);}
 .mt-vide{padding:10px 12px;color:var(--gris);font-size:12px;}
+.mt-choix{display:inline-flex;align-items:center;gap:6px;color:var(--gris);font-size:12px;}
+.mt-choix select{padding:3px 6px;border:1px solid var(--trait);border-radius:5px;}
+.mt-vu{color:#9a5a12;font-weight:bold;}
 </style>
 </head>
 <body>
@@ -15932,7 +15937,9 @@ function suivreCurseur(id){
    Le planning, l'état et la revue sont des modules chargés à la demande dans
    un cadre interne ; ils parlent à Grist par le pont ci-dessous.
    ======================================================================= */
-const APP={vue:"portefeuille", sous:"liste", retour:null, tri:{k:"ech",sens:1}, revuesOuvertes:false};
+const APP={vue:"portefeuille", sous:"liste", retour:null, tri:{k:"ech",sens:1}, revuesOuvertes:false,
+  agentVu:null,        // « Mon travail » vu comme un autre agent (après mot de passe)
+  choixAgent:false};   // liste de choix de l'agent affichée
 const COUL_GROUPEMENT={"DDA":"#7F77DD","DIR":"#2E3B52","GAAF":"#2B9BB5","GAST":"#8B6BB1","GBG":"#5B8DB8",
   "GBR":"#A0785A","GDB":"#3C5BA9","GFS":"#B05C9E","GMJ":"#4F9A94","GPOS":"#6B7FA0","GPTN":"#1D9E75",
   "GRH":"#D4537E","GSIC":"#378ADD","GSM":"#8D6E63","GST":"#0E7490","SDO":"#7A5195","SDSanté":"#5C6BC0"};
@@ -15941,6 +15948,11 @@ function couleurGroupement(v){
   if(COUL_GROUPEMENT[v]) return COUL_GROUPEMENT[v];
   let h=0; String(v||"").split("").forEach(ch=>{ h=(h*31+ch.charCodeAt(0))>>>0; });
   return COUL_RESERVE[h%COUL_RESERVE.length];
+}
+/* « 2026_06_A_Auditer… » : code en étiquette, intitulé en encre foncée */
+function libelleProjetHtml(lib){
+  const m=String(lib||"").match(/^\s*(\d{4}_\d{1,3}_[A-Za-z]{1,4})[\s_:\-]+(.+)$/);
+  return m ? '<span class="code-projet">'+esc(m[1])+'</span>'+esc(m[2].trim()) : esc(lib||"(sans libellé)");
 }
 function liseret(p){
   const c=S.cfg, vals=valListe(p[c.colGroupement]).length>1
@@ -15984,9 +15996,10 @@ function ouvrirFicheDepuisLigne(id){
 function allerVue(vue,sous){
   if(vue==="revues"){ ouvrirRevues(); return; }
   if(APP.vue==="revues") fermerRevues();
+  /* quitter « Mon travail » (autrement que pour une fiche) referme la vue d'un autre agent */
+  if(vue!=="travail"){ APP.agentVu=null; APP.choixAgent=false; }
   APP.vue=vue;
   if(sous) APP.sous=sous;
-  try{ localStorage.setItem(VUE_LS,JSON.stringify({vue:APP.vue==="fiche"?"portefeuille":APP.vue,sous:APP.sous})); }catch(e){}
   rendreApp();
 }
 function retourDepuisFiche(){
@@ -15994,11 +16007,10 @@ function retourDepuisFiche(){
   APP.retour=null;
   allerVue(r.vue,r.sous);
 }
+/* À chaque ouverture : Portefeuille complet, vue Liste (aucune vue mémorisée) */
 function vueInitiale(){
-  try{
-    const o=JSON.parse(localStorage.getItem(VUE_LS)||"null");
-    if(o && ["portefeuille","travail"].includes(o.vue)){ APP.vue=o.vue; if(["liste","planning","etats"].includes(o.sous)) APP.sous=o.sous; }
-  }catch(e){}
+  APP.vue="portefeuille"; APP.sous="liste";
+  try{ localStorage.removeItem(VUE_LS); }catch(e){}
 }
 
 /* ---------- rendu général ---------- */
@@ -16047,8 +16059,30 @@ function rendreFil(){
     return;
   }
   if(APP.vue==="travail"){
-    const ag=S.notifAgent||agentCourant();
-    f.innerHTML='<b>Mon travail</b>'+(ag?'<span class="fil-chemin">— '+esc(nomAgent(ag))+'</span>':'');
+    const moi=S.notifAgent||agentCourant(), vu=APP.agentVu;
+    const agents=(S.data.agents||[]).filter(a=>nomAgent(a)).sort((a,b)=>nomAgent(a).localeCompare(nomAgent(b),"fr"));
+    let h = vu
+      ? '<b>Travail de '+esc(nomAgent(vu))+'</b><span class="fil-chemin mt-vu">👁 vue d\'un autre agent</span>'
+      : '<b>Mon travail</b>'+(moi?'<span class="fil-chemin">— '+esc(nomAgent(moi))+'</span>':'');
+    h+='<span class="fil-esp"></span>';
+    if(APP.choixAgent || vu){
+      h+='<label class="mt-choix">Voir comme <select id="mt-agent"><option value="">— choisir un agent —</option>'+
+        agents.map(a=>'<option value="'+a.id+'"'+(vu&&vu.id===a.id?' selected':'')+'>'+esc(nomAgent(a))+'</option>').join("")+'</select></label>';
+      h+='<button type="button" class="fil-lien" id="mt-moi">Revenir à mon travail</button>';
+    } else if(agents.length){
+      h+='<button type="button" class="fil-lien" id="mt-voir">🔒 Voir comme un autre agent</button>';
+    }
+    f.innerHTML=h;
+    const bv=$("#mt-voir");
+    if(bv) bv.onclick=async()=>{
+      if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
+      if(!await motDePasseValide("Mot de passe pour voir le travail d'un autre agent :")) return;
+      APP.choixAgent=true; rendreFil();
+    };
+    const sa=$("#mt-agent");
+    if(sa) sa.onchange=()=>{ APP.agentVu=(S.data.agents||[]).find(a=>a.id===Number(sa.value))||null; rendreFil(); rendreTravail(); };
+    const bm=$("#mt-moi");
+    if(bm) bm.onclick=()=>{ APP.agentVu=null; APP.choixAgent=false; rendreFil(); rendreTravail(); };
     return;
   }
   if(APP.vue==="revues"){
@@ -16113,7 +16147,7 @@ function rendreListeApp(){
     liste.map(p=>{
       const e=echeanceProjet(p), ret=projetEnRetard(p), al=alerteProjet(p);
       const sous=[lire(c.tblMain,p,c.colNature), c.colSponsor?lire(c.tblMain,p,c.colSponsor):""].filter(Boolean).join(" · ");
-      return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+esc(lire(c.tblMain,p,c.colLibelle)||"(sans libellé)")+
+      return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+
         (estArchive(p)?' <span class="app-mut">(archivé)</span>':'')+(sous?'<div class="app-sous">'+esc(sous)+'</div>':'')+'</td>'+
         '<td>'+esc(lire(c.tblMain,p,c.colGroupement))+'</td><td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>'+
         '<td>'+pastillePriorite(lire(c.tblMain,p,c.colPriorite))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
@@ -16141,13 +16175,15 @@ function rendreTravail(){
     z.innerHTML='<div class="app-vide">« Mon travail » s\'appuie sur la table des agents : renseignez-la dans les réglages de la console (bloc Notifications).</div>';
     return;
   }
-  const ag=S.notifAgent||agentCourant();
+  const autre=!!APP.agentVu;
+  const ag=APP.agentVu||S.notifAgent||agentCourant();
   if(!ag){
     z.innerHTML='<div class="app-vide">Indiquez qui vous êtes pour retrouver vos projets, actions et tâches.<br><br>'+
       '<button class="btn" id="mt-qui">Choisir mon nom</button></div>';
     $("#mt-qui").onclick=()=>ouvrirNotifs();
     return;
   }
+  const M=autre?"Ses ":"Mes ";
   const auj=aujourdHuiUTC();
   const mesProjets=projets().filter(p=>designe(c.tblMain,p,c.colPorteur,ag));
   const els=elementsDeAgent(ag);
@@ -16155,7 +16191,8 @@ function rendreTravail(){
   const ech=els.filter(n=>n.ech).concat(mesProjets.filter(p=>echeanceProjet(p)&&etatDe(p)!=="termine")
       .map(p=>({p,lib:"Échéance du projet",ech:echeanceProjet(p),genre:"projet"})))
     .sort((a,b)=>a.ech-b.ech);
-  const L=notifsLues(), nl=(S.notifs||[]).filter(n=>!L.has(n.cle));
+  /* notifications : non lues pour soi ; pour un autre agent, celles en cours (sans toucher à leur lecture) */
+  const L=notifsLues(), nl=autre ? notifsDe(ag) : (S.notifs||[]).filter(n=>!L.has(n.cle));
   const dateHtml=t=>'<span class="'+(t<auj?"app-ret":"app-mut")+'">'+dateVersFR(t)+'</span>';
   const it=(n,i,droite)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x">'+esc(n.lib||"(sans libellé)")+
     '<small>'+esc(lire(c.tblMain,n.p,c.colLibelle))+(n.a?' · '+esc(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte):'')+'</small></div>'+(droite||"")+'</div>';
@@ -16166,18 +16203,18 @@ function rendreTravail(){
     return h;
   };
   z.innerHTML='<div class="mt-grille">'+
-    bloc("Mes projets",mesProjets.length+" porteur",mesProjets.map(p=>({p,lib:lire(c.tblMain,p,c.colLibelle),genre:"projet"})),
-      (n,i)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x"><b class="mt-projet">'+liseret(n.p)+esc(n.lib)+'</b><small>'+esc(lire(c.tblMain,n.p,c.colGroupement))+'</small></div>'+barreAppHtml(n.p)+'</div>')+
-    bloc("Mes échéances","les plus proches",ech,(n,i)=>it(n,i,dateHtml(n.ech)))+
-    bloc("Mes actions en cours",acts.length,acts,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
-    bloc("Mes tâches en cours",taches.length,taches,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
+    bloc(M+"projets",mesProjets.length+" porteur",mesProjets.map(p=>({p,lib:lire(c.tblMain,p,c.colLibelle),genre:"projet"})),
+      (n,i)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x"><b class="mt-projet">'+liseret(n.p)+libelleProjetHtml(n.lib)+'</b><small>'+esc(lire(c.tblMain,n.p,c.colGroupement))+'</small></div>'+barreAppHtml(n.p)+'</div>')+
+    bloc(M+"échéances","les plus proches",ech,(n,i)=>it(n,i,dateHtml(n.ech)))+
+    bloc(M+"actions en cours",acts.length,acts,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
+    bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
     (dem.length?bloc("Demandes du journal",dem.length,dem,(n,i)=>it(n,i,dateHtml(n.ech))):"")+
-    bloc("Notifications",nl.length+" non lue"+(nl.length>1?"s":""),nl,(n,i)=>'<div class="mt-it mt-notif" data-i="'+i+'" data-notif="1"><div class="mt-x">'+esc(n.lib||"")+'<small>'+esc(lire(c.tblMain,n.p,c.colLibelle))+'</small></div></div>')+
+    bloc("Notifications",autre?nl.length+" en cours":nl.length+" non lue"+(nl.length>1?"s":""),nl,(n,i)=>'<div class="mt-it mt-notif" data-i="'+i+'" data-notif="1"><div class="mt-x">'+esc(n.lib||"")+'<small>'+esc(lire(c.tblMain,n.p,c.colLibelle))+'</small></div></div>')+
   '</div>';
   z.querySelectorAll(".mt-it").forEach(e=>e.onclick=()=>{
     const n=tous[Number(e.dataset.i)];
     if(!n) return;
-    if(e.dataset.notif){ basculerFiche(); ouvrirNotif(n); rendreApp(); return; }
+    if(e.dataset.notif && !autre){ basculerFiche(); ouvrirNotif(n); rendreApp(); return; }
     ouvrirFiche(n.p, n.genre==="projet"?null:(n.genre==="journal"?"journal":"actions"));
     if(n.genre==="action" && n.a) setTimeout(()=>{ try{ ouvrirFenetreAction(n.a.id); }catch(err){} },50);
   });
@@ -17759,7 +17796,8 @@ html.integre #filtersPanel, html.integre #chipArchives{display:none!important;}
 .legend-titre{font-weight:bold;}
 .chev{display:inline-block;width:16px;color:var(--faint);cursor:pointer;user-select:none;}
 .chev.vide{cursor:default;visibility:hidden;}
-.nm-proj{font-size:13px;font-weight:bold;color:#C0504D;white-space:normal;overflow-wrap:break-word;line-height:1.3;}
+.code-projet{display:inline-block;font-size:10.5px;color:#7f6f6c;background:#F1EEE9;border-radius:4px;padding:1px 6px;margin-right:7px;vertical-align:1px;font-weight:bold;letter-spacing:.02em;}
+.nm-proj{font-size:13px;font-weight:bold;color:#26221F;white-space:normal;overflow-wrap:break-word;line-height:1.3;}
 .nm-meo{font-size:12.5px;color:var(--text-2);white-space:normal;overflow-wrap:break-word;line-height:1.3;}
 .nm-num{color:var(--muted);}
 .st-pt{font-size:11px;font-weight:bold;margin-left:8px;white-space:nowrap;}
@@ -20095,6 +20133,16 @@ function barSpec(row, mappings){
     return {s, e, av, state, fond, plein, solid, retard, jours, inter, couleurs:coulsLigne}
 }
 
+/* « 2026_06_A_Auditer… » -> {code:"2026_06_A", titre:"Auditer…"} */
+function decouperCodeProjet(lib){
+    const m = String(lib||"").match(/^\s*(\d{4}_\d{1,3}_[A-Za-z]{1,4})[\s_:\-]+(.+)$/)
+    return m ? {code:m[1], titre:m[2].trim()} : {code:"", titre:String(lib||"")}
+}
+function libelleProjetHtml(lib){
+    const d = decouperCodeProjet(lib)
+    return (d.code ? `<span class="code-projet">${escapeHtml(d.code)}</span>` : "") + escapeHtml(d.titre||"(sans libellé)")
+}
+
 function statutHtml(state, av){
     if(!state) return ""
     const pc = pastillePleineCouleurs(state, av, estInterrompu(state))
@@ -20205,12 +20253,13 @@ function renderRow(row, units, mappings){
     const arch = lastView && isArchived(r, lastView.model.cols) ? `<span class="nm-archive">(archivé)</span>` : ""
     const aussi = row.others && row.others.length ? `<span class="nm-aussi">aussi dans : ${escapeHtml(row.others.join(", "))}</span>` : ""
     const cls = row.t==="proj" ? "nm-proj" : "task-name-main"
+    const nomHtml = row.t==="proj" ? libelleProjetHtml(nom) : escapeHtml(nom||"(sans libellé)")
     const st = row.t==="flat" ? statutHtml(spec.state, spec.av) : ""
     const lignes = [sousLigneHtml(r)]
     const cs = spec.couleurs || []
     const liser = cs.length ? `<span class="liser" style="background:${cs.length>1 ? "linear-gradient("+cs.map((c,k)=>c+" "+(k*100/cs.length)+"%,"+c+" "+((k+1)*100/cs.length)+"%").join(",")+")" : cs[0]}"></span>` : ""
     const tip = [nom].concat(row.others&&row.others.length?["aussi dans : "+row.others.join(", ")]:[]).join(" — ")
-    nameCell = `<td class="task-name-cell${pctCls}" title="${escapeAttr(tip)}">${liser}<div class="${cls}">${chev}${escapeHtml(nom||"(sans libellé)")}${arch}${st}${aussi}</div>${lignes.join("")}${pct}</td>`
+    nameCell = `<td class="task-name-cell${pctCls}" title="${escapeAttr(tip)}">${liser}<div class="${cls}">${chev}${nomHtml}${arch}${st}${aussi}</div>${lignes.join("")}${pct}</td>`
     return `<tr class="${trCls}"${attrs}>${nameCell}${renderBarCells(row, spec, units, mappings)}</tr>`
 }
 
@@ -20686,15 +20735,20 @@ function pgGantt(ctx, rows, per){
         if(r.t==="grp") return {ind:8,st:"bold",c:"#5a4f4c",px:11}
         if(r.t==="axe") return {ind:12,st:"bold",c:r.teinte[2],px:11}
         const dl = r.couleurs && r.couleurs.length ? 11 : 0
-        if(r.t==="proj") return {ind:dl,st:"bold",c:NC.rouge,px:11}
+        if(r.t==="proj") return {ind:dl,st:"bold",c:NC.encre,px:11}
         if(r.t==="flat") return {ind:dl,st:"bold",c:NC.encre,px:11}
         if(r.t==="meo") return {ind:r.depth===2?26:14,st:"normal",c:NC.encre,px:11}
         return {ind:14+r.depth*12,st:"normal",c:NC.gris,px:10.5}
     }
     const prep=r=>{
         const s=styleDe(r)
-        const libT = r.t==="grp" ? String(r.lib).toUpperCase() : r.lib
-        const larg = r.t==="grp" ? W-160 : gl-14-s.ind
+        let libT = r.t==="grp" ? String(r.lib).toUpperCase() : r.lib
+        let larg = r.t==="grp" ? W-160 : gl-14-s.ind
+        r._tag = 0
+        if(r.t==="proj"){
+            const d = decouperCodeProjet(r.lib)
+            if(d.code){ r._code = d.code; r._tag = nW(pdf,d.code,9,"bold")+12+6; libT = d.titre; larg -= r._tag }
+        }
         r._l=nCoupe(pdf,libT,larg,s.px,s.st)
         if(!r._l.length) r._l=["(sans libellé)"]
         r._s = r.sous && r.t!=="axe" ? nCoupe(pdf,r.sous,larg,9.5,"normal",1) : []
@@ -20759,7 +20813,11 @@ function pgGantt(ctx, rows, per){
                 const hl=(h-8)/r.couleurs.length
                 r.couleurs.forEach((c,k)=>nR(pdf,x,yy+4+k*hl,4.5,hl,c))
             }
-            r._l.forEach((l,k)=>nT(pdf,x+s.ind,yl+k*lhl,l,{px:s.px,style:s.st,c:s.c}))
+            if(r._code){
+                nR(pdf,x+s.ind,yl-s.px*0.82,r._tag-6,s.px+2.5,"#F1EEE9",3)
+                nT(pdf,x+s.ind+6,yl-0.6,r._code,{px:9,style:"bold",c:NC.taupe})
+            }
+            r._l.forEach((l,k)=>nT(pdf,x+s.ind+(r._tag||0),yl+k*lhl,l,{px:s.px,style:s.st,c:s.c}))
             r._s.forEach((l,k)=>nT(pdf,x+s.ind,yl+r._l.length*lhl+k*12-1,l,{px:9.5,c:NC.gris2}))
             if(r.t==="axe" && r.sous) nT(pdf,xp-8,yc+3.5,r.sous,{px:9.5,c:r.teinte[3],align:"right"})
             if(r.d||r.f){
@@ -20772,13 +20830,10 @@ function pgGantt(ctx, rows, per){
                 nR(pdf,xp+g,yc-hb/2,lb,hb,r.fond,3)
                 if(!r.solid && r.av) nR(pdf,xp+g,yc-hb/2,Math.max(Math.min(6,lb),lb*Math.min(100,r.av)/100),hb,r.plein,3)
                 let xf=xp+g+lb
-                if(r.retard){
-                    nRond(pdf,xf,yc,6.5,NC.rouge)
-                    nT(pdf,xf,yc+3.4,"!",{px:10,style:"bold",c:"#ffffff",align:"center"})
-                }
+                // échéance dépassée : encadré rouge seul à l'impression (pas de « ! »)
                 const lt=r.inter?"interrompu":(!showProgress||r.av===null||r.av===undefined?"":r.av+" %")
                 if(lt && r.t!=="axe"){
-                    const wt=nW(pdf,lt,9.5), dx=r.retard?10:5
+                    const wt=nW(pdf,lt,9.5), dx=r.retard?7:5
                     if(xf+dx+wt<=x+W) nT(pdf,xf+dx,yc+3.3,lt,{px:9.5,c:NC.gris})
                     else if(xp+g-5-wt>=xp) nT(pdf,xp+g-5,yc+3.3,lt,{px:9.5,c:NC.gris,align:"right"})
                 }
@@ -20865,7 +20920,7 @@ function pgTableActions(ctx, item, mappings){
                 num:{t:String(a.num), c:NC.gris},
                 lib:{t:decouperLibelleAction(nom).texte||nom||"(sans libellé)"},
                 deb:{t:sp.s?formatDateFr(sp.s):"—", c:NC.gris},
-                ech:{t:sp.e?formatDateFr(sp.e)+(sp.retard?" !":""):"—", c:sp.retard?NC.rouge:NC.gris, style:sp.retard?"bold":"normal"},
+                ech:{t:sp.e?formatDateFr(sp.e):"—", c:sp.retard?NC.rouge:NC.gris, style:sp.retard?"bold":"normal"},
                 av:{type:"barre", av:sp.av, coul:colorByAxis&&g.teinte?g.teinte[0]:nBarreCoul(sp.av,sp.inter)}
             }
             if(pc) cel.st={type:"feu", t:sp.state, coul:nCoulTexteStatut(pc), point:pc.fond}
@@ -21250,6 +21305,61 @@ window.planningPret = ()=>!!(lastView && lastView.units && lastView.units.length
   @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
 html.integre #contenu tr[data-id]{cursor:pointer;}
 html.integre #contenu tr[data-id]:hover td{background:#f2f5fc;}
+
+/* ===== Mode intégré à l'application : présentation harmonisée avec la console (écran seulement) ===== */
+@media screen{
+  html.integre{--bleu:#3c4a6b;--bleu-clair:#e8ecf7;--bleu-fonce:#1c2330;--liseret:#7f6f6c;--trait:#dde2ea;--texte:#1c2330;--attenue:#6b7484;}
+  html.integre body{background:#fff;color:#1c2330;}
+  html.integre .barre{background:#f5f6f8;border-bottom:1px solid #dde2ea;padding:10px 16px 10px;}
+  html.integre .barre-haut h1{font-size:13px;color:#6b7484;font-weight:normal;}
+  html.integre .bascule{border-color:#c5cfe8;border-radius:6px;}
+  html.integre .bascule button{color:#5d6675;background:#fff;border:0;border-radius:0;font-weight:bold;padding:5px 14px;}
+  html.integre .bascule button + button{border-left:1px solid #c5cfe8;}
+  html.integre .barre-haut{gap:8px;}
+  html.integre .bascule button.actif{background:#e8ecf7;color:#002395;}
+  html.integre button{border-radius:6px;padding:5px 12px;background:#e8ecf7;border-color:#c5cfe8;color:#002395;}
+  html.integre button.secondaire{background:#fff;color:#3c4a6b;border-color:#dde2ea;}
+  html.integre button:hover{opacity:1;filter:brightness(.95);}
+  html.integre #btnExcel{background:#E8F3E8;border-color:#bfdcc0;color:#2E7D32;}
+  html.integre #btnExcelTous{color:#2E7D32;border-color:#d4e8d5;}
+  html.integre #btnEntete::before{content:"🔒 ";}
+  html.integre .champ > span{font-size:11px;color:#6b7484;}
+  html.integre input[type=text],html.integre input[type=search],html.integre select{border-color:#dde2ea;border-radius:5px;padding:5px 7px;font-size:12.5px;min-height:30px;}
+  html.integre input:focus,html.integre select:focus,html.integre button:focus{outline:2px solid #9fb0e0;}
+  html.integre .filtres{gap:12px;margin-top:10px;}
+  /* options d'édition repliées */
+  html.integre .barre:not(.options-ouvertes) .opt-avancee{display:none !important;}
+  html.integre .bouton-options{align-self:flex-end;background:none;border:0;color:#1e5fa5;padding:6px 0;font-weight:bold;cursor:pointer;}
+  html.integre .bouton-options:hover{text-decoration:underline;filter:none;}
+  /* contenu */
+  html.integre .contenu{padding:16px 18px;}
+  html.integre .entete-grp{border-left:4px solid #c5cfe8;padding:2px 0 2px 12px;}
+  html.integre .entete-grp h2{color:#1c2330;font-size:17px;}
+  html.integre h1,html.integre h2,html.integre h3{color:#1c2330;}
+  html.integre .rappel{background:#f7f8fa;border:0;border-left:4px solid #dde2ea;border-radius:8px;}
+  html.integre .rappel h4{color:#6b7484;}
+  html.integre .rappel .c{border:1px solid #dde2ea;border-radius:8px;}
+  html.integre .rappel .k{background:#e8ecf7;color:#3c4a6b;}
+  html.integre .rappel .c b{color:#1c2330;}
+  html.integre .avertissement{border-radius:8px;}
+  html.integre .compteur{background:#f5f6f8;border:0;border-radius:8px;padding:8px 14px;min-width:120px;}
+  html.integre .compteur .n{color:#1c2330;font-size:19px;}
+  html.integre .compteur .l{color:#6b7484;font-size:11.5px;}
+  html.integre .repartition{border-radius:4px;border:0;height:10px;}
+  html.integre .groupe-porteur{color:#7f6f6c;font-size:11px;letter-spacing:.03em;border-bottom:1.5px solid #7f6f6c;}
+  html.integre .bandeau{background:#F1EEE9;border-left:0;border-top:2px solid #7f6f6c;border-radius:0;}
+  html.integre .bandeau .nom{color:#5a4f4c;}
+  html.integre .tab th{font-size:10.5px;text-transform:uppercase;color:#7f6f6c !important;letter-spacing:.02em;border-bottom:1.5px solid #7f6f6c;background:#fafbfc !important;}
+  html.integre .tab td{border-bottom:1px solid #eef0f3;}
+  html.integre .tab tr.pj td.lib{color:#26221F;}
+  html.integre .repli{color:#9aa3b2;}
+  html.integre .groupe-porteur{color:#7f6f6c;}
+  html.integre .tab tr.ac td.lib{color:#1c2330;}
+  html.integre .tab td.lib-tache{color:#6b7484;}
+  html.integre .tab tr[data-id]:hover td{background:#f2f5fc;}
+  html.integre .code-projet{display:inline-block;font-size:10.5px;color:#7f6f6c;background:#F1EEE9;border-radius:4px;padding:1px 6px;
+    margin-right:7px;vertical-align:1px;font-weight:bold;letter-spacing:.02em;}
+}
 </style>
 </head>
 <body>
@@ -24291,6 +24401,30 @@ window.appliquerFiltreConsole = function(groupements, sponsors){
   }
   if (change) afficher();
 };
+
+/* Présentation intégrée : options d'édition repliables, code des projets en étiquette */
+if (INTEGRE){
+  const barre = document.getElementById("barre");
+  const avancees = ["selModeCollab","selDetail","selPerimetre","chkTermine","chkRappel","choixColonnes"];
+  avancees.forEach(id => { const el = document.getElementById(id); const ch = el && el.closest(".champ"); if (ch) ch.classList.add("opt-avancee"); });
+  const filtres = barre.querySelector(".filtres");
+  const bo = document.createElement("button");
+  bo.type = "button"; bo.className = "bouton-options"; bo.textContent = "Options d'édition ▾";
+  bo.onclick = () => { const o = barre.classList.toggle("options-ouvertes"); bo.textContent = "Options d'édition " + (o ? "▴" : "▾"); };
+  filtres.appendChild(bo);
+  const decorer = () => {
+    document.querySelectorAll("#contenu tr.pj td.lib").forEach(td => {
+      if (td.querySelector(".code-projet")) return;
+      const n = [...td.childNodes].find(x => x.nodeType === 3 && /\d{4}_\d{1,3}_[A-Za-z]{1,4}[\s_:\-]+\S/.test(x.nodeValue));
+      if (!n) return;
+      const m = n.nodeValue.match(/^(\s*)(\d{4}_\d{1,3}_[A-Za-z]{1,4})[\s_:\-]+(.+)$/);
+      if (!m) return;
+      const tag = document.createElement("span"); tag.className = "code-projet"; tag.textContent = m[2];
+      td.insertBefore(tag, n); n.nodeValue = m[3];
+    });
+  };
+  new MutationObserver(decorer).observe(document.getElementById("contenu"), {childList:true, subtree:true});
+}
 window.recharger = () => demarrerDonnees();
 /* Réglages de l'état (en-tête, compteurs, tables) : mot de passe de la console */
 if (INTEGRE){
