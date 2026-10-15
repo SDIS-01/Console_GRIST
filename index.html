@@ -16512,6 +16512,17 @@ window.PONT_MODULES={
   },
   ouvrirFiche:id=>ouvrirFicheDepuisLigne(id),
   projetSeul:()=>APP.vue==="fiche" && !!S.projetSel,
+  /* contexte qui décide de la présentation par défaut du planning */
+  contexte:()=>{
+    if(APP.vue==="fiche" && S.projetSel){
+      const p=S.projetSel, acts=actionsDe(p);
+      let nbT=0; try{ nbT=tachesDe(p).length; }catch(e){}
+      return {type:"projet", id:p.id, axes:acts.some(a=>axeDe(a)), tachesSeules:!acts.length && nbT>0};
+    }
+    if((MENUS["m-sponsor"]||{sel:[]}).sel.length) return {type:"sponsor", id:MENUS["m-sponsor"].sel.join("|")};
+    if(MENUS["m-groupement"].sel.length) return {type:"groupement", id:MENUS["m-groupement"].sel.join("|")};
+    return {type:"aucun"};
+  },
   /* accès protégés des modules : fermés tant qu'aucun mot de passe n'est défini */
   motDePasse:async invite=>{
     if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return false; }
@@ -20355,7 +20366,7 @@ function barSpec(row, mappings){
     let fond, plein, solid=false
     const coulsLigne = rowCouleurs(row)
     if(coulsLigne.length){ fond=nPale(coulsLigne[0],0.78); plein=coulsLigne[0] }
-    else if(row.t==="proj"){ fond="#F3E3E2"; plein="#C0504D" }
+    else if(row.t==="proj" && !projetParAvancement){ fond="#F3E3E2"; plein="#C0504D" }
     else if(row.t==="axe"){ fond="#ffffff"; plein=row.teinte[2] }
     else if(row.t==="meo" && colorByAxis && !colorKey() && row.teinte){ fond=row.teinte[1]; plein=row.teinte[0] }
     else if(!hasProgress){ plein=stateRule(state).color; fond=plein; solid=true }
@@ -20672,7 +20683,7 @@ function renderLegend(){
     }
     const sw = (c, lib, extra) => `<span class="legend-item"><span class="legend-swatch"${extra||""} style="background:${c}"></span>${escapeHtml(lib)}</span>`
     if(currentMappings.progress && showProgress){
-        if(lastView && lastView.model.hier && !ck) items.push(sw("#C0504D","Projet"))
+        if(lastView && lastView.model.hier && !ck && !projetParAvancement) items.push(sw("#C0504D","Projet"))
         items.push(sw("#7FA23F","≥ 76 %"), sw("#E3A51A","26 à 75 %"), sw("#F0904A","1 à 25 %"), sw("#D8D3CC","non démarré"))
         if(colorByAxis && !ck && lastView && lastView.model.anyAxe) items.push(`<span class="legend-item">actions : teinte de leur axe</span>`)
     } else {
@@ -21122,7 +21133,7 @@ function pgLegende(ctx, model){
         }
     }
     if(currentMappings.progress && showProgress){
-        if(model.hier && !ck) item(NC.rouge,"Projet")
+        if(model.hier && !ck && !projetParAvancement) item(NC.rouge,"Projet")
         item("#7FA23F","≥ 76 %"); item("#E3A51A","26 à 75 %"); item("#F0904A","1 à 25 %"); item("#D8D3CC","non démarré")
     }
     item(null,"échéance dépassée",{retard:true})
@@ -21298,15 +21309,39 @@ function chargerBientot(){ clearTimeout(tChargement); tChargement = setTimeout(c
 grist.onRecords(()=>chargerBientot())
 chargerBientot()
 // points d'entrée pour la console (mode intégré)
-/* dans un projet ouvert dans la console : ses actions MEO s'affichent d'office ;
-   en sortant du projet, la puce reprend l'état d'avant */
-let meoAvantProjet = null
+/* Présentation par défaut selon le contexte de la console, appliquée à chaque changement
+   de contexte (les réglages restent ensuite modifiables à la main) :
+   - projet ouvert : actions MEO, sans « Couleur par » ; couleur par axe s'il a des axes ;
+     tâches s'il n'a que des tâches ;
+   - filtre Sponsor CODIR : couleur et tri par groupement ;
+   - filtre Groupement : sans « Couleur par », barres des projets selon leur avancement ;
+   - sinon : présentation d'ouverture. */
+let contexteConsole = null
+let projetParAvancement = false
+function appliquerContexteConsole(){
+    if(!INTEGRE || !PONT.contexte) return
+    const cx = PONT.contexte() || {type:"aucun"}
+    const sig = cx.type+":"+(cx.id||"")
+    if(sig===contexteConsole) return
+    contexteConsole = sig
+    const kGrp = FILTER_KEYS.find(k=>filtreParCle(k).colonne===CONFIG.colonneGroupement) || ""
+    groupBy = ""; collapsedGroups = new Set(); collapsedProjects = new Set()
+    sortLevels = ["","",""]; projetParAvancement = false; colorByAxis = false; includeOptionalNature = false
+    let taches = false
+    if(cx.type==="projet"){ colorBy = ""; includeOptionalNature = true; colorByAxis = !!cx.axes; taches = !!cx.tachesSeules }
+    else if(cx.type==="sponsor"){ colorBy = kGrp; if(kGrp) sortLevels = [kGrp,"",""] }
+    else if(cx.type==="groupement"){ colorBy = ""; projetParAvancement = true }
+    else colorBy = null
+    setChip("chipNature", includeOptionalNature)
+    setChip("chipAxes", colorByAxis)
+    if(taches && !showTasks){ showTasks = true; setChip("chipTasks", true); loadTasks() }
+    else if(!taches && showTasks){ showTasks = false; setChip("chipTasks", false); setTasksStatus("") }
+}
 window.rafraichirDepuisConsole = ()=>{
-    const seul = INTEGRE && PONT.projetSeul && PONT.projetSeul()
-    if(seul && meoAvantProjet===null){ meoAvantProjet = includeOptionalNature; includeOptionalNature = true; setChip("chipNature", true) }
-    else if(!seul && meoAvantProjet!==null){ includeOptionalNature = meoAvantProjet; meoAvantProjet = null; setChip("chipNature", includeOptionalNature) }
+    appliquerContexteConsole()
     if(currentRecords && currentRecords.length) draw(currentRecords, currentMappings)
 }
+
 window.recharger = ()=>chargerBientot()
 window.ouvrirExportPlanning = ()=>openExportDialog()
 window.planningPret = ()=>!!(lastView && lastView.units && lastView.units.length)
