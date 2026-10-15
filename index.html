@@ -16395,7 +16395,7 @@ function rendreListeApp(){
     actionsDe(p).forEach(a=>{ nbA++; rep[classe(pct(a[c.colAvancement]),interrompu(a))]++; });
     tachesP(p).forEach(t=>{ nbT++; rep[classe(pct(t[c.colTacheAvancement]),statutInterrompu(c.tblTache,t,c.colTacheStatut))]++; });
   });
-  rendreKpi(ps,{actions:nbA,taches:nbT});
+  rendreKpi(ps);
   const cle={
     nom:p=>plierTexte(lire(c.tblMain,p,c.colLibelle)), grp:p=>plierTexte(lire(c.tblMain,p,c.colGroupement)),
     por:p=>plierTexte(lire(c.tblMain,p,c.colPorteur)), pri:p=>plierTexte(lire(c.tblMain,p,c.colPriorite)||"zz"),
@@ -17213,7 +17213,7 @@ async function anxImprimer(fam){
   const html=w.htmlAnnexeConsole(fam,f.g,f.sp);
   if(!html) throw new Error("rien à imprimer");
   const fr=document.createElement("iframe");
-  fr.style.cssText="position:fixed;left:-12000px;top:0;width:1120px;height:800px;border:0;";
+  fr.style.cssText="position:fixed;left:-12000px;top:0;width:800px;height:1120px;border:0;";
   document.body.appendChild(fr);
   fr.onload=()=>{ setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast("Impression impossible : "+e.message,true); }
     setTimeout(()=>fr.remove(),60000); },150); };
@@ -17672,7 +17672,7 @@ async function etImprimer(tous){
   const html=w.htmlEtatConsole(etOptionsEtat(), tous);
   if(!html) throw new Error("rien à imprimer");
   const fr=document.createElement("iframe");
-  fr.style.cssText="position:fixed;left:-12000px;top:0;width:1120px;height:800px;border:0;";
+  fr.style.cssText="position:fixed;left:-12000px;top:0;width:800px;height:1120px;border:0;";
   document.body.appendChild(fr);
   fr.onload=()=>{ setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast("Impression impossible : "+e.message,true); }
     setTimeout(()=>fr.remove(),60000); },200); };
@@ -25879,7 +25879,7 @@ window.preparerEtatConsole = o => {
 function documentEtatConsole(contenu, titre){
   const styles = Array.from(document.querySelectorAll("style")).map(x => x.outerHTML).join("");
   return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + echapper(titre || "État") + "</title>" + styles
-    + "<style>@page{size:A4 landscape;margin:10mm}body{background:#fff}</style></head><body><div id=\"contenu\" class=\"contenu\">"
+    + "<style>@page{size:A4 portrait;margin:14mm 12mm}body{background:#fff}</style></head><body><div id=\"contenu\" class=\"contenu\">"
     + contenu + "</div></body></html>";
 }
 window.htmlEtatConsole = (o, tous) => {
@@ -25934,7 +25934,7 @@ window.htmlAnnexeConsole = (famille, groupements, sponsors) => {
   const styles = Array.from(document.querySelectorAll("style")).map(x => x.outerHTML).join("");
   const date = new Date().toLocaleDateString("fr-FR");
   return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + nom + " — " + echapper(e.titre) + "</title>" + styles
-    + "<style>@page{size:A4 landscape;margin:10mm}.annexes{break-before:auto!important;page-break-before:auto!important}"
+    + "<style>@page{size:A4 portrait;margin:14mm 12mm}.annexes{break-before:auto!important;page-break-before:auto!important}"
     + ".entete-impression{display:flex!important}body{background:#fff}</style></head><body><div id=\"contenu\" class=\"contenu\">"
     + '<div class="entete-impression">' + LOGO_HTML + '<div class="txt-ent"><div class="t">' + nom + " — " + echapper(e.titre)
     + '</div><div class="d">Édité le ' + date + " · " + lignes.length + " ligne" + (lignes.length > 1 ? "s" : "") + "</div></div></div>"
