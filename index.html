@@ -1751,6 +1751,36 @@ body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!impo
 .mt-delai{flex:0 0 auto;font-size:11px;font-weight:bold;border-radius:9px;padding:2px 8px;white-space:nowrap;}
 .mt-delai.r{background:#FBEBEB;color:#993333;}.mt-delai.p{background:#FDEBD8;color:#A2551A;}.mt-delai.a{color:#6b7484;font-weight:normal;}
 .mt-x small .code-projet{font-size:10px;padding:0 5px;margin-right:5px;}
+/* MEC 2023 · PAPRIPACT (consultation seule) */
+.anx-outils{display:flex;align-items:center;gap:10px;padding:10px 16px 0;flex-wrap:wrap;}
+.anx-onglets{display:flex;gap:4px;}
+.anx-og{padding:6px 14px;border-radius:6px 6px 0 0;border:1px solid var(--trait);border-bottom:0;color:#6b7484;font-weight:bold;background:#f5f6f8;cursor:pointer;}
+.anx-og.actif{background:#fff;color:#1c2330;box-shadow:inset 0 3px 0 #002395;}
+.anx-og b{background:#e8ecf7;color:#3c4a6b;border-radius:9px;padding:0 6px;margin-left:6px;font-size:11px;}
+.anx-lect{font-size:11.5px;color:#6b7484;}
+.anx-lect i{font-style:normal;background:#eef1f6;border-radius:4px;padding:1px 7px;color:#3c4a6b;}
+.anx-xl{background:#12894b;color:#fff;border:1px solid #12894b;border-radius:5px;padding:6px 14px;font-weight:600;cursor:pointer;box-shadow:0 1px 3px rgba(18,137,75,.3);}
+.anx-xl:hover{background:#0d6e3b;}
+.anx-xl.petit{padding:3px 10px;font-size:11.5px;}
+.anx-defil{overflow:auto;margin:0 16px 16px;border-top:1px solid var(--trait);}
+.anx-table{width:100%;}
+.anx-table tbody tr{cursor:default;}
+.anx-table td{vertical-align:top;font-size:12px;}
+.anx-vide{margin:0 16px;}
+.anx-sous-liste{padding:6px 0 20px;}
+.anx-charge{padding:12px 16px;color:var(--gris);font-size:12px;}
+.anx-bloc{margin-top:14px;}
+.anx-bloc-tete{display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:2px solid #c5cfe8;background:#eef1f6;}
+.anx-bloc-tete b{font-size:13px;}
+.anx-bloc-tete span{color:#6b7484;font-size:12px;}
+.anx-bloc .anx-defil{margin:0;border-top:0;}
+.anx-voile{position:fixed;inset:0;background:rgba(28,35,48,.35);z-index:200;display:flex;align-items:center;justify-content:center;}
+.anx-fen{background:#fff;border-radius:10px;padding:18px 20px;width:min(480px,92vw);box-shadow:0 12px 40px rgba(0,0,0,.25);}
+.anx-fen h3{margin:0 0 6px;font-size:14px;}
+.anx-fen p{margin:0 0 10px;color:#6b7484;font-size:12px;}
+.anx-fen select{width:100%;padding:6px;border:1px solid var(--trait);border-radius:6px;}
+.anx-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
+.mt-aide{font-size:11.5px;color:var(--gris);}
 </style>
 </head>
 <body>
@@ -1853,6 +1883,7 @@ body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!impo
       <div id="zone-travail" class="zone-app" hidden></div>
       <div id="zone-planning" class="zone-mod" hidden></div>
       <div id="zone-etats" class="zone-mod" hidden></div>
+      <div id="zone-annexes" class="zone-app" hidden></div>
       <div id="zone-revues" class="zone-mod" hidden></div>
     </div>
     <div id="entete" class="entete"></div>
@@ -16110,7 +16141,7 @@ function rendreApp(){
     }
     /* planning ou état du seul projet ouvert */
     va.hidden=false;
-    ["liste","travail","planning","etats","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
+    ["liste","travail","planning","etats","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
     $("#kpi-app").hidden=true;
     if(APP.ficheSous==="planning"){ $("#zone-planning").hidden=false; chargerModule("planning"); }
     else { $("#zone-etats").hidden=false; chargerModule("etat"); }
@@ -16119,12 +16150,13 @@ function rendreApp(){
     return;
   }
   va.hidden=false;
-  ["liste","travail","planning","etats","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
+  ["liste","travail","planning","etats","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
   $("#kpi-app").hidden=true;
   if(APP.vue==="travail") $("#zone-travail").hidden=false;
   else if(APP.vue==="revues") $("#zone-revues").hidden=false;
   else if(APP.sous==="liste"){ $("#kpi-app").hidden=false; $("#zone-liste").hidden=false; }
   else if(APP.sous==="planning"){ $("#kpi-app").hidden=false; $("#zone-planning").hidden=false; chargerModule("planning"); }
+  else if(APP.sous==="annexes"){ $("#zone-annexes").hidden=false; }
   else { $("#zone-etats").hidden=false; chargerModule("etat"); }
   rendreListe();          // compteur, cloche ; puis rafraichirVueApp() dessine la vue active
 }
@@ -16137,7 +16169,7 @@ function rendreFil(){
   if(APP.vue==="fiche"){
     const r=APP.retour||{vue:"portefeuille",sous:"liste"};
     const nom = r.vue==="travail" ? "Mon travail" : r.vue==="revues" ? "Revues"
-      : "Portefeuille › "+({liste:"Liste",planning:"Planning",etats:"États"}[r.sous]);
+      : "Portefeuille › "+({liste:"Liste",planning:"Planning",etats:"États",annexes:"MEC · PAPRIPACT"}[r.sous]);
     const p=S.projetSel;
     f.innerHTML='<button type="button" class="fil-retour" id="fil-retour">← Retour</button>'+
       '<span class="fil-chemin">'+esc(nom)+(p?' › <b>'+esc(lire(S.cfg.tblMain,p,S.cfg.colLibelle)||"(sans libellé)")+'</b>':'')+'</span>'+
@@ -16192,7 +16224,7 @@ function rendreFil(){
   }
   f.innerHTML='<b>Portefeuille</b>'+(ctx.length?'<span class="fil-chemin">› '+esc(ctx.join(" › "))+'</span>':'')+
     '<span class="fil-esp"></span><div class="fil-sous">'+
-    [["liste","Liste"],["planning","Planning"],["etats","États"]].map(([k,l])=>
+    [["liste","Liste"],["planning","Planning"],["etats","États"],["annexes","MEC · PAPRIPACT"]].map(([k,l])=>
       '<button type="button" data-sous="'+k+'" class="'+(APP.sous===k?"actif":"")+'">'+l+'</button>').join("")+'</div>';
   f.querySelectorAll("[data-sous]").forEach(x=>x.onclick=()=>allerVue("portefeuille",x.dataset.sous));
 }
@@ -16260,6 +16292,8 @@ function rendreListeApp(){
   });
   $("#zone-liste").querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>
     ouvrirFiche(S.data.main.find(r=>r.id===Number(tr.dataset.p))));
+  /* filtre Groupement ou Sponsor : les lignes MEC 2023 et PAPRIPACT rattachées, sous les projets */
+  annexesSousListe();
 }
 
 /* ---------- Mon travail ---------- */
@@ -16348,17 +16382,23 @@ function rendreTravail(){
   /* actions d'un projet dont l'agent est déjà porteur : redondantes, sauf échéance dépassée ou dans les 15 jours */
   const idsMesProjets=new Set(mesProjets.map(p=>p.id));
   const urgente=n=>{ const e=etatNotif(n.ech); return !!e && (e.k==="retard"||e.k==="proche"); };
-  const acts=els.filter(n=>n.genre==="action" && (!idsMesProjets.has(n.p.id) || urgente(n))), taches=els.filter(n=>n.genre==="tache"), dem=els.filter(n=>n.genre==="journal" && n.ech);
-  const ech=els.filter(n=>n.ech && !(n.genre==="action" && idsMesProjets.has(n.p.id) && !urgente(n))).concat(mesProjets.filter(p=>echeanceProjet(p)&&etatDe(p)!=="termine")
-      .map(p=>({p,lib:"Échéance du projet",ech:echeanceProjet(p),genre:"projet"})))
-    .sort((a,b)=>a.ech-b.ech);
-  /* notifications : non lues pour soi ; pour un autre agent, celles en cours (sans toucher à leur lecture) */
-  const L=notifsLues(), nl=autre ? notifsDe(ag) : (S.notifs||[]).filter(n=>!L.has(n.cle));
+  /* une information n'apparaît qu'à un seul endroit : non lue, elle est dans Notifications ;
+     une fois lue, elle rejoint sa carte (actions, tâches, journal, demandes). Les échéances
+     sont portées par chaque ligne, triée par date. */
+  const L=notifsLues(), nl=autre ? [] : (S.notifs||[]).filter(n=>!L.has(n.cle));
+  const ident=n=>n.genre==="action"?"a:"+n.a.id : n.genre==="tache"?"t:"+n.t.id : n.genre==="journal"?"j:"+n.j.id
+    : (n.genre==="rappel"||n.genre==="demande")?"d:"+n.j.id : n.cle;
+  const enNotif=new Set(nl.map(ident));
+  const libre=n=>!enNotif.has(ident(n));
+  const parDate=(a,b)=>(a.ech||9e12)-(b.ech||9e12);
+  const acts=els.filter(n=>n.genre==="action" && (!idsMesProjets.has(n.p.id) || urgente(n)) && libre(n)).sort(parDate),
+        taches=els.filter(n=>n.genre==="tache" && libre(n)).sort(parDate),
+        dem=els.filter(n=>n.genre==="journal" && n.ech && libre(n)).sort(parDate);
   const dateHtml=t=>'<span class="'+(t<auj?"app-ret":"app-mut")+'">'+dateVersFR(t)+'</span>';
   const it=(n,i,droite)=>{ const sl=sousLigneTravail(n);
     return '<div class="mt-it" data-i="'+i+'"><div class="mt-x">'+esc(n.lib||"(sans libellé)")+
       (sl?'<small>'+sl+'</small>':'')+'</div>'+(droite||"")+'</div>'; };
-  const demandes=demandesDe(ag);
+  const demandes=demandesDe(ag).filter(libre);
   const itDemande=(n,i)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x"><span class="mt-genre">Journal</span><b class="mt-lib">'+
     esc((n.lib||"(entrée sans commentaire)").length>120?n.lib.slice(0,120)+"…":(n.lib||"(entrée sans commentaire)"))+'</b>'+
     '<small>'+(n.collab?'Demandé à <b>'+esc(n.collab)+'</b>':'Sans collaborateur désigné')+(n.date?' le '+dateVersFR(n.date).slice(0,5):'')+
@@ -16371,13 +16411,14 @@ function rendreTravail(){
   };
   z.innerHTML='<div class="mt-grille">'+
     bloc(M+"projets",mesProjets.length+" porteur",mesProjets.map(p=>({p,lib:lire(c.tblMain,p,c.colLibelle),genre:"projet"})),
-      (n,i)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x"><b class="mt-projet">'+liseret(n.p)+libelleProjetHtml(n.lib)+'</b><small>'+esc(lire(c.tblMain,n.p,c.colGroupement))+'</small></div>'+barreAppHtml(n.p)+'</div>')+
-    bloc(M+"échéances","les plus proches",ech,(n,i)=>it(n,i,dateHtml(n.ech)))+
-    bloc(M+"actions en cours",acts.length,acts,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
-    bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,n.ech?dateHtml(n.ech):""))+
-    (dem.length?bloc("Demandes du journal",dem.length,dem,(n,i)=>it(n,i,dateHtml(n.ech))):"")+
+      (n,i)=>{ const e=echeanceProjet(n.p);
+        return '<div class="mt-it" data-i="'+i+'"><div class="mt-x"><b class="mt-projet">'+liseret(n.p)+libelleProjetHtml(n.lib)+'</b><small>'+esc(lire(c.tblMain,n.p,c.colGroupement))+
+          (e&&etatDe(n.p)!=="termine"?' · échéance '+dateVersFR(e):'')+'</small></div>'+barreAppHtml(n.p)+'</div>'; })+
+    bloc(M+"actions en cours",acts.length,acts,(n,i)=>it(n,i,delaiHtml(n.ech)))+
+    bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,delaiHtml(n.ech)))+
+    (dem.length?bloc("Demandes du journal",dem.length,dem,(n,i)=>it(n,i,delaiHtml(n.ech))):"")+
     (S.cfg.colJnlAuteur && S.cfg.colJnlDelai ? bloc(M+"demandes à suivre",demandes.length+" en attente",demandes,itDemande) : "")+
-    carteNotifs(ag,autre,nl,tous)+
+    (autre?"":carteNotifs(ag,autre,nl,tous))+
   '</div>';
   const ntout=$("#mt-tout-lu");
   if(ntout) ntout.onclick=()=>{ const k=nl.length; marquerLues(nl); toast(k+" notification"+(k>1?"s":"")+" marquée"+(k>1?"s":"")+" comme lue"+(k>1?"s":"")); };
@@ -16394,16 +16435,14 @@ function rendreTravail(){
 
 /* carte « Notifications » de Mon travail (remplace le bouton de la barre) */
 function carteNotifs(ag,autre,nl,tous){
-  const filtre=autre ? "toutes" : (APP.filtreNotifs||"nonlues");
-  const toutes=autre ? nl : (S.notifs||[]);
-  const xs=(filtre==="nonlues" ? nl : toutes).slice().sort((a,b)=>(a.ech||9e12)-(b.ech||9e12));
+  const filtre="nonlues";
+  const xs=nl.slice().sort((a,b)=>(a.ech||9e12)-(b.ech||9e12));
   const lues=autre ? new Set() : notifsLues();
   let h='<div class="mt-carte mt-carte-notifs"><h3>Notifications<span>'+
-    (autre ? toutes.length+" en cours" : nl.length+" non lue"+(nl.length>1?"s":""))+'</span></h3>';
+    nl.length+" non lue"+(nl.length>1?"s":"")+'</span></h3>';
   if(!autre){
-    h+='<div class="mt-notif-outils">'+[["nonlues","Non lues",nl.length],["toutes","Toutes",toutes.length]].map(([k,l,n])=>
-      '<button type="button" class="mt-chip'+(filtre===k?" on":"")+'" data-mtf="'+k+'">'+l+' <b>'+n+'</b></button>').join("")+
-      '<span class="fil-esp"></span><button type="button" class="fil-lien" id="mt-tout-lu"'+(nl.length?"":" disabled")+'>Tout marquer comme lu</button></div>';
+    if(nl.length) h+='<div class="mt-notif-outils"><span class="mt-aide">Une fois lue, l\'information rejoint sa carte.</span>'+
+      '<span class="fil-esp"></span><button type="button" class="fil-lien" id="mt-tout-lu">Tout marquer comme lu</button></div>';
   }
   if(!xs.length){ h+='<div class="mt-vide">'+(filtre==="nonlues"?"Rien de nouveau.":"Aucune notification.")+'</div>'; return h+'</div>'; }
   const groupe=n=>{ const e=etatNotif(n.ech); return e&&e.k==="retard" ? "retard" : e&&e.k==="proche" ? "proche" : "tard"; };
@@ -16592,6 +16631,7 @@ function rafraichirVueApp(){
   rendreFil();
   if(APP.vue==="portefeuille"){
     if(APP.sous==="liste") rendreListeApp();
+    else if(APP.sous==="annexes") rendreAnnexes();
     else if(APP.sous==="planning") rendreKpi(projetsFiltres());
   } else if(APP.vue==="travail") rendreTravail();
   notifierModules();   // planning et état déjà chargés suivent les filtres, même masqués
@@ -16692,6 +16732,356 @@ function brancherApp(){
 }
 
 vueInitiale();
+
+/* =======================================================================
+   MEC 2023 et PAPRIPACT — consultation seule et export Excel fidèle.
+   Colonnes, libellés, couleurs des choix et règles conditionnelles sont
+   repris d'une vue Grist de chaque table (moteur du widget « Export Excel
+   fidèle »). Les lignes affichées suivent les filtres Groupement / Sponsor
+   de la console, avec le rattachement calculé par l'état.
+   Rien n'est jamais écrit dans les tables.
+   ======================================================================= */
+const ANX={meta:null, metaT:0, tables:{}, onglet:"mec", jeton:0};
+const ANX_TTL=60000;   // données relues au plus toutes les minutes
+const ANX_FAMILLES={mec:{titre:"MEC 2023", defaut:"MEC_2023", cle:"tMec"}, pap:{titre:"PAPRIPACT", defaut:"PAPRIPACT", cle:"tPapripact"}};
+
+function anxNomTable(fam){
+  const o=(S.modulesOptions&&S.modulesOptions.etat)||{};
+  return o[ANX_FAMILLES[fam].cle] || ANX_FAMILLES[fam].defaut;
+}
+function anxLignes(t){
+  return t.id.map((id,i)=>{ const o={id}; for(const k in t) if(k!=="id") o[k]=t[k][i]; return o; });
+}
+function anxJson(raw,def){ if(!raw) return def; try{ const v=JSON.parse(raw); return v==null?def:v; }catch(e){ return def; } }
+function anxRefList(v){ return Array.isArray(v)&&v[0]==="L" ? v.slice(1) : []; }
+function anxErreur(v){ return Array.isArray(v)&&v[0]==="E"; }
+
+async function anxChargerMeta(){
+  if(ANX.meta && Date.now()-ANX.metaT<ANX_TTL) return ANX.meta;
+  const noms=["_grist_Tables","_grist_Tables_column","_grist_Views","_grist_Views_section","_grist_Views_section_field"];
+  const t=await Promise.all(noms.map(n=>grist.docApi.fetchTable(n)));
+  let filtres=[];
+  try{ filtres=anxLignes(await grist.docApi.fetchTable("_grist_Filters")); }catch(e){}
+  ANX.meta={tables:anxLignes(t[0]), cols:anxLignes(t[1]), vues:anxLignes(t[2]), sections:anxLignes(t[3]), champs:anxLignes(t[4]), filtres};
+  ANX.metaT=Date.now();
+  return ANX.meta;
+}
+/* contexte d'une table : métadonnées, vues disponibles, données */
+async function anxTable(tableId){
+  const T0=ANX.tables[tableId];
+  if(T0 && Date.now()-T0.t<ANX_TTL) return T0;
+  const M=await anxChargerMeta();
+  const tb=M.tables.find(t=>t.tableId===tableId);
+  if(!tb) throw new Error("Table « "+tableId+" » introuvable dans le document.");
+  const colsByRef={};
+  M.cols.forEach(c=>{ colsByRef[c.id]=c; });
+  const pages={}; M.vues.forEach(v=>{ pages[v.id]=v.name||""; });
+  const sections=M.sections.filter(s=>s.tableRef===tb.id && ["record","detail","single"].includes(s.parentKey||"record"))
+    .map(s=>Object.assign({},s,{pageName:pages[s.parentId]||"", allFields:M.champs.filter(f=>f.parentId===s.id)}))
+    .filter(s=>s.allFields.length);
+  const data=await grist.docApi.fetchTable(tableId);
+  const T={tableId, tableRef:tb.id, colsByRef, sections, data, filtres:M.filtres,
+    colsTable:M.cols.filter(c=>c.parentId===tb.id), t:Date.now()};
+  ANX.tables[tableId]=T;
+  return T;
+}
+function anxSection(T){
+  const o=(S.modulesOptions&&S.modulesOptions.annexes)||{};
+  return T.sections.find(s=>s.id===o[T.tableId]) || T.sections[0] || null;
+}
+/* style et libellé d'un champ : colonne puis surcharge du champ (comme Grist) */
+function anxChamp(T,f){
+  const col=T.colsByRef[f.colRef];
+  if(!col) return null;
+  const colOpts=anxJson(col.widgetOptions,{}), fldOpts=anxJson(f.widgetOptions,{});
+  const opts=Object.assign({},colOpts,fldOpts);
+  const fRefs=anxRefList(f.rules), cRefs=anxRefList(col.rules);
+  const fSt=Array.isArray(fldOpts.rulesOptions)&&fldOpts.rulesOptions.length?fldOpts.rulesOptions:null;
+  const cSt=Array.isArray(colOpts.rulesOptions)&&colOpts.rulesOptions.length?colOpts.rulesOptions:null;
+  let refs=[], styles=[];
+  if(fRefs.length&&fSt){ refs=fRefs; styles=fSt; }
+  else if(cRefs.length&&cSt){ refs=cRefs; styles=cSt; }
+  else if(fRefs.length){ refs=fRefs; styles=cSt||[]; }
+  else if(cRefs.length){ refs=cRefs; styles=fSt||[]; }
+  const regles=refs.map((r,i)=>{ const rc=T.colsByRef[r]; return {colId:rc?rc.colId:null, style:styles[i]||{}}; });
+  const dRef=f.displayCol||col.displayCol||0, dCol=dRef?T.colsByRef[dRef]:null;
+  return {colId:col.colId, label:col.label||col.colId, type:col.type, baseType:String(col.type).split(":")[0],
+    displayColId:dCol?dCol.colId:null, width:f.width||100, opts, regles};
+}
+/* champs de la vue, plus la colonne Commentaire de la table si la vue ne la montre pas */
+function anxChamps(T,sec){
+  const fs=sec.allFields.slice().sort((a,b)=>a.parentPos-b.parentPos).map(f=>anxChamp(T,f)).filter(Boolean);
+  const vus=new Set(fs.map(f=>f.colId));
+  T.colsTable.filter(c=>/^comment/i.test(c.colId)||/^comment/i.test(c.label||""))
+    .filter(c=>!vus.has(c.colId) && !/^gristHelper_/.test(c.colId))
+    .forEach(c=>{ const f=anxChamp(T,{colRef:c.id, widgetOptions:"", rules:null, displayCol:0, width:260}); if(f) fs.push(f); });
+  return fs;
+}
+function anxValeur(T,f,i){
+  if(f.displayColId && T.data[f.displayColId]) return T.data[f.displayColId][i];
+  const a=T.data[f.colId]; return a?a[i]:null;
+}
+function anxStyle(T,f,i){
+  let st=Object.assign({},f.opts);
+  const co=f.opts.choiceOptions;
+  if(co && f.baseType==="Choice"){ const v=T.data[f.colId]?T.data[f.colId][i]:null; if(typeof v==="string"&&co[v]) st=Object.assign(st,co[v]); }
+  f.regles.forEach(r=>{ const fl=r.colId?T.data[r.colId]:null; if(fl&&fl[i]) st=Object.assign(st,r.style); });
+  return st;
+}
+function anxCss(o){
+  const c=[];
+  if(o.fillColor) c.push("background:"+o.fillColor);
+  if(o.textColor) c.push("color:"+o.textColor);
+  if(o.fontBold) c.push("font-weight:600");
+  if(o.fontItalic) c.push("font-style:italic");
+  const d=[]; if(o.fontUnderline) d.push("underline"); if(o.fontStrikethrough) d.push("line-through");
+  if(d.length) c.push("text-decoration:"+d.join(" "));
+  if(o.alignment) c.push("text-align:"+o.alignment);
+  return c.join(";");
+}
+function anxTexte(T,f,i){
+  const v=anxValeur(T,f,i);
+  if(v===null||v===undefined||v==="") return "";
+  if(anxErreur(v)) return "#ERREUR";
+  if(Array.isArray(v)) return (v[0]==="L"?v.slice(1):v).filter(x=>x!==null&&x!=="").join(", ");
+  if(f.displayColId) return String(v);
+  if((f.baseType==="Date"||f.baseType==="DateTime") && typeof v==="number") return dateVersFR(v);
+  if(f.baseType==="Bool") return v?"✓":"";
+  if((f.baseType==="Numeric"||f.baseType==="Int") && typeof v==="number"){
+    if(f.opts.numMode==="percent") return Math.round(v*100*(f.opts.decimals?Math.pow(10,f.opts.decimals):1))/(f.opts.decimals?Math.pow(10,f.opts.decimals):1)+" %";
+    return v.toLocaleString("fr-FR",{maximumFractionDigits:f.opts.decimals!=null?f.opts.decimals:(f.opts.maxDecimals!=null?f.opts.maxDecimals:10)});
+  }
+  return String(v);
+}
+/* lignes dans l'ordre de la vue (tri et filtres de la vue), restreintes aux identifiants donnés */
+function anxOrdre(T,sec,ids){
+  const D=T.data;
+  let idx=D.id.map((_,i)=>i);
+  if(ids){ const s=new Set(ids); idx=idx.filter(i=>s.has(D.id[i])); }
+  const specs=[];
+  T.filtres.filter(fl=>fl.viewSectionRef===sec.id&&fl.filter).forEach(fl=>specs.push({colRef:fl.colRef, spec:anxJson(fl.filter,null)}));
+  sec.allFields.forEach(f=>{ if(f.filter && !specs.some(o=>o.colRef===f.colRef)) specs.push({colRef:f.colRef, spec:anxJson(f.filter,null)}); });
+  const passe=(spec,v)=>{
+    if(!spec) return true;
+    if(spec.min!=null||spec.max!=null){ if(typeof v!=="number") return false; if(spec.min!=null&&v<spec.min) return false; if(spec.max!=null&&v>spec.max) return false; return true; }
+    const vals=(Array.isArray(v)&&v[0]==="L"?v.slice(1):[v===undefined?null:v]).map(x=>x===""?null:x); if(!vals.length) vals.push(null);
+    if(Array.isArray(spec.included)&&spec.included.length){ const st=new Set(spec.included.map(x=>x===""?null:x)); return vals.some(x=>st.has(x)); }
+    if(Array.isArray(spec.excluded)&&spec.excluded.length){ const st=new Set(spec.excluded.map(x=>x===""?null:x)); return !vals.some(x=>st.has(x)); }
+    return true;
+  };
+  specs.filter(o=>o.spec).forEach(o=>{ const col=T.colsByRef[o.colRef]; if(col) idx=idx.filter(i=>passe(o.spec, D[col.colId]?D[col.colId][i]:null)); });
+  const tri=anxJson(sec.sortColRefs,[]);
+  const regles=(Array.isArray(tri)?tri:[]).map(s=>typeof s==="number"?{colRef:Math.abs(s),dir:s<0?-1:1}:{colRef:Math.abs(s.colRef),dir:(s.direction!=null?s.direction:(s.colRef<0?-1:1))<0?-1:1}).filter(s=>T.colsByRef[s.colRef]);
+  const val=(ref,i)=>{ const c=T.colsByRef[ref], d=c.displayCol?T.colsByRef[c.displayCol]:null, src=d&&D[d.colId]?d.colId:c.colId; return D[src]?D[src][i]:null; };
+  const cmp=(a,b)=>{ const ea=a==null||a==="", eb=b==null||b===""; if(ea&&eb) return 0; if(ea) return -1; if(eb) return 1;
+    if(typeof a==="number"&&typeof b==="number") return a-b; return String(a).localeCompare(String(b),"fr",{numeric:true,sensitivity:"base"}); };
+  if(regles.length) idx.sort((x,y)=>{ for(const r of regles){ const c=cmp(val(r.colRef,x),val(r.colRef,y))*r.dir; if(c) return c; } return 0; });
+  else if(D.manualSort) idx.sort((x,y)=>D.manualSort[x]-D.manualSort[y]);
+  return idx;
+}
+function anxTableHtml(T,sec,idx){
+  const fs=anxChamps(T,sec);
+  if(!idx.length) return '<div class="mt-vide anx-vide">Aucune ligne.</div>';
+  return '<div class="anx-defil"><table class="app-table anx-table"><thead><tr>'+fs.map(f=>'<th style="min-width:'+Math.min(320,Math.max(70,f.width))+'px">'+esc(f.label)+'</th>').join("")+
+    '</tr></thead><tbody>'+idx.map(i=>'<tr>'+fs.map(f=>{
+      const st=anxStyle(T,f,i), t=anxTexte(T,f,i);
+      return '<td style="'+anxCss(st)+'"'+(t.length>140?' title="'+esc(t)+'"':'')+'>'+esc(t.length>400?t.slice(0,400)+"…":t)+'</td>';
+    }).join("")+'</tr>').join("")+'</tbody></table></div>';
+}
+
+/* identifiants rattachés aux filtres Groupement / Sponsor, calculés par l'état (null = pas de filtre) */
+function anxFiltres(){ return {g:MENUS["m-groupement"].sel.slice(), sp:(MENUS["m-sponsor"]||{sel:[]}).sel.slice()}; }
+async function anxIds(){
+  const f=anxFiltres();
+  if(!f.g.length && !f.sp.length) return null;
+  await chargerModule("etat");
+  const t0=Date.now();
+  while(Date.now()-t0<25000){
+    const w=fenetreModule("etat");
+    if(w && w.etatPret && w.etatPret() && w.lignesAnnexes) return w.lignesAnnexes(f.g,f.sp);
+    await new Promise(r=>setTimeout(r,250));
+  }
+  throw new Error("le rattachement aux groupements (calculé par l'état) n'a pas pu être lu");
+}
+
+/* ---------- export Excel fidèle (moteur du widget) ---------- */
+let anxExcelJs=null;
+function anxChargerExcelJs(){
+  if(window.ExcelJS) return Promise.resolve();
+  if(anxExcelJs) return anxExcelJs;
+  anxExcelJs=new Promise((ok,ko)=>{ const s=document.createElement("script");
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+    s.onload=()=>ok(); s.onerror=()=>{ anxExcelJs=null; ko(new Error("bibliothèque Excel non chargée (accès Internet ?)")); };
+    document.head.appendChild(s); });
+  return anxExcelJs;
+}
+function anxArgb(h){ if(!h) return null; const x=String(h).replace("#",""); return (x.length===8?x:"FF"+x).toUpperCase(); }
+function anxAppliquer(cell,o,base){
+  const fill=anxArgb(o.fillColor);
+  if(fill && !(base&&fill==="FFFFFFFF")) cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:fill}};
+  const font={};
+  if(o.textColor) font.color={argb:anxArgb(o.textColor)};
+  if(o.fontBold) font.bold=true; if(o.fontItalic) font.italic=true;
+  if(o.fontUnderline) font.underline=true; if(o.fontStrikethrough) font.strike=true;
+  if(Object.keys(font).length) cell.font=Object.assign({},cell.font||{},font);
+  const al={}; if(o.alignment) al.horizontal=o.alignment; if(o.wrap) al.wrapText=true;
+  if(Object.keys(al).length) cell.alignment=Object.assign({},cell.alignment||{},al);
+}
+function anxDateExcel(raw,type){
+  if(typeof raw!=="number") return raw;
+  const ms=raw*1000, tz=String(type).split(":")[1];
+  if(!tz) return new Date(ms);
+  try{ const p={}; new Intl.DateTimeFormat("en-US",{timeZone:tz,hour12:false,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"})
+    .formatToParts(new Date(ms)).forEach(x=>{ p[x.type]=x.value; });
+    return new Date(Date.UTC(+p.year,+p.month-1,+p.day,+p.hour%24,+p.minute,+p.second)); }catch(e){ return new Date(ms); }
+}
+function anxNumFmt(o){
+  const dec=o.decimals!=null?o.decimals:(o.maxDecimals!=null?o.maxDecimals:(o.numMode==="currency"?2:null));
+  const frac=dec?"."+"0".repeat(dec):"";
+  switch(o.numMode){
+    case "percent": return "0"+frac+"%";
+    case "currency": return "#,##0"+(frac||".00")+' "'+(o.currency==="USD"?"$":"€")+'"';
+    case "scientific": return "0.00E+00";
+    case "decimal": return "#,##0"+frac;
+    default: return dec?"#,##0"+frac:"General";
+  }
+}
+function anxValeurExcel(T,f,i){
+  const raw=anxValeur(T,f,i);
+  if(raw===null||raw===undefined||raw==="") return null;
+  if(anxErreur(raw)) return "#ERREUR";
+  if(Array.isArray(raw)){ const it=(raw[0]==="L"?raw.slice(1):raw).map(x=>x==null?"":String(x).trim()).filter(Boolean); return it.length?it.join("\n"):null; }
+  if(f.displayColId) return raw;
+  if(f.baseType==="Date"||f.baseType==="DateTime") return anxDateExcel(raw,f.type);
+  if(f.baseType==="Bool") return !!raw;
+  return raw;
+}
+async function anxExporter(T,sec,idx,titre){
+  await anxChargerExcelJs();
+  const fs=anxChamps(T,sec);
+  const wb=new ExcelJS.Workbook(); wb.creator="Console projets — SDIS de l'Ain";
+  const ws=wb.addWorksheet(String(titre||T.tableId).slice(0,31).replace(/[\\\/\*\?\[\]:]/g,"-"));
+  const h=ws.addRow(fs.map(f=>f.label));
+  h.eachCell(c=>{ c.font={bold:true,color:{argb:"FFFFFFFF"}}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F5673"}};
+    c.alignment={vertical:"middle"}; c.border={bottom:{style:"thin",color:{argb:"FFB8C2CC"}}}; });
+  h.height=20;
+  ws.views=[{state:"frozen",ySplit:1,xSplit:sec.numFrozen||0}];
+  ws.autoFilter={from:{row:1,column:1},to:{row:1,column:fs.length}};
+  fs.forEach((f,k)=>{ ws.getColumn(k+1).width=Math.max(9,Math.round(f.width/7)); });
+  idx.forEach(r=>{
+    const row=ws.addRow(fs.map(f=>anxValeurExcel(T,f,r)));
+    fs.forEach((f,k)=>{
+      const cell=row.getCell(k+1);
+      anxAppliquer(cell,f.opts,true);
+      const co=f.opts.choiceOptions;
+      if(co){
+        if(f.baseType==="Choice" && typeof cell.value==="string" && co[cell.value]) anxAppliquer(cell,co[cell.value]);
+        else if(f.baseType==="ChoiceList"){
+          const parts=[];
+          anxRefList(T.data[f.colId][r]).filter(v=>v!=null&&String(v).trim()!=="").forEach((v,n)=>{
+            if(n) parts.push({text:"\n",font:{color:{argb:anxArgb(f.opts.textColor)||"FF000000"}}});
+            const o=co[v]||{}, font={color:{argb:anxArgb(o.textColor)||anxArgb(f.opts.textColor)||"FF000000"}};
+            if(o.fontBold) font.bold=true; if(o.fontItalic) font.italic=true;
+            parts.push({text:String(v),font});
+          });
+          cell.value=parts.length?{richText:parts}:null;
+        }
+      }
+      f.regles.forEach(rg=>{ const fl=rg.colId?T.data[rg.colId]:null; if(fl&&fl[r]) anxAppliquer(cell,rg.style); });
+      if(!f.displayColId){
+        if(f.baseType==="Date"||f.baseType==="DateTime") cell.numFmt="dd/mm/yyyy";
+        else if(f.baseType==="Numeric"||f.baseType==="Int") cell.numFmt=anxNumFmt(f.opts);
+      }
+      const v=cell.value;
+      if((typeof v==="string"&&v.indexOf("\n")>=0)||(v&&Array.isArray(v.richText)&&v.richText.some(p=>String(p.text).indexOf("\n")>=0)))
+        cell.alignment=Object.assign({},cell.alignment||{},{wrapText:true,vertical:"top"});
+    });
+  });
+  const buf=await wb.xlsx.writeBuffer();
+  const url=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  const a=document.createElement("a"); a.href=url;
+  const ctx=anxFiltres(), suffixe=ctx.g.concat(ctx.sp).join("_");
+  a.download=(String(titre||T.tableId)+(suffixe?"_"+suffixe:"")).replace(/[^\w\-]+/g,"_").replace(/^_+|_+$/g,"")+"_"+new Date().toISOString().slice(0,10)+".xlsx";
+  a.click(); setTimeout(()=>URL.revokeObjectURL(url),2000);
+  toast("Fichier Excel généré : "+idx.length+" ligne"+(idx.length>1?"s":""));
+}
+
+/* choix de la vue Grist lue (administrateur) */
+async function anxChoisirVue(T){
+  if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
+  if(!await motDePasseValide("Mot de passe pour choisir la vue lue :")) return;
+  const cur=anxSection(T);
+  const v=document.createElement("div"); v.className="anx-voile";
+  v.innerHTML='<div class="anx-fen"><h3>Vue lue pour « '+esc(T.tableId)+' »</h3>'+
+    '<p>Colonnes, ordre, couleurs, tri et filtres sont repris de cette vue Grist.</p>'+
+    '<select id="anx-vue">'+T.sections.map(s=>'<option value="'+s.id+'"'+(cur&&cur.id===s.id?" selected":"")+'>'+esc((s.pageName?s.pageName+" › ":"")+(s.title||"Sans titre"))+'</option>').join("")+'</select>'+
+    '<div class="anx-btns"><button class="btn-2" id="anx-annuler">Annuler</button><button class="btn" id="anx-ok">Enregistrer</button></div></div>';
+  document.body.appendChild(v);
+  v.querySelector("#anx-annuler").onclick=()=>v.remove();
+  v.querySelector("#anx-ok").onclick=()=>{
+    S.modulesOptions=S.modulesOptions||{};
+    S.modulesOptions.annexes=Object.assign({},S.modulesOptions.annexes||{},{[T.tableId]:Number(v.querySelector("#anx-vue").value)});
+    sauverOptionsModules(); v.remove(); rafraichirVueApp();
+  };
+}
+
+/* ---------- vue Portefeuille › MEC · PAPRIPACT ---------- */
+async function rendreAnnexes(){
+  const z=$("#zone-annexes"), jeton=++ANX.jeton;
+  if(!z.innerHTML) z.innerHTML='<div class="app-vide">Chargement de MEC 2023 et PAPRIPACT…</div>';
+  try{
+    const [ids, Tm, Tp]=await Promise.all([anxIds(), anxTable(anxNomTable("mec")).catch(e=>({erreur:e.message})), anxTable(anxNomTable("pap")).catch(e=>({erreur:e.message}))]);
+    if(jeton!==ANX.jeton) return;
+    const parFam={mec:Tm, pap:Tp};
+    const lignes=fam=>{ const T=parFam[fam]; if(T.erreur) return null; const sec=anxSection(T); if(!sec) return null;
+      return {T, sec, idx:anxOrdre(T,sec, ids ? (fam==="mec"?ids.mec:ids.pap) : null)}; };
+    const L={mec:lignes("mec"), pap:lignes("pap")};
+    const f=ANX.onglet, cur=L[f], T=parFam[f];
+    const info=ids ? "lignes rattachées aux filtres de la console" : "toutes les lignes (filtrez un groupement ou un sponsor pour restreindre)";
+    z.innerHTML='<div class="anx-outils"><div class="anx-onglets">'+["mec","pap"].map(k=>
+        '<button type="button" class="anx-og'+(f===k?" actif":"")+'" data-anx="'+k+'">'+ANX_FAMILLES[k].titre+'<b>'+(L[k]?L[k].idx.length:"—")+'</b></button>').join("")+'</div>'+
+      '<span class="anx-lect">👁 Consultation seule'+(cur?' · vue Grist <i>'+esc((cur.sec.pageName?cur.sec.pageName+" › ":"")+(cur.sec.title||"Sans titre"))+'</i>':'')+' · '+info+'</span>'+
+      '<span class="fil-esp"></span>'+
+      (cur?'<button type="button" class="anx-xl" id="anx-xl">⬇ Exporter en .xlsx</button><button type="button" class="fil-lien" id="anx-vue-btn">🔒 Vue lue</button>':'')+'</div>'+
+      (cur ? anxTableHtml(cur.T,cur.sec,cur.idx)
+           : '<div class="app-vide">'+esc(T.erreur||("Aucune vue Grist ne présente la table « "+anxNomTable(f)+" ».")))+'</div>';
+    z.querySelectorAll("[data-anx]").forEach(b=>b.onclick=()=>{ ANX.onglet=b.dataset.anx; rendreAnnexes(); });
+    const bx=$("#anx-xl"); if(bx) bx.onclick=()=>anxExporter(cur.T,cur.sec,cur.idx,ANX_FAMILLES[f].titre).catch(e=>toast("Export impossible : "+e.message,true));
+    const bv=$("#anx-vue-btn"); if(bv) bv.onclick=()=>anxChoisirVue(cur.T);
+  }catch(e){
+    if(jeton===ANX.jeton) z.innerHTML='<div class="app-vide">MEC 2023 / PAPRIPACT indisponibles : '+esc(e.message)+'.</div>';
+  }
+}
+
+/* ---------- sous la liste des projets, quand un groupement ou un sponsor est filtré ---------- */
+async function annexesSousListe(){
+  const zl=$("#zone-liste");
+  const f=anxFiltres();
+  if(!f.g.length && !f.sp.length) return;
+  const d=document.createElement("div"); d.id="liste-annexes"; d.className="anx-sous-liste";
+  d.innerHTML='<div class="anx-charge">Recherche des lignes MEC 2023 et PAPRIPACT rattachées…</div>';
+  zl.appendChild(d);
+  const jeton=++ANX.jeton;
+  try{
+    const [ids, Tm, Tp]=await Promise.all([anxIds(), anxTable(anxNomTable("mec")).catch(()=>null), anxTable(anxNomTable("pap")).catch(()=>null)]);
+    if(jeton!==ANX.jeton || !d.isConnected) return;
+    let h="";
+    [["mec",Tm],["pap",Tp]].forEach(([fam,T])=>{
+      if(!T) return;
+      const sec=anxSection(T); if(!sec) return;
+      const idx=anxOrdre(T,sec, fam==="mec"?ids.mec:ids.pap);
+      if(!idx.length) return;
+      h+='<div class="anx-bloc"><div class="anx-bloc-tete"><b>'+ANX_FAMILLES[fam].titre+'</b><span>'+idx.length+' ligne'+(idx.length>1?"s":"")+' rattachée'+(idx.length>1?"s":"")+' · consultation seule</span>'+
+        '<span class="fil-esp"></span><button type="button" class="anx-xl petit" data-xl="'+fam+'">⬇ Excel</button></div>'+anxTableHtml(T,sec,idx)+'</div>';
+      d._anx=d._anx||{}; d._anx[fam]={T,sec,idx};
+    });
+    d.innerHTML=h;
+    d.querySelectorAll("[data-xl]").forEach(b=>b.onclick=()=>{ const o=d._anx[b.dataset.xl];
+      anxExporter(o.T,o.sec,o.idx,ANX_FAMILLES[b.dataset.xl].titre).catch(e=>toast("Export impossible : "+e.message,true)); });
+  }catch(e){
+    if(jeton===ANX.jeton && d.isConnected) d.innerHTML='<div class="anx-charge">MEC 2023 / PAPRIPACT : '+esc(e.message)+'.</div>';
+  }
+}
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
    déjà installée dans le document — réglages, impression, coup d'œil, modules —
@@ -24789,6 +25179,17 @@ if (INTEGRE){
   }, true);
 }
 window.etatPret = () => !!D.pretes;
+/* Pour la console : identifiants des lignes MEC 2023 et PAPRIPACT rattachées aux groupements
+   et sponsors donnés (listes vides = pas de filtre sur ce critère). */
+window.lignesAnnexes = (groupements, sponsors) => {
+  if (!D.pretes) return null;
+  const g = (groupements || []).map(norm), sp = (sponsors || []).map(norm);
+  const okG = r => !g.length || g.includes(norm(r.grpCode)) || g.includes(norm(r.grpLibelle));
+  const okS = r => !sp.length || sp.includes(norm(r.sponsor));
+  const mec = new Set(), pap = new Set();
+  annexesSponsor().forEach(r => { if (okG(r) && okS(r)) (r.famille === "MEC 2023" ? mec : pap).add(r.a.id); });
+  return { tMec: reglages.tMec, tPap: reglages.tPapripact, mec: [...mec], pap: [...pap] };
+};
 window.ouvrirReglagesEtat = async () => {
   if (INTEGRE && !(await PONT.motDePasse("Mot de passe pour modifier les réglages de l'état :"))) return;
   ouvrirReglages();
