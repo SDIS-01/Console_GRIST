@@ -1838,6 +1838,7 @@ body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!impo
 .et-pop-l{font-size:11.5px;color:#6b7484;margin:6px 0 3px;}
 .anx-cliquable{cursor:pointer!important;}
 .anx-cliquable:hover td{background:var(--bleu-survol)!important;}
+.fa-titre-fixe{border:1px solid transparent;padding:6px 10px;}
 </style>
 </head>
 <body>
@@ -2721,6 +2722,21 @@ function fonctionAgent(tableId,ligne,colPorteur){
 
 /* --- accès aux valeurs, en résolvant les références --- */
 function lire(tableId,ligne,colId){
+  const v=lireBrut(tableId,ligne,colId);
+  const c=S.cfg;
+  if(colId && colId===c.colLibelle && tableId===c.tblMain && c.colActKey && ligne && ligne[c.colActKey]){
+    const k=txt(ligne[c.colActKey]).trim();
+    if(k && k!==v){
+      const dk=decouperLibelleAction(k);
+      if(dk.num && dk.texte && dk.texte!==k && !decouperLibelleAction(v).num){
+        const code=(String(v).match(/^\s*(\d{4}_\d{1,3}_[A-Za-z]{1,4})/)||[])[1];
+        if(!String(v).trim() || (code && k.indexOf(code)===0)) return dk.num+" - "+dk.texte;
+      }
+    }
+  }
+  return v;
+}
+function lireBrut(tableId,ligne,colId){
   if(!colId||!ligne) return "";
   const v=ligne[colId];
   const info=infoCol(tableId,colId);
@@ -6167,8 +6183,9 @@ function rendreFenetreAction(){
   const av=pct(a[c.colAvancement]);
   const ts=tachesDe(a);
   v.innerHTML='<div class="fa-fenetre" role="dialog" aria-modal="true">'+
-    '<div class="fa-tete"><div class="fa-titre"><input type="text" class="edit fa-titre-champ" '+
-      'data-t="'+t+'" data-r="'+a.id+'" data-c="'+c.colLibelle+'" value="'+esc(txt(a[c.colLibelle]))+'"></div>'+
+    '<div class="fa-tete"><div class="fa-titre">'+(lire(c.tblMain,a,c.colLibelle)!==lireBrut(c.tblMain,a,c.colLibelle)
+      ? '<div class="fa-titre-champ fa-titre-fixe">'+esc(lire(c.tblMain,a,c.colLibelle))+'</div>'
+      : '<input type="text" class="edit fa-titre-champ" data-t="'+t+'" data-r="'+a.id+'" data-c="'+c.colLibelle+'" value="'+esc(txt(a[c.colLibelle]))+'">')+'</div>'+
     '<button type="button" class="fa-fermer" title="Fermer (Échap)">✕</button></div>'+
     '<div class="grille">'+
       (axeOK()?ch("Axe",editeurAxe(t,a)):"")+
@@ -16177,6 +16194,8 @@ function ouvrirFicheDepuisLigne(id){
   const o=projetDeLigne(id);
   if(!o.p){ toast("Ligne introuvable dans la table des projets.",true); return; }
   ouvrirFiche(o.p, o.action ? "actions" : null);
+  /* une action : sa fenêtre s'ouvre directement, avec ses tâches */
+  if(o.action && typeof ouvrirFenetreAction==="function") setTimeout(()=>{ try{ ouvrirFenetreAction(o.action.id); }catch(e){} },0);
 }
 function allerVue(vue,sous){
   if(vue==="revues"){ ouvrirRevues(); return; }
@@ -16185,6 +16204,7 @@ function allerVue(vue,sous){
   if(vue!=="travail"){ APP.agentVu=null; APP.choixAgent=false; }
   if(vue!=="fiche") APP.ficheSous="fiche";
   if(sous && sous!=="etats" && APP.etat) APP.etat.avance=false;
+  if(sous==="etats" && APP.etat && !APP.etat.avance) sous="liste";
   APP.vue=vue;
   if(sous) APP.sous=sous;
   rendreApp();
@@ -16238,7 +16258,6 @@ function rendreApp(){
   else if(APP.sous==="liste"){ $("#kpi-app").hidden=false; $("#zone-liste").hidden=false; }
   else if(APP.sous==="planning"){ $("#kpi-app").hidden=false; $("#zone-planning").hidden=false; chargerModule("planning"); }
   else if(APP.sous==="annexes"){ $("#zone-annexes").hidden=false; }
-  else if(!APP.etat.avance){ $("#zone-etats-app").hidden=false; }
   else { $("#zone-etats").hidden=false; chargerModule("etat"); }
   rendreListe();          // compteur, cloche ; puis rafraichirVueApp() dessine la vue active
 }
@@ -16306,12 +16325,12 @@ function rendreFil(){
   }
   f.innerHTML='<b>Portefeuille</b>'+(ctx.length?'<span class="fil-chemin">› '+esc(ctx.join(" › "))+'</span>':'')+
     '<span class="fil-esp"></span><div class="fil-sous">'+
-    [["liste","Liste"],["planning","Planning"],["etats","États"],["annexes","MEC · PAPRIPACT"]].map(([k,l])=>
+    [["liste","Liste"],["planning","Planning"],["annexes","MEC · PAPRIPACT"]].map(([k,l])=>
       '<button type="button" data-sous="'+k+'" class="'+(APP.sous===k?"actif":"")+'">'+l+'</button>').join("")+'</div>';
   f.querySelectorAll("[data-sous]").forEach(x=>x.onclick=()=>allerVue("portefeuille",x.dataset.sous));
   if(APP.sous==="etats" && APP.etat && APP.etat.avance){
-    const b=document.createElement("button"); b.type="button"; b.className="fil-lien"; b.id="et-simple"; b.textContent="← Vue simplifiée de l'état";
-    f.appendChild(b); b.onclick=()=>{ APP.etat.avance=false; rendreApp(); };
+    const b=document.createElement("button"); b.type="button"; b.className="fil-lien"; b.id="et-simple"; b.textContent="← Retour à la liste";
+    f.appendChild(b); b.onclick=()=>{ APP.etat.avance=false; allerVue("portefeuille","liste"); };
   }
 }
 
@@ -16321,7 +16340,7 @@ function projetEnRetard(p){
   const e=echeanceProjet(p), a=pct(p[S.cfg.colAvancement]);
   return (e && e<aujourdHuiUTC() && etatDe(p)!=="termine" && etatDe(p)!=="interrompu") || alerteProjet(p).retard>0;
 }
-function rendreKpi(ps){
+function rendreKpi(ps, detail){
   /* projets affichés, répartis par nature, et ceux inscrits au P2A de l'année en cours
      (millésime du projet ou d'une de ses actions) */
   const an=String(new Date().getFullYear());
@@ -16331,7 +16350,8 @@ function rendreKpi(ps){
     '<div><b>'+ps.length+'</b><span>projets affichés</span></div>'+
     '<div><b>'+ps.filter(p=>nat(p)==="PEPS").length+'</b><span>PEPS</span></div>'+
     '<div><b>'+ps.filter(p=>nat(p)==="AV").length+'</b><span>AV</span></div>'+
-    (S.cfg.colMillesime ? '<div><b>'+p2a+'</b><span>au P2A '+an+'</span></div>' : '');
+    (S.cfg.colMillesime ? '<div><b>'+p2a+'</b><span>au P2A '+an+'</span></div>' : '')+
+    (detail ? '<div><b>'+detail.actions+'</b><span>actions MEO</span></div><div><b>'+detail.taches+'</b><span>tâches</span></div>' : '');
 }
 
 /* ---------- vue Liste ---------- */
@@ -16348,8 +16368,17 @@ function barreAppHtml(p){
   return '<div class="app-av"><div class="app-av-b"><i style="width:'+Math.max(0,Math.min(100,a||0))+'%;background:'+b.fill+'"></i></div><span>'+(a==null?"–":a+" %")+'</span></div>';
 }
 function rendreListeApp(){
-  const c=S.cfg, ps=projetsFiltres();
-  rendreKpi(ps);
+  const c=S.cfg, ps=projetsFiltres(), E=APP.etat;
+  /* chiffres-clés, répartition des projets, actions et tâches */
+  let nbA=0, nbT=0; const rep={rouge:0,orange:0,vert:0,gris:0};
+  const classe=(a,inter)=>inter?"gris":a>=100?"vert":a>0?"orange":"rouge";
+  const tachesP=p=>{ try{ return tachesDe(p).concat(...actionsDe(p).map(a=>tachesDe(a))); }catch(e){ return []; } };
+  ps.forEach(p=>{
+    rep[classe(pct(p[c.colAvancement]),interrompu(p))]++;
+    actionsDe(p).forEach(a=>{ nbA++; rep[classe(pct(a[c.colAvancement]),interrompu(a))]++; });
+    tachesP(p).forEach(t=>{ nbT++; rep[classe(pct(t[c.colTacheAvancement]),statutInterrompu(c.tblTache,t,c.colTacheStatut))]++; });
+  });
+  rendreKpi(ps,{actions:nbA,taches:nbT});
   const cle={
     nom:p=>plierTexte(lire(c.tblMain,p,c.colLibelle)), grp:p=>plierTexte(lire(c.tblMain,p,c.colGroupement)),
     por:p=>plierTexte(lire(c.tblMain,p,c.colPorteur)), pri:p=>plierTexte(lire(c.tblMain,p,c.colPriorite)||"zz"),
@@ -16359,25 +16388,85 @@ function rendreListeApp(){
   const liste=[...ps].sort((a,b)=>{ const x=cle[k](a), y=cle[k](b); return (x<y?-1:x>y?1:0)*sens; });
   const th=(kk,l)=>'<th data-tri="'+kk+'">'+l+(k===kk?(sens>0?" ▾":" ▴"):"")+'</th>';
   const auj=aujourdHuiUTC();
-  $("#zone-liste").innerHTML = liste.length ? '<table class="app-table"><thead><tr>'+th("nom","Projet")+th("grp","Groupement")+th("por","Porteur")+
-    th("pri","Priorité")+'<th>Statut</th>'+th("av","Avancement")+th("ech","Échéance")+'<th></th></tr></thead><tbody>'+
-    liste.map(p=>{
-      const e=echeanceProjet(p), ret=projetEnRetard(p), al=alerteProjet(p);
-      const sous=[lire(c.tblMain,p,c.colNature), c.colSponsor?lire(c.tblMain,p,c.colSponsor):""].filter(Boolean).join(" · ");
-      return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+
-        (estArchive(p)?' <span class="app-mut">(archivé)</span>':'')+(sous?'<div class="app-sous">'+esc(sous)+'</div>':'')+'</td>'+
-        '<td>'+esc(lire(c.tblMain,p,c.colGroupement))+'</td><td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>'+
-        '<td>'+pastillePriorite(lire(c.tblMain,p,c.colPriorite))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
-        '<td class="'+(e&&e<auj&&etatDe(p)!=="termine"?"app-ret":"")+'">'+(e?dateVersFR(e):"—")+'</td>'+
-        '<td>'+(ret?'<span class="app-alerte">'+(al.retard>1?al.retard+" retards":"en retard")+'</span>':'')+'</td></tr>';
-    }).join("")+'</tbody></table>'
-    : '<div class="app-vide">Aucun projet ne correspond aux filtres.</div>';
-  $("#zone-liste").querySelectorAll("[data-tri]").forEach(t=>t.onclick=()=>{
+  const ligneProjet=p=>{
+    const e=echeanceProjet(p), ret=projetEnRetard(p), al=alerteProjet(p);
+    const sous=[lire(c.tblMain,p,c.colNature), c.colSponsor?lire(c.tblMain,p,c.colSponsor):""].filter(Boolean).join(" · ");
+    const n=actionsDe(p).length+tachesP(p).length, ouvert=E.ouverts.has(p.id)||E.meo||E.taches;
+    return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+
+      '<span class="et-chev" data-chev="'+p.id+'">'+(n?(ouvert?"▾":"▸"):"")+'</span>'+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+
+      (estArchive(p)?' <span class="app-mut">(archivé)</span>':'')+(sous?'<div class="app-sous">'+esc(sous)+'</div>':'')+'</td>'+
+      '<td>'+esc(lire(c.tblMain,p,c.colGroupement))+'</td><td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>'+
+      '<td>'+pastillePriorite(lire(c.tblMain,p,c.colPriorite))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
+      '<td class="'+(e&&e<auj&&etatDe(p)!=="termine"?"app-ret":"")+'">'+(e?dateVersFR(e):"—")+'</td>'+
+      '<td>'+(ret?'<span class="app-alerte">'+(al.retard>1?al.retard+" retards":"en retard")+'</span>':'')+'</td></tr>';
+  };
+  const ligneAction=(a,p)=>{
+    const av=pct(a[c.colAvancement]), inter=interrompu(a), e=Number(a[c.colEch])||null;
+    const d=decouperLibelleAction(lire(c.tblMain,a,c.colActKey)||""), d2=d.num?d:decouperLibelleAction(lire(c.tblMain,a,c.colLibelle));
+    return '<tr class="et-action" data-p="'+p.id+'" data-a="'+a.id+'"><td class="et-lib"><span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(d2.num?d2.texte:lire(c.tblMain,a,c.colLibelle))+'</td>'+
+      '<td></td><td>'+esc(lire(c.tblMain,a,c.colPorteur))+'</td><td></td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td>'+
+      '<td>'+etBarre(av)+'</td><td>'+etEch(e,av>=100||inter)+'</td><td></td></tr>';
+  };
+  const ligneTache=(t,p)=>{
+    const av=pct(t[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,t,c.colTacheStatut), e=Number(t[c.colTacheFin])||null;
+    return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+'</td>'+
+      '<td></td><td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td><td></td>'+
+      '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",av||0,inter)+'</td><td>'+(av==null?"":etBarre(av))+'</td><td>'+etEch(e,av>=100||inter)+'</td><td></td></tr>';
+  };
+  const blocProjet=p=>{
+    let h=ligneProjet(p);
+    const ouvert=E.ouverts.has(p.id), voirA=E.meo||ouvert, voirT=E.taches||ouvert;
+    if(voirT){ let tp=[]; try{ tp=tachesDe(p); }catch(e){} tp.forEach(t=>{ h+=ligneTache(t,p); }); }
+    if(voirA||voirT) actionsDe(p).forEach(a=>{
+      if(voirA) h+=ligneAction(a,p);
+      if(voirT){ let ta=[]; try{ ta=tachesDe(a); }catch(e){} ta.forEach(t=>{ h+=ligneTache(t,p); }); }
+    });
+    return h;
+  };
+  /* regroupement facultatif */
+  let corps="";
+  if(E.grp){
+    const cg=p=>E.grp==="porteur"?(lire(c.tblMain,p,c.colPorteur)||"Sans porteur"):(lire(c.tblMain,p,c.colGroupement)||"Sans groupement");
+    const groupes=new Map(); liste.forEach(p=>{ const g=cg(p); if(!groupes.has(g)) groupes.set(g,[]); groupes.get(g).push(p); });
+    [...groupes.keys()].sort((a,b)=>a.localeCompare(b,"fr")).forEach(g=>{
+      const l=groupes.get(g), na=l.reduce((s2,p)=>s2+actionsDe(p).length,0);
+      corps+='<tr class="et-grp"><td colspan="8">'+esc(g)+'<small>'+l.length+' projet'+(l.length>1?"s":"")+(na?' · '+na+' action'+(na>1?"s":""):"")+'</small></td></tr>';
+      l.forEach(p=>{ corps+=blocProjet(p); });
+    });
+  } else liste.forEach(p=>{ corps+=blocProjet(p); });
+  const sponsorFiltre=(MENUS["m-sponsor"]||{sel:[]}).sel.length>0;
+  const chip=(kk,l)=>'<button type="button" class="mt-chip'+(E[kk]?" on":"")+'" data-etchip="'+kk+'">'+(E[kk]?"☑":"☐")+' '+l+'</button>';
+  const tot=rep.rouge+rep.orange+rep.vert+rep.gris;
+  $("#zone-liste").innerHTML=
+    '<div class="et-outils"><span class="et-lab">Regrouper par</span><select id="et-grp">'+
+      [["","Aucun"],["porteur","Porteur"],["groupement","Groupement"]].map(([v,l])=>'<option value="'+v+'"'+(E.grp===v?" selected":"")+'>'+l+'</option>').join("")+'</select>'+
+      chip("meo","Actions MEO")+chip("taches","Tâches")+'<span class="fil-esp"></span>'+
+      '<button type="button" class="fil-lien" id="et-opts">⚙ Options d\'édition ▾</button>'+
+      '<button type="button" class="anx-pdf" id="et-pdf">🖨 État PDF</button>'+
+      '<button type="button" class="anx-pdf" id="et-pdf-tous">PDF tous '+(sponsorFiltre?"sponsors":"groupements")+'</button>'+
+      '<button type="button" class="anx-xl" id="et-xl">⬇ Excel</button>'+
+      '<button type="button" class="anx-pdf" id="et-xl-tous">Excel tous</button>'+
+      '<button type="button" class="anx-pdf" id="et-plus" title="Autres éditions du portefeuille">⋯</button></div>'+
+    (tot ? '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([kk])=>rep[kk]).map(([kk,col])=>'<i style="flex:'+rep[kk]+';background:'+col+'"></i>').join("")+'</div>'+
+      '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([kk])=>rep[kk]).map(([kk,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[kk]).join("")+
+      ' <span class="app-mut">(projets, actions et tâches)</span></div>' : '')+
+    (liste.length ? '<table class="app-table"><thead><tr>'+th("nom","Projet")+th("grp","Groupement")+th("por","Porteur")+
+      th("pri","Priorité")+'<th>Statut</th>'+th("av","Avancement")+th("ech","Échéance")+'<th></th></tr></thead><tbody>'+corps+'</tbody></table>'
+      : '<div class="app-vide">Aucun projet ne correspond aux filtres.</div>');
+  const z=$("#zone-liste");
+  z.querySelectorAll("[data-tri]").forEach(t=>t.onclick=()=>{
     if(APP.tri.k===t.dataset.tri) APP.tri.sens*=-1; else APP.tri={k:t.dataset.tri,sens:1};
     rendreListeApp();
   });
-  $("#zone-liste").querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>
-    ouvrirFiche(S.data.main.find(r=>r.id===Number(tr.dataset.p))));
+  $("#et-grp").onchange=e=>{ E.grp=e.target.value; rendreListeApp(); };
+  z.querySelectorAll("[data-etchip]").forEach(b=>b.onclick=()=>{ E[b.dataset.etchip]=!E[b.dataset.etchip]; rendreListeApp(); });
+  z.querySelectorAll("[data-chev]").forEach(sp=>sp.onclick=ev=>{ ev.stopPropagation(); const id=Number(sp.dataset.chev);
+    if(E.ouverts.has(id)) E.ouverts.delete(id); else E.ouverts.add(id); rendreListeApp(); });
+  z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>{
+    const p=S.data.main.find(r=>r.id===Number(tr.dataset.p));
+    ouvrirFiche(p, tr.dataset.a?"actions":(tr.classList.contains("et-tache")?"taches":null));
+  });
+  brancherEditionsListe();
   /* filtre Groupement ou Sponsor : les lignes MEC 2023 et PAPRIPACT rattachées, sous les projets */
   annexesSousListe();
 }
@@ -16720,7 +16809,7 @@ function rafraichirVueApp(){
   if(APP.vue==="portefeuille"){
     if(APP.sous==="liste") rendreListeApp();
     else if(APP.sous==="annexes") rendreAnnexes();
-    else if(APP.sous==="etats" && !APP.etat.avance) rendreEtatsApp();
+
     else if(APP.sous==="planning") rendreKpi(projetsFiltres());
   } else if(APP.vue==="travail") rendreTravail();
   notifierModules();   // planning et état déjà chargés suivent les filtres, même masqués
@@ -16754,11 +16843,7 @@ function menuEditionsHtml(){
   let h='<div class="ed-t">'+(p&&APP.vue==="fiche"?"Ce projet":"Projet")+'</div>';
   if(S.cfg.pdfVisible) h+=it("fiche","fiche","Note CODIR ou dossier projet","PDF · diaporama",offProjet);
   else h+=it("fiche","fiche","Note CODIR ou dossier projet","diaporama",offProjet);
-  h+='<div class="ed-sep"></div><div class="ed-t">Portefeuille affiché</div>'+
-    it("planning","planning","Planning","PDF · diaporama")+
-    it("liste","echeances","Échéances en retard et à venir","Excel")+
-    it("liste","analyse","Analyse portefeuille","écran · PDF")+
-    '<div class="ed-sep"></div><div class="ed-t">Accès protégés</div>'+
+  h+='<div class="ed-sep"></div><div class="ed-t">Accès protégés</div>'+
     it("revues","revues","🔒 Revues (annuelle, P2A…)","mot de passe")+
     it("","reglages-etat","🔒 Réglages de l'état","mot de passe");
   return h;
@@ -16776,6 +16861,7 @@ async function lancerEdition(id){
     return;
   }
   if(id.startsWith("etat") || id==="reglages-etat"){
+    APP.etat.avance=true;
     allerVue("portefeuille","etats");
     await chargerModule("etat");
     const bouton={"etat-pdf":"btnImprimer","etat-xlsx":"btnExcel","etat-tous-pdf":"btnTous","etat-tous-xlsx":"btnExcelTous"}[id];
@@ -17393,7 +17479,7 @@ async function annexesMonTravail(ag, grille){
    l'état, chargé en arrière-plan et réglé sur les filtres de la console.
    La vue complète de l'état reste accessible (options avancées).
    ======================================================================= */
-APP.etat={grp:"porteur", meo:false, taches:false, ouverts:new Set(), avance:false,
+APP.etat={grp:"", meo:false, taches:false, ouverts:new Set(), avance:false,
   opts:{rappel:true, termine:false, interrompu:false, perimetre:"implication"}};
 
 /* colonnes Origine et Service de la table principale (si elles existent) */
@@ -17560,8 +17646,32 @@ function etPopupOptions(bouton){
   const r=bouton.getBoundingClientRect();
   pop.style.top=(r.bottom+4)+"px"; pop.style.left=Math.max(8,Math.min(window.innerWidth-pop.offsetWidth-8,r.left-80))+"px";
   pop.querySelectorAll("[data-o]").forEach(el=>el.onchange=()=>{ O[el.dataset.o]= el.type==="checkbox" ? el.checked : el.value; });
-  pop.querySelector("#et-avance").onclick=()=>{ pop.remove(); APP.etat.avance=true; rendreApp(); };
+  pop.querySelector("#et-avance").onclick=()=>{ pop.remove(); APP.etat.avance=true; allerVue("portefeuille","etats"); };
   setTimeout(()=>{ const fermer=e=>{ if(!pop.contains(e.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
+}
+
+/* boutons d'édition de la barre de la Liste */
+function brancherEditionsListe(){
+  const lancer=(fn,msg)=>{ toast(msg); fn().catch(er=>toast("Édition impossible : "+er.message,true)); };
+  const on=(id,f)=>{ const b=$("#"+id); if(b) b.onclick=f; };
+  on("et-opts",e=>{ e.stopPropagation(); etPopupOptions(e.currentTarget); });
+  on("et-pdf",()=>lancer(()=>etImprimer(false),"Préparation de l'état…"));
+  on("et-pdf-tous",()=>lancer(()=>etImprimer(true),"Préparation de l'état complet…"));
+  on("et-xl",()=>lancer(()=>etExcel(false),"Préparation du fichier Excel…"));
+  on("et-xl-tous",()=>lancer(()=>etExcel(true),"Préparation du fichier Excel complet…"));
+  on("et-plus",e=>{
+    e.stopPropagation();
+    document.querySelectorAll(".anx-pop").forEach(x=>x.remove());
+    const pop=document.createElement("div"); pop.className="anx-pop et-pop";
+    pop.innerHTML='<div class="et-pop-t">Autres éditions du portefeuille</div>'+
+      '<button type="button" class="ed-it" data-ed2="echeances"><span>Échéances en retard et à venir</span><small>Excel</small></button>'+
+      '<button type="button" class="ed-it" data-ed2="analyse"><span>Analyse portefeuille</span><small>écran · PDF</small></button>';
+    document.body.appendChild(pop);
+    const r=e.currentTarget.getBoundingClientRect();
+    pop.style.top=(r.bottom+4)+"px"; pop.style.left=Math.max(8,Math.min(window.innerWidth-pop.offsetWidth-8,r.right-pop.offsetWidth))+"px";
+    pop.querySelectorAll("[data-ed2]").forEach(b=>b.onclick=()=>{ pop.remove(); lancerEdition(b.dataset.ed2); });
+    setTimeout(()=>{ const fermer=ev=>{ if(!pop.contains(ev.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
+  });
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
