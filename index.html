@@ -16279,15 +16279,28 @@ function rendreTravail(){
   const auj=aujourdHuiUTC();
   const mesProjets=projets().filter(p=>designe(c.tblMain,p,c.colPorteur,ag));
   const els=elementsDeAgent(ag);
-  const acts=els.filter(n=>n.genre==="action"), taches=els.filter(n=>n.genre==="tache"), dem=els.filter(n=>n.genre==="journal" && n.ech);
-  const ech=els.filter(n=>n.ech).concat(mesProjets.filter(p=>echeanceProjet(p)&&etatDe(p)!=="termine")
+  /* actions d'un projet dont l'agent est déjà porteur : redondantes, sauf échéance dépassée ou dans les 15 jours */
+  const idsMesProjets=new Set(mesProjets.map(p=>p.id));
+  const urgente=n=>{ const e=etatNotif(n.ech); return !!e && (e.k==="retard"||e.k==="proche"); };
+  const acts=els.filter(n=>n.genre==="action" && (!idsMesProjets.has(n.p.id) || urgente(n))), taches=els.filter(n=>n.genre==="tache"), dem=els.filter(n=>n.genre==="journal" && n.ech);
+  const ech=els.filter(n=>n.ech && !(n.genre==="action" && idsMesProjets.has(n.p.id) && !urgente(n))).concat(mesProjets.filter(p=>echeanceProjet(p)&&etatDe(p)!=="termine")
       .map(p=>({p,lib:"Échéance du projet",ech:echeanceProjet(p),genre:"projet"})))
     .sort((a,b)=>a.ech-b.ech);
   /* notifications : non lues pour soi ; pour un autre agent, celles en cours (sans toucher à leur lecture) */
   const L=notifsLues(), nl=autre ? notifsDe(ag) : (S.notifs||[]).filter(n=>!L.has(n.cle));
   const dateHtml=t=>'<span class="'+(t<auj?"app-ret":"app-mut")+'">'+dateVersFR(t)+'</span>';
-  const it=(n,i,droite)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x">'+esc(n.lib||"(sans libellé)")+
-    '<small>'+esc(lire(c.tblMain,n.p,c.colLibelle))+(n.a?' · '+esc(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte):'')+'</small></div>'+(droite||"")+'</div>';
+  /* ligne grise : projet, puis action parente d'une tâche ; jamais ce qui répète l'intitulé */
+  const norme=x=>String(x||"").replace(/\s+/g," ").trim().toLowerCase();
+  const sousLigne=n=>{
+    const lib=norme(n.lib), vus=new Set([lib]), parts=[];
+    const ajoute=t=>{ const k=norme(t); if(k && !vus.has(k) && !(lib && (lib.indexOf(k)===0 || k.indexOf(lib)===0))){ vus.add(k); parts.push(t); } };
+    ajoute(lire(c.tblMain,n.p,c.colLibelle));
+    if(n.a && n.genre!=="action") ajoute(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte);
+    return parts.join(" · ");
+  };
+  const it=(n,i,droite)=>{ const sl=sousLigne(n);
+    return '<div class="mt-it" data-i="'+i+'"><div class="mt-x">'+esc(n.lib||"(sans libellé)")+
+      (sl?'<small>'+esc(sl)+'</small>':'')+'</div>'+(droite||"")+'</div>'; };
   const tous=[];
   const bloc=(titre,compte,items,rendu)=>{
     const h='<div class="mt-carte"><h3>'+titre+'<span>'+compte+'</span></h3>'+
