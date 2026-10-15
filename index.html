@@ -1855,7 +1855,7 @@ body:not(.mob) .app-nav button.actif{color:#1c2f6b;border-bottom-color:#F5A623;}
 body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo):not(.btn-pf):not(.btn-xlsx){
   background:#fff;color:#1c2f6b;border-color:#c5cfe8;}
 body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo):not(.btn-pf):not(.btn-xlsx):hover{background:#dbe4f7;}
-.fil-impr{margin-left:auto;}
+.fil-impr{margin-left:auto;display:flex;gap:6px;}
 </style>
 </head>
 <body>
@@ -16293,11 +16293,17 @@ function rendreFil(){
     f.innerHTML='<button type="button" class="fil-retour" id="fil-retour">← Retour</button>'+
       '<span class="fil-chemin">'+esc(nom)+(p?' › <b>'+esc(lire(S.cfg.tblMain,p,S.cfg.colLibelle)||"(sans libellé)")+'</b>':'')+'</span>'+
       '<span class="fil-esp"></span>'+(p?'<div class="fil-sous">'+
-      [["fiche","Fiche"],["planning","Planning"],["etats","États"]].map(([k,l])=>
+      [["fiche","Fiche"],["planning","Planning"]].map(([k,l])=>
         '<button type="button" data-fsous="'+k+'" class="'+(APP.ficheSous===k?"actif":"")+'">'+l+'</button>').join("")+'</div>'+
-        '<button type="button" class="anx-pdf fil-impr" id="fil-impr" title="Note CODIR ou dossier projet ('+(S.cfg.pdfVisible?"PDF · diaporama":"diaporama")+')">🖨 Note CODIR / dossier projet</button>':'');
+        '<span class="fil-impr"><button type="button" class="anx-pdf" id="fil-etat-pdf" title="État du projet, avec ses actions et tâches">🖨 État PDF</button>'+
+        '<button type="button" class="anx-xl" id="fil-etat-xl" title="État du projet au format Excel">⬇ État Excel</button>'+
+        '<button type="button" class="anx-pdf" id="fil-impr" title="Note CODIR ou dossier projet ('+(S.cfg.pdfVisible?"PDF · diaporama":"diaporama")+')">🖨 Note CODIR / dossier projet</button></span>':'');
     $("#fil-retour").onclick=retourDepuisFiche;
     const bi=$("#fil-impr"); if(bi) bi.onclick=()=>ouvrirImpression();
+    const projetEtat=()=>({projet:{id:p.id, libelle:lire(S.cfg.tblMain,p,S.cfg.colLibelle)}, meo:true, taches:true,
+      rappel:APP.etat.opts.rappel, termine:true, interrompu:true});
+    const be=$("#fil-etat-pdf"); if(be) be.onclick=()=>{ toast("Préparation de l'état du projet…"); etImprimer(false,projetEtat()).catch(er=>toast("État impossible : "+er.message,true)); };
+    const bx=$("#fil-etat-xl"); if(bx) bx.onclick=()=>{ toast("Préparation de l'Excel du projet…"); etExcel(false,projetEtat()).catch(er=>toast("Excel impossible : "+er.message,true)); };
     f.querySelectorAll("[data-fsous]").forEach(x=>x.onclick=()=>{ APP.ficheSous=x.dataset.fsous; rendreApp(); });
     return;
   }
@@ -17666,10 +17672,10 @@ function etOptionsEtat(){
     porteur:un("m-porteur"), origine:un("m-origine"), service:un("m-service"), recherche:$("#q").value.trim()
   });
 }
-async function etImprimer(tous){
+async function etImprimer(tous, opts){
   const w=await anxEtatPret();
   if(!w.htmlEtatConsole) throw new Error("état trop ancien");
-  const html=w.htmlEtatConsole(etOptionsEtat(), tous);
+  const html=w.htmlEtatConsole(opts||etOptionsEtat(), tous);
   if(!html) throw new Error("rien à imprimer");
   const fr=document.createElement("iframe");
   fr.style.cssText="position:fixed;left:-12000px;top:0;width:800px;height:1120px;border:0;";
@@ -17678,10 +17684,11 @@ async function etImprimer(tous){
     setTimeout(()=>fr.remove(),60000); },200); };
   fr.srcdoc=html;
 }
-async function etExcel(tous){
+async function etExcel(tous, opts){
   const w=await anxEtatPret();
   if(!w.excelEtatConsole) throw new Error("état trop ancien");
-  await w.excelEtatConsole(etOptionsEtat(), tous);
+  const ok=await w.excelEtatConsole(opts||etOptionsEtat(), tous);
+  if(ok===false) throw new Error("projet introuvable dans l'état");
 }
 function etPopupOptions(bouton){
   document.querySelectorAll(".anx-pop").forEach(x=>x.remove());
@@ -25873,6 +25880,14 @@ window.preparerEtatConsole = o => {
   fixer("chkRappel", o.rappel !== false); if (o.perimetre) fixer("selPerimetre", o.perimetre);
   afficher();                                   // remplit les listes Origine / Service / Collaborateur
   fixer("selOrigine", o.origine); fixer("selService", o.service); fixer("selCollaborateur", o.porteur);
+  /* état d'un seul projet (fiche projet de la console) */
+  if (o.projet){
+    const cle = cleProjetConsole(o.projet);
+    if (!cle) return false;
+    if (vue !== "groupement") changerVue("groupement");
+    groupementCourant = TOUS; const sg = document.getElementById("selGroupement"); if (sg) sg.value = TOUS;
+    fixer("selProjet", cle);
+  }
   afficher();
   return true;
 };
@@ -25892,13 +25907,14 @@ window.htmlEtatConsole = (o, tous) => {
     try { if (vue === "sponsor") imprimerTousSponsors(); else imprimerTous(); } finally { window.print = orig; }
   }
   const doc = documentEtatConsole(html, document.title);
-  window.EDITION_CONSOLE = {}; afficher();       // la vue complète retrouve son contenu habituel
+  window.EDITION_CONSOLE = {}; if (o && o.projet) document.getElementById("selProjet").value = "";
+  afficher();       // la vue complète retrouve son contenu habituel
   return doc;
 };
 window.excelEtatConsole = async (o, tous) => {
   if (!window.preparerEtatConsole(o)) return false;
   try { await exporterExcel(!!tous); }
-  finally { window.EDITION_CONSOLE = {}; afficher(); }
+  finally { window.EDITION_CONSOLE = {}; if (o && o.projet) document.getElementById("selProjet").value = ""; afficher(); }
   return true;
 };
 /* Pour la console (Mon travail) : groupement d'un agent, lu dans la table des collaborateurs
