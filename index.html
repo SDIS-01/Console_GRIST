@@ -16168,8 +16168,9 @@ function couleurGroupement(v){
 }
 /* « 2026_06_A_Auditer… » : code en étiquette, intitulé en encre foncée */
 function libelleProjetHtml(lib){
-  const m=String(lib||"").match(/^\s*(\d{4}_\d{1,3}_[A-Za-z]{1,4})[\s_:\-]+(.+)$/);
-  return m ? '<span class="code-projet">'+esc(m[1])+'</span>'+esc(m[2].trim()) : esc(lib||"(sans libellé)");
+  /* tolère les espaces parasites dans le code (« 2026_24_ A », « 2026_ 11_A ») */
+  const m=String(lib||"").match(/^\s*(\d{4})\s*_\s*(\d{1,3})\s*_\s*([A-Za-z]{1,4})(?!\p{L})[\s_:\-]+(.+)$/u);
+  return m ? '<span class="code-projet">'+esc(m[1]+"_"+m[2]+"_"+m[3])+'</span>'+esc(m[4].trim()) : esc(lib||"(sans libellé)");
 }
 function liseret(p){
   const c=S.cfg, vals=valListe(p[c.colGroupement]).length>1
@@ -16460,8 +16461,7 @@ function rendreListeApp(){
       '<button type="button" class="fil-lien" id="et-opts">⚙ Options d\'édition ▾</button>'+
       '<button type="button" class="anx-pdf" id="et-pdf">🖨 État PDF</button>'+
       '<button type="button" class="anx-pdf" id="et-pdf-tous">PDF tous '+(sponsorFiltre?"sponsors":"groupements")+'</button>'+
-      '<button type="button" class="anx-xl" id="et-xl">⬇ Excel</button>'+
-      '<button type="button" class="anx-pdf" id="et-xl-tous">Excel tous</button>'+
+      '<button type="button" class="anx-xl" id="et-xl" title="Extraction PEPS / AV des projets affichés">⬇ Excel</button>'+
       '<button type="button" class="anx-pdf" id="et-plus" title="Autres éditions du portefeuille">⋯</button></div>'+
     (tot ? '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([kk])=>rep[kk]).map(([kk,col])=>'<i style="flex:'+rep[kk]+';background:'+col+'"></i>').join("")+'</div>'+
       '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([kk])=>rep[kk]).map(([kk,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[kk]).join("")+
@@ -17711,20 +17711,19 @@ function brancherEditionsListe(){
   on("et-opts",e=>{ e.stopPropagation(); etPopupOptions(e.currentTarget); });
   on("et-pdf",()=>lancer(()=>etImprimer(false),"Préparation de l'état…"));
   on("et-pdf-tous",()=>lancer(()=>etImprimer(true),"Préparation de l'état complet…"));
-  on("et-xl",()=>lancer(()=>etExcel(false),"Préparation du fichier Excel…"));
-  on("et-xl-tous",()=>lancer(()=>etExcel(true),"Préparation du fichier Excel complet…"));
+  /* Excel de la Liste = extraction PEPS / AV des projets affichés */
+  on("et-xl",()=>lancer(()=>exporterPepsAv(),"Préparation de l'extraction PEPS / AV…"));
   on("et-plus",e=>{
     e.stopPropagation();
     document.querySelectorAll(".anx-pop").forEach(x=>x.remove());
     const pop=document.createElement("div"); pop.className="anx-pop et-pop";
     pop.innerHTML='<div class="et-pop-t">Autres éditions du portefeuille</div>'+
-      '<button type="button" class="ed-it" data-ed2="peps"><span>Extraction PEPS / AV (projets affichés)</span><small>Excel</small></button>'+
       '<button type="button" class="ed-it" data-ed2="echeances"><span>Échéances en retard et à venir</span><small>Excel</small></button>';
     document.body.appendChild(pop);
     const r=e.currentTarget.getBoundingClientRect();
     pop.style.top=(r.bottom+4)+"px"; pop.style.left=Math.max(8,Math.min(window.innerWidth-pop.offsetWidth-8,r.right-pop.offsetWidth))+"px";
     pop.querySelectorAll("[data-ed2]").forEach(b=>b.onclick=()=>{ pop.remove();
-      if(b.dataset.ed2==="peps"){ toast("Préparation de l'extraction PEPS / AV…"); exporterPepsAv().catch(er=>toast("Export impossible : "+er.message,true)); }
+      if(b.dataset.ed2==="etat-xl"||b.dataset.ed2==="etat-xl-tous"){ toast("Préparation du fichier Excel…"); etExcel(b.dataset.ed2==="etat-xl-tous").catch(er=>toast("Export impossible : "+er.message,true)); }
       else lancerEdition(b.dataset.ed2); });
     setTimeout(()=>{ const fermer=ev=>{ if(!pop.contains(ev.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
   });
@@ -21428,8 +21427,8 @@ function barSpec(row, mappings){
 
 /* « 2026_06_A_Auditer… » -> {code:"2026_06_A", titre:"Auditer…"} */
 function decouperCodeProjet(lib){
-    const m = String(lib||"").match(/^\s*(\d{4}_\d{1,3}_[A-Za-z]{1,4})[\s_:\-]+(.+)$/)
-    return m ? {code:m[1], titre:m[2].trim()} : {code:"", titre:String(lib||"")}
+    const m = String(lib||"").match(/^\s*(\d{4})\s*_\s*(\d{1,3})\s*_\s*([A-Za-z]{1,4})(?!\p{L})[\s_:\-]+(.+)$/u)
+    return m ? {code:m[1]+"_"+m[2]+"_"+m[3], titre:m[4].trim()} : {code:"", titre:String(lib||"")}
 }
 function libelleProjetHtml(lib){
     const d = decouperCodeProjet(lib)
@@ -25831,9 +25830,10 @@ if (INTEGRE){
   const decorer = () => {
     document.querySelectorAll("#contenu tr.pj td.lib").forEach(td => {
       if (td.querySelector(".code-projet")) return;
-      const n = [...td.childNodes].find(x => x.nodeType === 3 && /\d{4}_\d{1,3}_[A-Za-z]{1,4}[\s_:\-]+\S/.test(x.nodeValue));
+      const n = [...td.childNodes].find(x => x.nodeType === 3 && /\d{4}\s*_\s*\d{1,3}\s*_\s*[A-Za-z]{1,4}[\s_:\-]+\S/.test(x.nodeValue));
       if (!n) return;
-      const m = n.nodeValue.match(/^(\s*)(\d{4}_\d{1,3}_[A-Za-z]{1,4})[\s_:\-]+(.+)$/);
+      const m0 = n.nodeValue.match(/^(\s*)(\d{4})\s*_\s*(\d{1,3})\s*_\s*([A-Za-z]{1,4})(?!\p{L})[\s_:\-]+(.+)$/u);
+      const m = m0 ? [m0[0], m0[1], m0[2] + "_" + m0[3] + "_" + m0[4], m0[5]] : null;
       if (!m) return;
       const tag = document.createElement("span"); tag.className = "code-projet"; tag.textContent = m[2];
       td.insertBefore(tag, n); n.nodeValue = m[3];
