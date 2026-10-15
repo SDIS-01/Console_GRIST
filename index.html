@@ -1735,6 +1735,10 @@ body:not(.app-hors-fiche) .app-filtres, body.app-revues .app-filtres{display:non
 .app-filtres .compteur{margin-left:auto;border:0;padding:0;min-height:0;font-size:12px;gap:10px;}
 .app-filtres .btn-raz{font-size:12px;}
 .app-filtres .msel-lib{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+/* Liste / Planning / États centrés dans le fil d'Ariane */
+.fil-app{position:relative;}
+.fil-app .fil-sous{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);}
+.fil-app .fil-chemin{max-width:calc(50% - 200px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -1989,7 +1993,7 @@ body:not(.app-hors-fiche) .app-filtres, body.app-revues .app-filtres{display:non
       <button type="button" class="ap-croix" id="ap-fermer" title="Fermer l'aperçu">✕</button>
     </header>
     <div class="ap-barre">
-      <button type="button" class="btn-2" id="ap-options">Changer de document</button>
+      <button type="button" class="btn-2" id="ap-options">← Retour</button>
       <label class="ap-coche" id="ap-pj-lab">
         <input type="checkbox" id="ap-pj"> Enregistrer aussi le PDF en pièce jointe du projet</label>
       <span class="ap-espace"></span>
@@ -11196,7 +11200,7 @@ function ouvrirCdo(p,retour){
     '<header><span>En un coup d\'œil</span><small>'+esc(lire(S.cfg.tblMain,p,S.cfg.colLibelle)||"")+'</small>'+
       '<span class="ap-espace"></span><small>utilisé par le PDF et le diaporama</small></header>'+
     '<div class="cdo-barre"><span id="cdo-etat"></span><span class="ap-espace"></span>'+
-      '<button type="button" class="btn-2" id="cdo-raz">↺ Revenir au calcul automatique</button></div>'+
+      '<button type="button" class="btn-2" id="cdo-raz">↺ Revenir aux informations de la console</button></div>'+
     '<div class="cdo-zone" id="cdo-zone"><div class="cdo-echelle" id="cdo-echelle">'+
       '<div class="cdo-feuille" id="cdo-feuille"><canvas id="cdo-canevas"></canvas>'+
       '<div class="cdo-edit" id="cdo-edit" style="top:'+d.cdo.y+'px;height:'+(d.cdo.bas-d.cdo.y)+'px">'+
@@ -16466,8 +16470,9 @@ function rafraichirVueApp(){
   rendreFil();
   if(APP.vue==="portefeuille"){
     if(APP.sous==="liste") rendreListeApp();
-    else { if(APP.sous==="planning") rendreKpi(projetsFiltres()); notifierModules(); }
+    else if(APP.sous==="planning") rendreKpi(projetsFiltres());
   } else if(APP.vue==="travail") rendreTravail();
+  notifierModules();   // planning et état déjà chargés suivent les filtres, même masqués
 }
 
 /* ---------- Revues : espace protégé par mot de passe ---------- */
@@ -20757,13 +20762,17 @@ function majOptionsExport(){
     document.getElementById("exGroupeLab").style.opacity = mise==="projet" ? ".5" : ""
     exportPrefs.groupePage = cb.checked
 }
-document.querySelectorAll("#exSortie button").forEach(b=>b.onclick=()=>{ setExportSortie(b.dataset.v); grist.setOption("exportPrefs", exportPrefs) })
-document.querySelectorAll('input[name="exMise"]').forEach(r=>r.onchange=()=>{ majOptionsExport(); grist.setOption("exportPrefs", exportPrefs) })
-document.getElementById("exGroupePage").onchange=()=>{ majOptionsExport(); grist.setOption("exportPrefs", exportPrefs) }
+/* aperçu déjà affiché : il suit aussitôt le changement d'option */
+const apercuOuvert = () => document.getElementById("exportBox").classList.contains("apercu")
+const suivreApercu = () => { if(apercuOuvert()) setTimeout(apercuExport, 30) }
+document.querySelectorAll("#exSortie button").forEach(b=>b.onclick=()=>{ setExportSortie(b.dataset.v); grist.setOption("exportPrefs", exportPrefs); suivreApercu() })
+document.querySelectorAll('input[name="exMise"]').forEach(r=>r.onchange=()=>{ majOptionsExport(); grist.setOption("exportPrefs", exportPrefs); suivreApercu() })
+document.getElementById("exGroupePage").onchange=()=>{ majOptionsExport(); grist.setOption("exportPrefs", exportPrefs); suivreApercu() }
 document.getElementById("exAnnuler").onclick=()=>document.getElementById("exportOverlay").classList.remove("open")
 let urlApercuExport = null
-document.getElementById("exApercu").onclick=()=>{
+function apercuExport(){
     const info = document.getElementById("exInfo")
+    info.textContent = "Mise à jour de l'aperçu…"
     try{
         const d = construirePlanningDoc(exportPrefs.sortie==="odp" ? "pdf" : "pdf", exportPrefs.sortie==="odp")
         if(urlApercuExport) URL.revokeObjectURL(urlApercuExport)
@@ -20773,6 +20782,7 @@ document.getElementById("exApercu").onclick=()=>{
         info.textContent = d.pages+(exportPrefs.sortie==="odp"?" diapositive":" page")+(d.pages>1?"s":"")
     }catch(e){ info.textContent = "Erreur : "+e.message; console.error(e) }
 }
+document.getElementById("exApercu").onclick=apercuExport
 document.getElementById("exGenerer").onclick=()=>{
     const info = document.getElementById("exInfo")
     try{
@@ -21060,7 +21070,7 @@ function construirePlanningDoc(sortie, format43){
         const titre = "Planning des projets"
         const pdf = sortie==="odp" ? odpSortieNouvelle()
             : new window.jspdf.jsPDF({orientation:"landscape",unit:"px",format:[PW,PH],compress:true})
-        const ctx = {pdf, mode:"planning", sortie, titre, pages:0, y:0, yBas:0, secs:{}, som:[], sec:"", yFin:{}, decal:{}, bandeauHaut:true,
+        const ctx = {pdf, mode:"planning", sortie, titre, pages:0, y:0, yBas:0, secs:{}, som:[], sec:"", yFin:{}, decal:{}, bandeauHaut:false,   // pas de bandeau photo en tête du planning
             pied:"SDIS de l'Ain · Planning des projets édité le "+new Date().toLocaleDateString("fr-FR")}
         const per = pgColonnes(lastView.units, lastView.min, lastView.max)
         const grpActif = !!(groupBy && mappings[groupBy])
@@ -24510,24 +24520,58 @@ if (INTEGRE){
 }
 /* Filtres communs de la console : un seul groupement (ou sponsor) choisi à
    gauche devient le groupement (ou le sponsor) de l'état. */
+/* Filtres communs de la console → état. Un sponsor filtré bascule en « État par sponsor CODIR »
+   (avec le groupement s'il y en a un seul) ; sinon un groupement filtré bascule en « État par groupement ».
+   Si l'état n'est pas encore prêt, le filtre est appliqué dès la fin du chargement. */
+let filtreConsoleAttente = null, sponsorDeConsole = false;
 window.appliquerFiltreConsole = function(groupements, sponsors){
-  if (!D.pretes) return;
+  if (!D.pretes){
+    const premier = !filtreConsoleAttente;
+    filtreConsoleAttente = [groupements, sponsors];
+    if (premier){
+      const t = setInterval(() => {
+        if (!D.pretes) return;
+        clearInterval(t);
+        const f = filtreConsoleAttente; filtreConsoleAttente = null;
+        window.appliquerFiltreConsole(f[0], f[1]);
+      }, 200);
+    }
+    return;
+  }
   const choisir = (idSel, valeur) => {
     const sel = document.getElementById(idSel);
     const opt = [...sel.options].find(o => o.value === valeur)
-      || [...sel.options].find(o => o.text.indexOf(valeur) >= 0);
+      || [...sel.options].find(o => o.text.indexOf(valeur) >= 0)
+      || [...sel.options].find(o => o.value && valeur.indexOf(o.value) >= 0);
     return opt ? opt.value : null;
   };
-  let change = false;
-  if (groupements && groupements.length === 1){
-    const v = choisir("selGroupement", groupements[0]);
-    if (v && v !== groupementCourant){ groupementCourant = v; document.getElementById("selGroupement").value = v; replies = new Set(); change = true; }
+  const unGrp = groupements && groupements.length === 1 ? groupements[0] : null;
+  const unSp = sponsors && sponsors.length === 1 ? sponsors[0] : null;
+  if (unSp){
+    const v = choisir("selSponsor", unSp);
+    if (v){
+      sponsorCourant = v; document.getElementById("selSponsor").value = v; sponsorDeConsole = true;
+      if (vue !== "sponsor") changerVue("sponsor"); else afficher();
+      const gs = document.getElementById("selGrpSponsor");
+      const g = unGrp ? choisir("selGrpSponsor", unGrp) : "";
+      if (g !== null && gs.value !== g){ gs.value = g; afficher(); }
+      return;
+    }
   }
-  if (sponsors && sponsors.length === 1){
-    const v = choisir("selSponsor", sponsors[0]);
-    if (v && v !== sponsorCourant){ sponsorCourant = v; document.getElementById("selSponsor").value = v; change = true; }
+  if (sponsorDeConsole && !unSp){
+    sponsorDeConsole = false;
+    sponsorCourant = TOUS; document.getElementById("selSponsor").value = TOUS;
+    document.getElementById("selGrpSponsor").value = "";
+    if (!unGrp){ afficher(); return; }
   }
-  if (change) afficher();
+  if (unGrp){
+    const v = choisir("selGroupement", unGrp);
+    if (v){
+      const change = v !== groupementCourant;
+      if (change){ groupementCourant = v; document.getElementById("selGroupement").value = v; replies = new Set(); }
+      if (vue !== "groupement") changerVue("groupement"); else if (change) afficher();
+    }
+  }
 };
 
 /* Présentation intégrée : options d'édition repliables, code des projets en étiquette */
