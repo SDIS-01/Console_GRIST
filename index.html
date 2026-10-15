@@ -16071,18 +16071,16 @@ function projetEnRetard(p){
   return (e && e<aujourdHuiUTC() && etatDe(p)!=="termine" && etatDe(p)!=="interrompu") || alerteProjet(p).retard>0;
 }
 function rendreKpi(ps){
-  const auj=aujourdHuiUTC();
-  const enc=ps.filter(p=>etatDe(p)==="encours");
-  const ret=ps.filter(projetEnRetard).length;
-  const sous30=ps.filter(p=>{ const e=echeanceProjet(p); return e && e>=auj && e<=auj+30*86400 && etatDe(p)!=="termine"; }).length;
-  const avs=enc.map(p=>pct(p[S.cfg.colAvancement])).filter(v=>v!=null);
-  const moy=avs.length?Math.round(avs.reduce((s,v)=>s+v,0)/avs.length):null;
+  /* projets affichés, répartis par nature, et ceux inscrits au P2A de l'année en cours
+     (millésime du projet ou d'une de ses actions) */
+  const an=String(new Date().getFullYear());
+  const nat=p=>natureDe(p);
+  const p2a=ps.filter(p=>[...millesimesProjet(p)].some(m=>String(m).indexOf(an)>=0)).length;
   $("#kpi-app").innerHTML=
     '<div><b>'+ps.length+'</b><span>projets affichés</span></div>'+
-    '<div class="kpi-rouge"><b>'+ret+'</b><span>en retard</span></div>'+
-    '<div><b>'+sous30+'</b><span>échéances sous 30 jours</span></div>'+
-    '<div><b>'+(moy==null?"–":moy+" %")+'</b><span>avancement moyen (en cours)</span></div>'+
-    '<div><b>'+ps.filter(p=>etatDe(p)==="termine").length+'</b><span>terminés</span></div>';
+    '<div><b>'+ps.filter(p=>nat(p)==="PEPS").length+'</b><span>PEPS</span></div>'+
+    '<div><b>'+ps.filter(p=>nat(p)==="AV").length+'</b><span>AV</span></div>'+
+    (S.cfg.colMillesime ? '<div><b>'+p2a+'</b><span>au P2A '+an+'</span></div>' : '');
 }
 
 /* ---------- vue Liste ---------- */
@@ -16254,6 +16252,11 @@ window.PONT_MODULES={
     return ids;
   },
   ouvrirFiche:id=>ouvrirFicheDepuisLigne(id),
+  /* accès protégés des modules : fermés tant qu'aucun mot de passe n'est défini */
+  motDePasse:async invite=>{
+    if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return false; }
+    return await motDePasseValide(invite);
+  },
   apresArchivageRevue:async()=>{
     await chargerPhotos();
     if(S.photosEtat!=="ok") return false;
@@ -16351,11 +16354,6 @@ function menuEditionsHtml(){
     it("planning","planning","Planning","PDF · diaporama")+
     it("liste","echeances","Échéances en retard et à venir","Excel")+
     it("liste","analyse","Analyse portefeuille","écran · PDF")+
-    '<div class="ed-sep"></div><div class="ed-t">États</div>'+
-    it("etats","etat-pdf","État du groupement / sponsor affiché","PDF")+
-    it("etats","etat-xlsx","État du groupement / sponsor affiché","Excel")+
-    it("etats","etat-tous-pdf","Tous les groupements / sponsors","PDF")+
-    it("etats","etat-tous-xlsx","Tous les groupements / sponsors","Excel")+
     '<div class="ed-sep"></div><div class="ed-t">Accès protégés</div>'+
     it("revues","revues","🔒 Revues (annuelle, P2A…)","mot de passe")+
     it("","reglages-etat","🔒 Réglages de l'état","mot de passe");
@@ -16374,7 +16372,6 @@ async function lancerEdition(id){
     return;
   }
   if(id.startsWith("etat") || id==="reglages-etat"){
-    if(id==="reglages-etat" && !await motDePasseValide("Mot de passe pour les réglages de l'état :")) return;
     allerVue("portefeuille","etats");
     await chargerModule("etat");
     const bouton={"etat-pdf":"btnImprimer","etat-xlsx":"btnExcel","etat-tous-pdf":"btnTous","etat-tous-xlsx":"btnExcelTous"}[id];
@@ -16410,6 +16407,27 @@ function brancherApp(){
 
 vueInitiale();
 
+/* Widget neuf (options vides) : on reprend les réglages complets d'une console
+   déjà installée dans le document — réglages, impression, coup d'œil, modules —
+   plutôt que de deviner les tables et colonnes. */
+async function importerReglagesConsole(){
+  try{
+    const t=await grist.docApi.fetchTable("_grist_Views_section");
+    let meilleur=null;
+    const fouiller=v=>{
+      if(typeof v==="string"){ if(!/^\s*[{[]/.test(v)) return; try{ fouiller(JSON.parse(v)); }catch(e){} return; }
+      if(!v || typeof v!=="object") return;
+      if(v.cfg && typeof v.cfg==="object" && v.cfg.tblMain && v.cfg.colProjKey!==undefined){
+        if(!meilleur || JSON.stringify(v).length>JSON.stringify(meilleur).length) meilleur=v;
+        return;
+      }
+      Object.keys(v).forEach(k=>fouiller(v[k]));
+    };
+    (t.options||[]).forEach(o=>fouiller(o));
+    return meilleur ? JSON.parse(JSON.stringify(meilleur)) : null;
+  }catch(e){ console.warn("Reprise des réglages impossible : "+e.message); return null; }
+}
+
 async function demarrer(){
   console.info("Console Projets — version "+VERSION);
   majMobile();
@@ -16422,7 +16440,11 @@ async function demarrer(){
     }
   });
   try{
-    const o=await grist.widgetApi.getOptions();
+    let o=await grist.widgetApi.getOptions();
+    if(!o || !o.cfg || !o.cfg.tblMain){
+      const imp=await importerReglagesConsole();
+      if(imp){ o=imp; S.reglagesRepris=true; }
+    }
     if(o && o.cfg) S.cfg=Object.assign({},DEF,o.cfg);
     /* on repart du dernier travail enregistré dans le document */
     if(o && o.pages && typeof o.pages==="object") S.pagesParProjet=o.pages;
@@ -16464,7 +16486,12 @@ async function demarrer(){
     else if(hmARedessiner) rattraperHistorique();
   },30000);
   try{ await tout(); }
-  finally{ S.pret=true; }              // le suivi reprend même après un échec
+  finally{ S.pret=true; }
+  if(S.reglagesRepris){
+    S.reglagesRepris=false;
+    try{ await grist.widgetApi.setOptions(paquetOptions()); }catch(e){}
+    toast("Réglages repris de la console existante dans ce document.");
+  }              // le suivi reprend même après un échec
   if(curseurEnAttente!=null){
     const minId=Math.min(...S.data.main.map(r=>r.id));
     const id=curseurEnAttente; curseurEnAttente=null;
@@ -24265,8 +24292,21 @@ window.appliquerFiltreConsole = function(groupements, sponsors){
   if (change) afficher();
 };
 window.recharger = () => demarrerDonnees();
+/* Réglages de l'état (en-tête, compteurs, tables) : mot de passe de la console */
+if (INTEGRE){
+  const invite = "Mot de passe pour modifier les réglages de l'état :";
+  const be = document.getElementById("btnEntete");
+  be.addEventListener("click", async e => {
+    if (be.dataset.autorise === "1"){ be.dataset.autorise = ""; return; }
+    e.stopImmediatePropagation(); e.preventDefault();
+    if (await PONT.motDePasse(invite)){ be.dataset.autorise = "1"; be.click(); }
+  }, true);
+}
 window.etatPret = () => !!D.pretes;
-window.ouvrirReglagesEtat = () => ouvrirReglages();
+window.ouvrirReglagesEtat = async () => {
+  if (INTEGRE && !(await PONT.motDePasse("Mot de passe pour modifier les réglages de l'état :"))) return;
+  ouvrirReglages();
+};
 
 (async function init(){
   brancherInterface();
