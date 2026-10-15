@@ -16973,11 +16973,13 @@ function anxTableHtml(T,sec,idx,fam){
     '</tr></thead><tbody>'+idx.map(i=>'<tr>'+fs.map(f=>'<td class="anx-td-'+(f.role||"txt")+'">'+anxCellule(T,f,i,ctx)+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>';
 }
 /* ---------- filtres et tri par colonne (comme dans Excel) ---------- */
-ANX.fc={mec:{val:{},tri:null}, pap:{val:{},tri:null}};
+/* filtre par défaut : les lignes à 100 % d'avancement sont masquées (pastille retirable) */
+ANX.fc={mec:{val:{},tri:null,sans100:true}, pap:{val:{},tri:null,sans100:true}};
 function anxFiltresCol(fam){ return ANX.fc[fam]; }
 function anxAppliquerCol(T,fs,idx,fam,sauf){
   const F=anxFiltresCol(fam);
   let r=idx;
+  if(F.sans100){ const fa=fs.find(x=>x.role==="avct"); if(fa) r=r.filter(i=>{ const n=anxPourcent(T,fa,i); return n===null || n<100; }); }
   Object.keys(F.val).forEach(col=>{
     if(col===sauf) return;
     const vals=F.val[col]; if(!vals||!vals.length) return;
@@ -17022,6 +17024,31 @@ function anxPopupFiltre(bouton,T,fs,idxBase,fam,redessiner){
     pop.remove(); redessiner();
   };
   setTimeout(()=>{ const fermer=e=>{ if(!pop.contains(e.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
+}
+/* fenêtre de l'état, chargé au besoin et attendu jusqu'à ce que ses données soient prêtes */
+async function anxEtatPret(){
+  await chargerModule("etat");
+  const t0=Date.now();
+  while(Date.now()-t0<25000){
+    const w=fenetreModule("etat");
+    if(w && w.etatPret && w.etatPret()) return w;
+    await new Promise(r=>setTimeout(r,250));
+  }
+  throw new Error("l'état n'a pas pu être chargé");
+}
+/* état PDF de MEC 2023 ou PAPRIPACT, produit par l'état (mêmes filtres, tris et présentation) */
+async function anxImprimer(fam){
+  const w=await anxEtatPret();
+  if(!w.htmlAnnexeConsole) throw new Error("état trop ancien");
+  const f=anxFiltres();
+  const html=w.htmlAnnexeConsole(fam,f.g,f.sp);
+  if(!html) throw new Error("rien à imprimer");
+  const fr=document.createElement("iframe");
+  fr.style.cssText="position:fixed;left:-12000px;top:0;width:1120px;height:800px;border:0;";
+  document.body.appendChild(fr);
+  fr.onload=()=>{ setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast("Impression impossible : "+e.message,true); }
+    setTimeout(()=>fr.remove(),60000); },150); };
+  fr.srcdoc=html;
 }
 /* identifiants rattachés aux filtres Groupement / Sponsor, calculés par l'état (null = pas de filtre) */
 function anxFiltres(){ return {g:MENUS["m-groupement"].sel.slice(), sp:(MENUS["m-sponsor"]||{sel:[]}).sel.slice()}; }
@@ -17092,13 +17119,21 @@ async function anxExporter(T,sec,idx,titre){
   const ws=wb.addWorksheet(String(titre||T.tableId).slice(0,31).replace(/[\\\/\*\?\[\]:]/g,"-"));
   const h=ws.addRow(fs.map(f=>f.label));
   h.eachCell(c=>{ c.font={bold:true,color:{argb:"FFFFFFFF"}}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F5673"}};
-    c.alignment={vertical:"middle"}; c.border={bottom:{style:"thin",color:{argb:"FFB8C2CC"}}}; });
-  h.height=20;
-  ws.views=[{state:"frozen",ySplit:1,xSplit:sec.numFrozen||0}];
+    c.alignment={vertical:"middle",horizontal:"center",wrapText:true}; c.border={bottom:{style:"thin",color:{argb:"FFB8C2CC"}}}; });
+  h.height=24;
+  ws.views=[{state:"frozen",ySplit:1,xSplit:0}];
+  /* impression : A4 paysage, toutes les colonnes sur la largeur, en-tête répété */
+  ws.pageSetup={paperSize:9,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,
+    margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.3,footer:0.3},printTitlesRow:"1:1"};
   ws.autoFilter={from:{row:1,column:1},to:{row:1,column:fs.length}};
-  fs.forEach((f,k)=>{ ws.getColumn(k+1).width=Math.max(9,Math.round(f.width/7)); });
+  /* largeurs lisibles : textes longs plus larges et renvoyés à la ligne */
+  fs.forEach((f,k)=>{ ws.getColumn(k+1).width = f.role==="comm" ? 50 : f.role==="id" ? 45 : f.role==="avct" ? 13 : f.role==="ech" ? 13 : Math.max(14,Math.min(30,Math.round(f.width/7))); });
   idx.forEach(r=>{
-    const row=ws.addRow(fs.map(f=>anxValeurExcel(T,f,r)));
+    const row=ws.addRow(fs.map(f=>{
+      /* avancement : vrai pourcentage Excel quand la valeur est numérique (0,95 ou 95) */
+      if(f.role==="avct"){ const n=anxNombre(T,f,r); if(n!==null) return n<=1 ? n : n/100; }
+      return anxValeurExcel(T,f,r);
+    }));
     fs.forEach((f,k)=>{
       const cell=row.getCell(k+1);
       anxAppliquer(cell,f.opts,true);
@@ -17121,9 +17156,16 @@ async function anxExporter(T,sec,idx,titre){
         if(f.baseType==="Date"||f.baseType==="DateTime") cell.numFmt="dd/mm/yyyy";
         else if(f.baseType==="Numeric"||f.baseType==="Int") cell.numFmt=anxNumFmt(f.opts);
       }
+      if(f.role==="avct" && typeof cell.value==="number") cell.numFmt="0%";
+      /* par défaut : cellules centrées verticalement ; textes longs renvoyés à la ligne ;
+         statut, avancement et échéance centrés horizontalement */
       const v=cell.value;
-      if((typeof v==="string"&&v.indexOf("\n")>=0)||(v&&Array.isArray(v.richText)&&v.richText.some(p=>String(p.text).indexOf("\n")>=0)))
-        cell.alignment=Object.assign({},cell.alignment||{},{wrapText:true,vertical:"top"});
+      const multi=(typeof v==="string"&&v.indexOf("\n")>=0)||(v&&Array.isArray(v.richText)&&v.richText.some(p=>String(p.text).indexOf("\n")>=0));
+      const al={vertical:"middle"};
+      if(multi || f.role==="comm" || f.role==="id" || (typeof v==="string" && v.length>30)) al.wrapText=true;
+      if(["statut","avct","ech"].includes(f.role) && !(cell.alignment&&cell.alignment.horizontal)) al.horizontal="center";
+      cell.alignment=Object.assign({},cell.alignment||{},al);
+      cell.border={bottom:{style:"thin",color:{argb:"FFE2E6EA"}}};
     });
   });
   const buf=await wb.xlsx.writeBuffer();
@@ -17171,12 +17213,14 @@ async function rendreAnnexes(){
     const pastilles=cur ? Object.keys(F.val).filter(k=>F.val[k]&&F.val[k].length).map(k=>{
       const fc=cur.fs.find(x=>x.colId===k); const v=F.val[k];
       return '<span class="anx-fc">'+esc((fc?fc.label:k)+" : "+(v.length>2?v.slice(0,2).join(", ")+" +"+(v.length-2):v.join(", ")))+'<button type="button" data-fx="'+esc(k)+'" title="Retirer">✕</button></span>'; }) : [];
+    if(cur && F.sans100) pastilles.unshift('<span class="anx-fc">Avancement &lt; 100 %<button type="button" data-f100="1" title="Afficher aussi les lignes à 100 %">✕</button></span>');
     if(cur && F.tri){ const fc=cur.fs.find(x=>x.colId===F.tri.col); if(fc) pastilles.push('<span class="anx-fc">Tri : '+esc(fc.label)+(F.tri.dir>0?" ↑":" ↓")+'<button type="button" data-ftri="1">✕</button></span>'); }
     z.innerHTML='<div class="anx-outils"><div class="anx-onglets">'+["mec","pap"].map(k=>
         '<button type="button" class="anx-og'+(f===k?" actif":"")+'" data-anx="'+k+'">'+ANX_FAMILLES[k].titre+'<b>'+(L[k]?L[k].idx.length:"—")+'</b></button>').join("")+'</div>'+
       '<span class="anx-lect">👁 Consultation seule · '+info+'</span><span class="fil-esp"></span>'+
       (cur?'<button type="button" class="anx-pdf" id="anx-pdf">🖨 État PDF</button><button type="button" class="anx-xl" id="anx-xl">⬇ Exporter en .xlsx</button>':'')+'</div>'+
       (cur ? '<div class="anx-actifs">'+(pastilles.length?'Filtres du tableau : '+pastilles.join("")+'<button type="button" class="fil-lien" id="anx-fz">Tout effacer</button>':'<span>Filtrez ou triez avec ▾ dans l\'en-tête des colonnes.</span>')+
+          (!F.sans100?'<button type="button" class="fil-lien" id="anx-r100">Masquer les lignes à 100 %</button>':'')+
           '<span class="fil-esp"></span><span>'+cur.idx.length+' ligne'+(cur.idx.length>1?"s":"")+' sur '+cur.base.length+(pastilles.length?" · l'export Excel reprend ces filtres":"")+'</span></div>'+anxTableHtml(cur.T,cur.sec,cur.idx,f)
            : '<div class="app-vide">'+esc(T.erreur||("Table « "+anxNomTable(f)+" » introuvable."))+'</div>');
     const redessiner=()=>rendreAnnexes();
@@ -17184,7 +17228,9 @@ async function rendreAnnexes(){
     z.querySelectorAll("[data-fcol]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); anxPopupFiltre(b,cur.T,cur.fs,cur.base,f,redessiner); });
     z.querySelectorAll("[data-fx]").forEach(b=>b.onclick=()=>{ delete F.val[b.dataset.fx]; redessiner(); });
     z.querySelectorAll("[data-ftri]").forEach(b=>b.onclick=()=>{ F.tri=null; redessiner(); });
-    const fz=$("#anx-fz"); if(fz) fz.onclick=()=>{ F.val={}; F.tri=null; redessiner(); };
+    const r100=$("#anx-r100"); if(r100) r100.onclick=()=>{ F.sans100=true; redessiner(); };
+    z.querySelectorAll("[data-f100]").forEach(b=>b.onclick=()=>{ F.sans100=false; redessiner(); });
+    const fz=$("#anx-fz"); if(fz) fz.onclick=()=>{ F.val={}; F.tri=null; F.sans100=false; redessiner(); };
     const bx=$("#anx-xl"); if(bx) bx.onclick=()=>anxExporter(cur.T,cur.sec,cur.idx,ANX_FAMILLES[f].titre).catch(e=>toast("Export impossible : "+e.message,true));
     const bp=$("#anx-pdf"); if(bp) bp.onclick=()=>{ toast("Préparation de l'état "+ANX_FAMILLES[f].titre+"…"); anxImprimer(f).catch(e=>toast("État PDF impossible : "+e.message,true)); };
   }catch(e){
@@ -17208,9 +17254,10 @@ async function annexesSousListe(){
     [["mec",Tm],["pap",Tp]].forEach(([fam,T])=>{
       if(!T) return;
       const sec=anxSection(T); if(!sec) return;
-      const idx=anxOrdre(T,sec, fam==="mec"?ids.mec:ids.pap);
+      const fsL=anxChamps(T,sec), faL=fsL.find(x=>x.role==="avct");
+      const idx=anxOrdre(T,sec, fam==="mec"?ids.mec:ids.pap).filter(i=>{ if(!faL) return true; const n=anxPourcent(T,faL,i); return n===null||n<100; });
       if(!idx.length) return;
-      h+='<div class="anx-bloc"><div class="anx-bloc-tete"><b>'+ANX_FAMILLES[fam].titre+'</b><span>'+idx.length+' ligne'+(idx.length>1?"s":"")+' rattachée'+(idx.length>1?"s":"")+' · consultation seule</span>'+
+      h+='<div class="anx-bloc"><div class="anx-bloc-tete"><b>'+ANX_FAMILLES[fam].titre+'</b><span>'+idx.length+' ligne'+(idx.length>1?"s":"")+' rattachée'+(idx.length>1?"s":"")+' · hors avancement 100 % · consultation seule</span>'+
         '<span class="fil-esp"></span><button type="button" class="anx-pdf petit" data-pdf="'+fam+'">🖨 État PDF</button><button type="button" class="anx-xl petit" data-xl="'+fam+'">⬇ Excel</button></div>'+anxTableHtml(T,sec,idx)+'</div>';
       d._anx=d._anx||{}; d._anx[fam]={T,sec,idx};
     });
