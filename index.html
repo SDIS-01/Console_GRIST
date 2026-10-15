@@ -16443,11 +16443,11 @@ function rendreTravail(){
     return h;
   };
   z.innerHTML='<div class="mt-grille">'+
-    bloc(M+"projets",mesProjets.length+" porteur",mesProjets.map(p=>({p,lib:lire(c.tblMain,p,c.colLibelle),genre:"projet"})),
+    bloc(M+"projets et actions",mesProjets.length+" porteur",mesProjets.map(p=>({p,lib:lire(c.tblMain,p,c.colLibelle),genre:"projet"})),
       (n,i)=>{ const e=echeanceProjet(n.p);
         return '<div class="mt-it" data-i="'+i+'"><div class="mt-x"><b class="mt-projet">'+liseret(n.p)+libelleProjetHtml(n.lib)+'</b><small>'+esc(lire(c.tblMain,n.p,c.colGroupement))+
           (e&&etatDe(n.p)!=="termine"?' · échéance '+dateVersFR(e):'')+'</small></div>'+barreAppHtml(n.p)+'</div>'; })+
-    bloc(M+"actions en cours",acts.length,acts,(n,i)=>it(n,i,delaiHtml(n.ech)))+
+    bloc(M+"actions de mise en œuvre",acts.length,acts,(n,i)=>it(n,i,delaiHtml(n.ech)))+
     bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,delaiHtml(n.ech)))+
     (dem.length?bloc("Demandes du journal",dem.length,dem,(n,i)=>it(n,i,delaiHtml(n.ech))):"")+
     (S.cfg.colJnlAuteur && S.cfg.colJnlDelai ? bloc(M+"demandes à suivre",demandes.length+" en attente",demandes,itDemande) : "")+
