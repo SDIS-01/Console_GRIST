@@ -1739,6 +1739,8 @@ body:not(.app-hors-fiche) .app-filtres, body.app-revues .app-filtres{display:non
 .fil-app{position:relative;}
 .fil-app .fil-sous{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);}
 .fil-app .fil-chemin{max-width:calc(50% - 200px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* dans un projet : ni barre de filtres ni chiffres-clés (le projet est le filtre) */
+body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!important;}
 </style>
 </head>
 <body>
@@ -4342,7 +4344,7 @@ function ouvrirNotif(n){
    ======================================================================= */
 
 const ONGLETS=[["synthese","Synthèse"],["analyse","Analyse"],["strategie","Stratégie"],["actions","Actions"],["taches","Tâches"],
-               ["instances","Instances"],["planning","Planning"],
+               ["instances","Instances"],
                ["journal","Journal de bord"],["notes","Notes"],
                ["budget","Budget"],["ressources","Ressources"]];
 
@@ -15992,7 +15994,8 @@ function suivreCurseur(id){
    ======================================================================= */
 const APP={vue:"portefeuille", sous:"liste", retour:null, tri:{k:"ech",sens:1}, revuesOuvertes:false,
   agentVu:null,        // « Mon travail » vu comme un autre agent (après mot de passe)
-  choixAgent:false};   // liste de choix de l'agent affichée
+  choixAgent:false,    // liste de choix de l'agent affichée
+  ficheSous:"fiche"};  // dans un projet : Fiche · Planning · États, limités à ce projet   // liste de choix de l'agent affichée
 const COUL_GROUPEMENT={"DDA":"#7F77DD","DIR":"#2E3B52","GAAF":"#2B9BB5","GAST":"#8B6BB1","GBG":"#5B8DB8",
   "GBR":"#A0785A","GDB":"#3C5BA9","GFS":"#B05C9E","GMJ":"#4F9A94","GPOS":"#6B7FA0","GPTN":"#1D9E75",
   "GRH":"#D4537E","GSIC":"#378ADD","GSM":"#8D6E63","GST":"#0E7490","SDO":"#7A5195","SDSanté":"#5C6BC0"};
@@ -16029,6 +16032,7 @@ function ouvrirFiche(p,onglet){
   if(enMobile()){ S.projetSel=p; if(onglet) S.onglet=onglet; reverrouiller(); rendreMobile(); return; }
   basculerFiche();
   S.projetSel=p;
+  APP.ficheSous="fiche";
   if(onglet) S.onglet=onglet;
   reverrouiller();
   rendreApp();
@@ -16051,13 +16055,14 @@ function allerVue(vue,sous){
   if(APP.vue==="revues") fermerRevues();
   /* quitter « Mon travail » (autrement que pour une fiche) referme la vue d'un autre agent */
   if(vue!=="travail"){ APP.agentVu=null; APP.choixAgent=false; }
+  if(vue!=="fiche") APP.ficheSous="fiche";
   APP.vue=vue;
   if(sous) APP.sous=sous;
   rendreApp();
 }
 function retourDepuisFiche(){
   const r=APP.retour||{vue:"portefeuille",sous:"liste"};
-  APP.retour=null;
+  APP.retour=null; APP.ficheSous="fiche";
   allerVue(r.vue,r.sous);
 }
 /* À chaque ouverture : Portefeuille complet, vue Liste (aucune vue mémorisée) */
@@ -16071,15 +16076,29 @@ function rendreApp(){
   if(enMobile()) return;
   const b=document.body;
   ["portefeuille","travail","fiche","revues"].forEach(v=>b.classList.toggle("app-"+v,APP.vue===v));
-  b.classList.toggle("app-hors-fiche",APP.vue!=="fiche");
+  const ficheModule = APP.vue==="fiche" && APP.ficheSous!=="fiche";
+  b.classList.toggle("app-hors-fiche",APP.vue!=="fiche" || ficheModule);
+  b.classList.toggle("app-ctx-projet",APP.vue==="fiche");
   document.querySelectorAll(".app-nav [data-vue]").forEach(x=>
     x.classList.toggle("actif", x.dataset.vue===(APP.vue==="fiche"&&APP.retour?APP.retour.vue:APP.vue)));
   rendreFil();
   const va=$("#vue-app");
   if(APP.vue==="fiche"){
     if(!S.projetSel){ APP.vue=(APP.retour&&APP.retour.vue)||"portefeuille"; APP.retour=null; return rendreApp(); }
-    va.hidden=true;
-    rendreListe(); rendreProjet();
+    if(APP.ficheSous==="fiche"){
+      va.hidden=true;
+      rendreListe(); rendreProjet();
+      notifierModules();
+      return;
+    }
+    /* planning ou état du seul projet ouvert */
+    va.hidden=false;
+    ["liste","travail","planning","etats","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
+    $("#kpi-app").hidden=true;
+    if(APP.ficheSous==="planning"){ $("#zone-planning").hidden=false; chargerModule("planning"); }
+    else { $("#zone-etats").hidden=false; chargerModule("etat"); }
+    rendreListe();
+    notifierModules();
     return;
   }
   va.hidden=false;
@@ -16105,10 +16124,11 @@ function rendreFil(){
     const p=S.projetSel;
     f.innerHTML='<button type="button" class="fil-retour" id="fil-retour">← Retour</button>'+
       '<span class="fil-chemin">'+esc(nom)+(p?' › <b>'+esc(lire(S.cfg.tblMain,p,S.cfg.colLibelle)||"(sans libellé)")+'</b>':'')+'</span>'+
-      '<span class="fil-esp"></span>'+(p?'<button type="button" class="fil-lien" id="fil-planning">Voir dans le planning</button>':'');
+      '<span class="fil-esp"></span>'+(p?'<div class="fil-sous">'+
+      [["fiche","Fiche"],["planning","Planning"],["etats","États"]].map(([k,l])=>
+        '<button type="button" data-fsous="'+k+'" class="'+(APP.ficheSous===k?"actif":"")+'">'+l+'</button>').join("")+'</div>':'');
     $("#fil-retour").onclick=retourDepuisFiche;
-    const vp=$("#fil-planning");
-    if(vp) vp.onclick=()=>{ $("#q").value=lire(S.cfg.tblMain,p,S.cfg.colLibelle); APP.retour=null; allerVue("portefeuille","planning"); rendreListe(); };
+    f.querySelectorAll("[data-fsous]").forEach(x=>x.onclick=()=>{ APP.ficheSous=x.dataset.fsous; rendreApp(); });
     return;
   }
   if(APP.vue==="travail"){
@@ -16400,10 +16420,12 @@ window.PONT_MODULES={
   /* lignes retenues par les filtres communs : projets affichés et leurs actions */
   idsVisibles:()=>{
     const ids=new Set();
-    projetsFiltres().forEach(p=>{ ids.add(p.id); actionsDe(p).forEach(a=>ids.add(a.id)); });
+    const ps = (APP.vue==="fiche" && S.projetSel) ? [S.projetSel] : projetsFiltres();
+    ps.forEach(p=>{ ids.add(p.id); actionsDe(p).forEach(a=>ids.add(a.id)); });
     return ids;
   },
   ouvrirFiche:id=>ouvrirFicheDepuisLigne(id),
+  projetSeul:()=>APP.vue==="fiche" && !!S.projetSel,
   /* accès protégés des modules : fermés tant qu'aucun mot de passe n'est défini */
   motDePasse:async invite=>{
     if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return false; }
@@ -16454,7 +16476,10 @@ function notifierModules(){
     const wp=fenetreModule("planning");
     if(wp && wp.rafraichirDepuisConsole){ try{ wp.rafraichirDepuisConsole(); }catch(e){} }
     const we=fenetreModule("etat");
-    if(we && we.appliquerFiltreConsole){ try{ we.appliquerFiltreConsole(MENUS["m-groupement"].sel.slice(), (MENUS["m-sponsor"]||{sel:[]}).sel.slice()); }catch(e){} }
+    if(we && we.appliquerFiltreConsole){ try{
+      const pj=(APP.vue==="fiche" && S.projetSel) ? {id:S.projetSel.id, libelle:lire(S.cfg.tblMain,S.projetSel,S.cfg.colLibelle)} : null;
+      we.appliquerFiltreConsole(MENUS["m-groupement"].sel.slice(), (MENUS["m-sponsor"]||{sel:[]}).sel.slice(), pj);
+    }catch(e){} }
   },120);
 }
 /* données modifiées dans Grist : les modules ouverts relisent */
@@ -21187,7 +21212,15 @@ function chargerBientot(){ clearTimeout(tChargement); tChargement = setTimeout(c
 grist.onRecords(()=>chargerBientot())
 chargerBientot()
 // points d'entrée pour la console (mode intégré)
-window.rafraichirDepuisConsole = ()=>{ if(currentRecords && currentRecords.length) draw(currentRecords, currentMappings) }
+/* dans un projet ouvert dans la console : ses actions MEO s'affichent d'office ;
+   en sortant du projet, la puce reprend l'état d'avant */
+let meoAvantProjet = null
+window.rafraichirDepuisConsole = ()=>{
+    const seul = INTEGRE && PONT.projetSeul && PONT.projetSeul()
+    if(seul && meoAvantProjet===null){ meoAvantProjet = includeOptionalNature; includeOptionalNature = true; setChip("chipNature", true) }
+    else if(!seul && meoAvantProjet!==null){ includeOptionalNature = meoAvantProjet; meoAvantProjet = null; setChip("chipNature", includeOptionalNature) }
+    if(currentRecords && currentRecords.length) draw(currentRecords, currentMappings)
+}
 window.recharger = ()=>chargerBientot()
 window.ouvrirExportPlanning = ()=>openExportDialog()
 window.planningPret = ()=>!!(lastView && lastView.units && lastView.units.length)
@@ -24523,17 +24556,28 @@ if (INTEGRE){
 /* Filtres communs de la console → état. Un sponsor filtré bascule en « État par sponsor CODIR »
    (avec le groupement s'il y en a un seul) ; sinon un groupement filtré bascule en « État par groupement ».
    Si l'état n'est pas encore prêt, le filtre est appliqué dès la fin du chargement. */
-let filtreConsoleAttente = null, sponsorDeConsole = false;
-window.appliquerFiltreConsole = function(groupements, sponsors){
+let filtreConsoleAttente = null, sponsorDeConsole = false, projetDeConsole = false;
+/* projet ouvert dans la console → l'état de ce seul projet (vue groupement, filtre Projet) */
+function cleProjetConsole(pj){
+  const liste = tousLesProjets();
+  const TA = reglages.tAction, l = ctxDe(TA).lignes.find(x => x.id === pj.id);
+  const parId = l ? texte(TA, l, "ID_Projet_Action_AV") : "";
+  if (parId && liste.includes(parId)) return parId;
+  const lib = String(pj.libelle || "").trim();
+  if (liste.includes(lib)) return lib;
+  const code = (lib.match(/^\d{4}_\d{1,3}_[A-Za-z]{1,4}/) || [""])[0];
+  return (code && liste.find(x => x.indexOf(code) === 0)) || "";
+}
+window.appliquerFiltreConsole = function(groupements, sponsors, projet){
   if (!D.pretes){
     const premier = !filtreConsoleAttente;
-    filtreConsoleAttente = [groupements, sponsors];
+    filtreConsoleAttente = [groupements, sponsors, projet];
     if (premier){
       const t = setInterval(() => {
         if (!D.pretes) return;
         clearInterval(t);
         const f = filtreConsoleAttente; filtreConsoleAttente = null;
-        window.appliquerFiltreConsole(f[0], f[1]);
+        window.appliquerFiltreConsole(f[0], f[1], f[2]);
       }, 200);
     }
     return;
@@ -24545,6 +24589,21 @@ window.appliquerFiltreConsole = function(groupements, sponsors){
       || [...sel.options].find(o => o.value && valeur.indexOf(o.value) >= 0);
     return opt ? opt.value : null;
   };
+  const champProjet = document.getElementById("selProjet");
+  if (projet){
+    const cle = cleProjetConsole(projet);
+    if (cle){
+      projetDeConsole = true;
+      const change = champProjet.value !== cle || vue !== "groupement";
+      champProjet.value = cle;
+      if (vue !== "groupement") changerVue("groupement"); else if (change) afficher();
+      return;
+    }
+  } else if (projetDeConsole){
+    projetDeConsole = false;
+    champProjet.value = "";
+    afficher();
+  }
   const unGrp = groupements && groupements.length === 1 ? groupements[0] : null;
   const unSp = sponsors && sponsors.length === 1 ? sponsors[0] : null;
   if (unSp){
