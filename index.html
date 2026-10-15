@@ -8872,7 +8872,7 @@ function anaEvolutionHtml(p,A){
   const ph=photosDe(p), auj=aujourdHuiUTC(), c=S.cfg;
   const m=mesuresPhoto(A), der=ph[ph.length-1];
   if(!der) return '<div class="carte"><h2>Évolution</h2><div class="ana-note">Aucune photo pour ce projet. '+
-    'Les photos se prennent pour tous les projets en cours depuis la fenêtre « Analyse portefeuille ».</div></div>';
+    'Les photos des projets en cours se prennent automatiquement à l\'archivage d\'une revue annuelle complète ou P2A.</div></div>';
   const dPh=Number(der.Date), jours=Math.round((auj-dPh)/JOUR);
   const num=k=>der[k]==null||der[k]===""?null:Number(der[k]);
   /* tableau avant / maintenant / écart ; « mieux » dit dans quel sens l'écart est favorable */
@@ -17022,12 +17022,12 @@ function anxChamp(T,f){
   return {colId:col.colId, label:col.label||col.colId, type:col.type, baseType:String(col.type).split(":")[0],
     displayColId:dCol?dCol.colId:null, width:f.width||100, opts, regles};
 }
-function anxChamps(T,sec){
+function anxChamps(T,sec,liste){
   const fam=anxFamDe(T), parId={}, parPli={};
   T.colsTable.forEach(c=>{ parId[c.colId]=c; parPli[anxPli(c.colId)]=parPli[anxPli(c.colId)]||c; if(c.label) parPli[anxPli(c.label)]=parPli[anxPli(c.label)]||c; });
   const champVue={}; (sec.allFields||[]).forEach(f=>{ champVue[f.colRef]=f; });
   const fs=[];
-  ANX_COLONNES[fam].forEach(([id,lib,role])=>{
+  (liste||ANX_COLONNES[fam]).forEach(([id,lib,role])=>{
     const col=parId[id] || parPli[anxPli(id)] || (id==="Commentaires" ? parPli["commentaire"] : null);
     if(!col) return;
     const fv=champVue[col.id];
@@ -17281,9 +17281,9 @@ function anxValeurExcel(T,f,i){
   if(f.baseType==="Bool") return !!raw;
   return raw;
 }
-async function anxExporter(T,sec,idx,titre){
+async function anxExporter(T,sec,idx,titre,fsImpose,nomFichier){
   await anxChargerExcelJs();
-  const fs=anxChamps(T,sec);
+  const fs=fsImpose||anxChamps(T,sec);
   const wb=new ExcelJS.Workbook(); wb.creator="Console projets — SDIS de l'Ain";
   const ws=wb.addWorksheet(String(titre||T.tableId).slice(0,31).replace(/[\\\/\*\?\[\]:]/g,"-"));
   const h=ws.addRow(fs.map(f=>f.label));
@@ -17341,7 +17341,7 @@ async function anxExporter(T,sec,idx,titre){
   const url=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
   const a=document.createElement("a"); a.href=url;
   const ctx=anxFiltres(), suffixe=ctx.g.concat(ctx.sp).join("_");
-  a.download=(String(titre||T.tableId)+(suffixe?"_"+suffixe:"")).replace(/[^\w\-]+/g,"_").replace(/^_+|_+$/g,"")+"_"+new Date().toISOString().slice(0,10)+".xlsx";
+  a.download=(String(nomFichier||titre||T.tableId)+(suffixe?"_"+suffixe:"")).replace(/[^\w\-]+/g,"_").replace(/^_+|_+$/g,"")+"_"+new Date().toISOString().slice(0,10)+".xlsx";
   a.click(); setTimeout(()=>URL.revokeObjectURL(url),2000);
   toast("Fichier Excel généré : "+idx.length+" ligne"+(idx.length>1?"s":""));
 }
@@ -17501,6 +17501,29 @@ async function annexesMonTravail(ag, grille){
   }
 }
 
+/* ---------- extraction PEPS / AV (même présentation que le widget d'export) ---------- */
+const ANX_COLS_PEPS=[["Groupement","Groupement"],["ID_Projet_Action_AV","ID_Projet_Action_AV","id"],["Nature","Nature"],
+  ["Date_Début","Date_Début","ech"],["Ech_Prev","Ech_Prev","ech"],["Date_Fin","Date_Fin","ech"],["Statut","Statut","statut"],
+  ["Avancement","Avancement","avct"],["Commentaire","Commentaire","comm"],["Priorité","Priorité"],["Instance","Instance"],
+  ["Journal_bord_Commentaire","Journal_bord_Commentaire","comm"],["MEC_2023","MEC_2023"],["CASDIS_N","CASDIS_N"],["Sponsor_CODIR","Sponsor_CODIR"]];
+async function exporterPepsAv(){
+  const c=S.cfg, T=await anxTable(c.tblMain), sec=anxSection(T);
+  /* colonnes de la console quand leur nom diffère (projet, dates, priorité…) */
+  const liste=ANX_COLS_PEPS.map(([id,lib,role])=>{
+    const alias={ID_Projet_Action_AV:c.colProjKey,Groupement:c.colGroupement,Nature:c.colNature,"Date_Début":c.colDebut,Ech_Prev:c.colEch,
+      Date_Fin:c.colFin,Statut:c.colStatut,Avancement:c.colAvancement,Commentaire:c.colCommentaire,"Priorité":c.colPriorite,Sponsor_CODIR:c.colSponsor}[id];
+    return [alias&&infoCol(c.tblMain,alias)?alias:id, lib, role];
+  });
+  const fs=anxChamps(T,sec,liste);
+  const ids=projetsFiltres().map(p=>p.id);
+  const fG=fs.find(f=>f.label==="Groupement"), fI=fs.find(f=>f.role==="id");
+  const idx=anxOrdre(T,sec,ids).sort((a,b)=>{
+    const g=(fG?anxTexte(T,fG,a):"").localeCompare(fG?anxTexte(T,fG,b):"","fr");
+    return g || (fI?anxTexte(T,fI,a):"").localeCompare(fI?anxTexte(T,fI,b):"","fr",{numeric:true});
+  });
+  await anxExporter(T,sec,idx,"Extract_PEPS_AV",fs,"Extract_PEPS_AV");
+}
+
 /* =======================================================================
    Onglet États simplifié : présentation de la Liste (projets, actions MEO,
    tâches), filtres de la barre du haut, MEC 2023 / PAPRIPACT en bas.
@@ -17509,7 +17532,7 @@ async function annexesMonTravail(ag, grille){
    La vue complète de l'état reste accessible (options avancées).
    ======================================================================= */
 APP.etat={grp:"", meo:false, taches:false, ouverts:new Set(), avance:false,
-  opts:{rappel:true, termine:false, interrompu:false, perimetre:"implication"}};
+  opts:{meo:false, taches:false, rappel:false, termine:false, interrompu:false, perimetre:"portage"}};
 
 /* colonnes Origine et Service de la table principale (si elles existent) */
 function colOrigineApp(){ const c=S.cfg; return ["Origine"].find(k=>infoCol(c.tblMain,k))||""; }
@@ -17658,13 +17681,15 @@ async function etImprimer(tous){
 async function etExcel(tous){
   const w=await anxEtatPret();
   if(!w.excelEtatConsole) throw new Error("état trop ancien");
-  w.excelEtatConsole(etOptionsEtat(), tous);
+  await w.excelEtatConsole(etOptionsEtat(), tous);
 }
 function etPopupOptions(bouton){
   document.querySelectorAll(".anx-pop").forEach(x=>x.remove());
   const O=APP.etat.opts;
   const pop=document.createElement("div"); pop.className="anx-pop et-pop";
   pop.innerHTML='<div class="et-pop-t">Options d\'édition (PDF / Excel)</div>'+
+    '<label><input type="checkbox" data-o="meo"'+(O.meo?" checked":"")+'> Inclure les actions MEO</label>'+
+    '<label><input type="checkbox" data-o="taches"'+(O.taches?" checked":"")+'> Inclure les tâches</label>'+
     '<label><input type="checkbox" data-o="rappel"'+(O.rappel?" checked":"")+'> Rappel des définitions en tête</label>'+
     '<label><input type="checkbox" data-o="termine"'+(O.termine?" checked":"")+'> Inclure les éléments terminés</label>'+
     '<label><input type="checkbox" data-o="interrompu"'+(O.interrompu?" checked":"")+'> Inclure les éléments interrompus</label>'+
@@ -17693,12 +17718,14 @@ function brancherEditionsListe(){
     document.querySelectorAll(".anx-pop").forEach(x=>x.remove());
     const pop=document.createElement("div"); pop.className="anx-pop et-pop";
     pop.innerHTML='<div class="et-pop-t">Autres éditions du portefeuille</div>'+
-      '<button type="button" class="ed-it" data-ed2="echeances"><span>Échéances en retard et à venir</span><small>Excel</small></button>'+
-      '<button type="button" class="ed-it" data-ed2="analyse"><span>Analyse portefeuille</span><small>écran · PDF</small></button>';
+      '<button type="button" class="ed-it" data-ed2="peps"><span>Extraction PEPS / AV (projets affichés)</span><small>Excel</small></button>'+
+      '<button type="button" class="ed-it" data-ed2="echeances"><span>Échéances en retard et à venir</span><small>Excel</small></button>';
     document.body.appendChild(pop);
     const r=e.currentTarget.getBoundingClientRect();
     pop.style.top=(r.bottom+4)+"px"; pop.style.left=Math.max(8,Math.min(window.innerWidth-pop.offsetWidth-8,r.right-pop.offsetWidth))+"px";
-    pop.querySelectorAll("[data-ed2]").forEach(b=>b.onclick=()=>{ pop.remove(); lancerEdition(b.dataset.ed2); });
+    pop.querySelectorAll("[data-ed2]").forEach(b=>b.onclick=()=>{ pop.remove();
+      if(b.dataset.ed2==="peps"){ toast("Préparation de l'extraction PEPS / AV…"); exporterPepsAv().catch(er=>toast("Export impossible : "+er.message,true)); }
+      else lancerEdition(b.dataset.ed2); });
     setTimeout(()=>{ const fermer=ev=>{ if(!pop.contains(ev.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
   });
 }
@@ -23626,6 +23653,20 @@ function construireEtat(code, sansProjetSeul){
     projetsSeuls = { portes, impactes };
   }
 
+  /* Édition demandée par la console : actions MEO et / ou tâches exclues (projets seuls par défaut) */
+  const EC = window.EDITION_CONSOLE || {};
+  if (!seul && (EC.sansMeo || EC.sansTaches)){
+    projetsFinaux.forEach(p => {
+      if (EC.sansMeo){
+        if (!EC.sansTaches) p.actions.forEach(a => { p.taches = p.taches.concat(a.taches); });
+        p.actions = [];
+      }
+      if (EC.sansTaches){ p.taches = []; p.actions.forEach(a => { a.taches = []; }); }
+    });
+    const gardes = projetsFinaux.filter(p => p.direct || p.actions.length || p.taches.length);
+    projetsFinaux.length = 0; gardes.forEach(x => projetsFinaux.push(x));
+  }
+
   /* MEC 2023, PAPRIPACT et lignes sans projet ne sont rattachés à aucun projet :
      ils disparaissent quand un projet est sélectionné. */
   const garderAnnexe = o => !f.projet
@@ -23633,7 +23674,8 @@ function construireEtat(code, sansProjetSeul){
   const mecFinal = mecBrut.filter(garderAnnexe);
   const papFinal = papBrut.filter(garderAnnexe);
   /* Lignes sans projet : filtrées sur leur propre origine (une tâche n'en a pas). */
-  const orphelinsFinaux = projetsSeuls ? [] : orphelins.filter(x => garderAnnexe(Object.assign({}, x.o, { libelle: x.libelle }))
+  const orphelinsFinaux = projetsSeuls ? [] : orphelins.filter(x => !(EC.sansMeo && x.type === "action") && !(EC.sansTaches && x.type !== "action"))
+    .filter(x => garderAnnexe(Object.assign({}, x.o, { libelle: x.libelle }))
     && garderOrigine(x.type === "action" && x.o ? x.o.origine : "", f.origine));
   mecFinal.sort((x, y) =>
     (x.categorie || "").localeCompare(y.categorie || "", "fr") || x.libelle.localeCompare(y.libelle, "fr"));
@@ -25813,9 +25855,11 @@ if (INTEGRE){
 window.etatPret = () => !!D.pretes;
 /* ---- Pour l'onglet États de la console : réglage de l'état puis édition (PDF ou Excel) ----
    o = {g, sp, porteur, origine, service, recherche, termine, interrompu, rappel, perimetre} */
+window.EDITION_CONSOLE = {};
 window.preparerEtatConsole = o => {
   if (!D.pretes) return false;
   o = o || {};
+  window.EDITION_CONSOLE = { sansMeo: !o.meo, sansTaches: !o.taches };
   const fixer = (id, v) => { const el = document.getElementById(id); if (!el) return;
     if (el.type === "checkbox") el.checked = !!v; else { el.value = v || ""; if (el.tagName === "SELECT" && el.value !== (v || "")) el.value = ""; } };
   const g = o.g || [], sp = o.sp || [];
@@ -25847,11 +25891,14 @@ window.htmlEtatConsole = (o, tous) => {
     window.print = () => { html = zone.innerHTML; };
     try { if (vue === "sponsor") imprimerTousSponsors(); else imprimerTous(); } finally { window.print = orig; }
   }
-  return documentEtatConsole(html, document.title);
+  const doc = documentEtatConsole(html, document.title);
+  window.EDITION_CONSOLE = {}; afficher();       // la vue complète retrouve son contenu habituel
+  return doc;
 };
-window.excelEtatConsole = (o, tous) => {
+window.excelEtatConsole = async (o, tous) => {
   if (!window.preparerEtatConsole(o)) return false;
-  exporterExcel(!!tous);
+  try { await exporterExcel(!!tous); }
+  finally { window.EDITION_CONSOLE = {}; afficher(); }
   return true;
 };
 /* Pour la console (Mon travail) : groupement d'un agent, lu dans la table des collaborateurs
