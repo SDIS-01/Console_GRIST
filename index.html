@@ -1781,6 +1781,39 @@ body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!impo
 .anx-fen select{width:100%;padding:6px;border:1px solid var(--trait);border-radius:6px;}
 .anx-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
 .mt-aide{font-size:11.5px;color:var(--gris);}
+.anx-pdf{background:#fff;color:#3c4a6b;border:1px solid #c5cfe8;border-radius:5px;padding:6px 12px;font-weight:600;cursor:pointer;}
+.anx-pdf:hover{background:#e8ecf7;}
+.anx-pdf.petit{padding:3px 10px;font-size:11.5px;}
+/* MEC · PAPRIPACT épuré, filtres de colonnes */
+.anx-st{font-weight:bold;font-size:11.5px;white-space:nowrap;}
+.anx-st i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px;}
+.anx-av{display:flex;align-items:center;gap:6px;min-width:110px;}
+.anx-av-b{flex:1;height:6px;border-radius:3px;background:#e8ecf2;overflow:hidden;}
+.anx-av-b i{display:block;height:100%;}
+.anx-av span{font-size:11.5px;color:#6b7484;white-space:nowrap;}
+.anx-id{font-weight:600;color:#1c2330;}
+.anx-td-id{min-width:220px;max-width:360px;}
+.anx-comm{color:#6b7484;font-size:11.5px;max-width:320px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+.anx-td-comm{min-width:200px;}
+.anx-table th{white-space:nowrap;}
+.anx-f{border:0;background:none;color:#9aa3b2;font-size:10px;margin-left:4px;padding:0 4px;border-radius:3px;cursor:pointer;}
+.anx-f:hover{background:#e8ecf7;color:#3c4a6b;}
+.anx-f.on{background:#002395;color:#fff;}
+.anx-actifs{display:flex;align-items:center;gap:6px;padding:8px 16px;border-top:1px solid var(--trait);font-size:12px;color:#6b7484;flex-wrap:wrap;margin-top:-1px;}
+.anx-fc{display:inline-flex;align-items:center;gap:4px;background:#e8ecf7;border:1px solid #c5cfe8;color:#3c4a6b;border-radius:14px;padding:2px 4px 2px 10px;font-weight:bold;}
+.anx-fc button{border:0;background:none;color:#3c4a6b;cursor:pointer;font-weight:bold;}
+.anx-pop{position:fixed;z-index:300;width:260px;background:#fff;border:1px solid var(--trait);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:8px;font-size:12px;}
+.anx-pop-tri{display:flex;gap:6px;border-bottom:1px solid #eef0f3;padding-bottom:7px;margin-bottom:7px;}
+.anx-pop-tri button{border:1px solid var(--trait);background:#fff;border-radius:5px;padding:3px 8px;color:#3c4a6b;cursor:pointer;}
+.anx-pop-q{width:100%;box-sizing:border-box;border:1px solid var(--trait);border-radius:5px;padding:5px 7px;margin-bottom:6px;}
+.anx-pop-liste{max-height:240px;overflow:auto;}
+.anx-pop-liste label{display:flex;align-items:center;gap:7px;padding:4px 3px;border-radius:4px;cursor:pointer;}
+.anx-pop-liste label:hover{background:var(--bleu-survol);}
+.anx-pop-liste label span{flex:1;min-width:0;}
+.anx-pop-liste label small{color:#9aa3b2;}
+.anx-pop-liste label[hidden]{display:none;}
+.anx-pop-pied{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #eef0f3;padding-top:7px;margin-top:6px;}
+.mt-anx-tout{display:block;padding:8px 12px;text-align:left;}
 </style>
 </head>
 <body>
@@ -16420,6 +16453,8 @@ function rendreTravail(){
     (S.cfg.colJnlAuteur && S.cfg.colJnlDelai ? bloc(M+"demandes à suivre",demandes.length+" en attente",demandes,itDemande) : "")+
     (autre?"":carteNotifs(ag,autre,nl,tous))+
   '</div>';
+  /* lignes MEC 2023 et PAPRIPACT du groupement de l'agent (rattachement calculé par l'état) */
+  if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mt-grille"));
   const ntout=$("#mt-tout-lu");
   if(ntout) ntout.onclick=()=>{ const k=nl.length; marquerLues(nl); toast(k+" notification"+(k>1?"s":"")+" marquée"+(k>1?"s":"")+" comme lue"+(k>1?"s":"")); };
   z.querySelectorAll("[data-mtf]").forEach(b=>b.onclick=()=>{ APP.filtreNotifs=b.dataset.mtf; rendreTravail(); });
@@ -16735,9 +16770,9 @@ vueInitiale();
 
 /* =======================================================================
    MEC 2023 et PAPRIPACT — consultation seule et export Excel fidèle.
-   Colonnes, libellés, couleurs des choix et règles conditionnelles sont
-   repris d'une vue Grist de chaque table (moteur du widget « Export Excel
-   fidèle »). Les lignes affichées suivent les filtres Groupement / Sponsor
+   Colonnes fixées (celles des extractions de référence), présentation
+   épurée à l'écran, filtres et tri par colonne ; l'export Excel reprend
+   les styles des colonnes Grist (moteur du widget « Export Excel fidèle »). Les lignes affichées suivent les filtres Groupement / Sponsor
    de la console, avec le rattachement calculé par l'état.
    Rien n'est jamais écrit dans les tables.
    ======================================================================= */
@@ -16786,9 +16821,19 @@ async function anxTable(tableId){
   return T;
 }
 function anxSection(T){
-  const o=(S.modulesOptions&&S.modulesOptions.annexes)||{};
-  return T.sections.find(s=>s.id===o[T.tableId]) || T.sections[0] || null;
+  /* la vue Grist ne sert plus qu'à reprendre le style des colonnes pour l'export Excel */
+  return T.sections[0] || {id:0, allFields:[], sortColRefs:"[]", numFrozen:0};
 }
+/* colonnes affichées et exportées, dans l'ordre des extractions de référence */
+const ANX_COLONNES={
+  mec:[["ID_MEC_2023","ID MEC 2023","id"],["Recommandation_Rappel","Recommandation / Rappel"],["Statut","Statut","statut"],
+       ["Avancement","Avancement","avct"],["Commentaires","Commentaires","comm"],["Porteur","Porteur"],["Groupement","Groupement"]],
+  pap:[["Action_PAPRIPACT","Action","id"],["Commentaire_SHS","Commentaire SHS","comm"],["Origine","Origine"],["Famille","Famille"],
+       ["Echéance","Échéance","ech"],["Statut","Statut","statut"],["Avancement","Avancement","avct"],["Observation_Porteur","Observation porteur","comm"],
+       ["Service_Porteur","Service porteur"],["Groupement_Pilote","Groupement pilote"]]
+};
+const anxPli=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"");
+function anxFamDe(T){ return T.tableId===anxNomTable("pap") ? "pap" : "mec"; }
 /* style et libellé d'un champ : colonne puis surcharge du champ (comme Grist) */
 function anxChamp(T,f){
   const col=T.colsByRef[f.colRef];
@@ -16808,13 +16853,18 @@ function anxChamp(T,f){
   return {colId:col.colId, label:col.label||col.colId, type:col.type, baseType:String(col.type).split(":")[0],
     displayColId:dCol?dCol.colId:null, width:f.width||100, opts, regles};
 }
-/* champs de la vue, plus la colonne Commentaire de la table si la vue ne la montre pas */
 function anxChamps(T,sec){
-  const fs=sec.allFields.slice().sort((a,b)=>a.parentPos-b.parentPos).map(f=>anxChamp(T,f)).filter(Boolean);
-  const vus=new Set(fs.map(f=>f.colId));
-  T.colsTable.filter(c=>/^comment/i.test(c.colId)||/^comment/i.test(c.label||""))
-    .filter(c=>!vus.has(c.colId) && !/^gristHelper_/.test(c.colId))
-    .forEach(c=>{ const f=anxChamp(T,{colRef:c.id, widgetOptions:"", rules:null, displayCol:0, width:260}); if(f) fs.push(f); });
+  const fam=anxFamDe(T), parId={}, parPli={};
+  T.colsTable.forEach(c=>{ parId[c.colId]=c; parPli[anxPli(c.colId)]=parPli[anxPli(c.colId)]||c; if(c.label) parPli[anxPli(c.label)]=parPli[anxPli(c.label)]||c; });
+  const champVue={}; (sec.allFields||[]).forEach(f=>{ champVue[f.colRef]=f; });
+  const fs=[];
+  ANX_COLONNES[fam].forEach(([id,lib,role])=>{
+    const col=parId[id] || parPli[anxPli(id)] || (id==="Commentaires" ? parPli["commentaire"] : null);
+    if(!col) return;
+    const fv=champVue[col.id];
+    const f=anxChamp(T, fv || {colRef:col.id, widgetOptions:"", rules:null, displayCol:0, width:role==="comm"?260:(role==="id"?240:110)});
+    if(f){ f.label=lib; f.role=role||""; fs.push(f); }
+  });
   return fs;
 }
 function anxValeur(T,f,i){
@@ -16853,54 +16903,133 @@ function anxTexte(T,f,i){
   }
   return String(v);
 }
-/* lignes dans l'ordre de la vue (tri et filtres de la vue), restreintes aux identifiants donnés */
+/* lignes rattachées, dans l'ordre de la table */
 function anxOrdre(T,sec,ids){
   const D=T.data;
   let idx=D.id.map((_,i)=>i);
-  if(ids){ const s=new Set(ids); idx=idx.filter(i=>s.has(D.id[i])); }
-  const specs=[];
-  T.filtres.filter(fl=>fl.viewSectionRef===sec.id&&fl.filter).forEach(fl=>specs.push({colRef:fl.colRef, spec:anxJson(fl.filter,null)}));
-  sec.allFields.forEach(f=>{ if(f.filter && !specs.some(o=>o.colRef===f.colRef)) specs.push({colRef:f.colRef, spec:anxJson(f.filter,null)}); });
-  const passe=(spec,v)=>{
-    if(!spec) return true;
-    if(spec.min!=null||spec.max!=null){ if(typeof v!=="number") return false; if(spec.min!=null&&v<spec.min) return false; if(spec.max!=null&&v>spec.max) return false; return true; }
-    const vals=(Array.isArray(v)&&v[0]==="L"?v.slice(1):[v===undefined?null:v]).map(x=>x===""?null:x); if(!vals.length) vals.push(null);
-    if(Array.isArray(spec.included)&&spec.included.length){ const st=new Set(spec.included.map(x=>x===""?null:x)); return vals.some(x=>st.has(x)); }
-    if(Array.isArray(spec.excluded)&&spec.excluded.length){ const st=new Set(spec.excluded.map(x=>x===""?null:x)); return !vals.some(x=>st.has(x)); }
-    return true;
-  };
-  specs.filter(o=>o.spec).forEach(o=>{ const col=T.colsByRef[o.colRef]; if(col) idx=idx.filter(i=>passe(o.spec, D[col.colId]?D[col.colId][i]:null)); });
-  const tri=anxJson(sec.sortColRefs,[]);
-  const regles=(Array.isArray(tri)?tri:[]).map(s=>typeof s==="number"?{colRef:Math.abs(s),dir:s<0?-1:1}:{colRef:Math.abs(s.colRef),dir:(s.direction!=null?s.direction:(s.colRef<0?-1:1))<0?-1:1}).filter(s=>T.colsByRef[s.colRef]);
-  const val=(ref,i)=>{ const c=T.colsByRef[ref], d=c.displayCol?T.colsByRef[c.displayCol]:null, src=d&&D[d.colId]?d.colId:c.colId; return D[src]?D[src][i]:null; };
-  const cmp=(a,b)=>{ const ea=a==null||a==="", eb=b==null||b===""; if(ea&&eb) return 0; if(ea) return -1; if(eb) return 1;
-    if(typeof a==="number"&&typeof b==="number") return a-b; return String(a).localeCompare(String(b),"fr",{numeric:true,sensitivity:"base"}); };
-  if(regles.length) idx.sort((x,y)=>{ for(const r of regles){ const c=cmp(val(r.colRef,x),val(r.colRef,y))*r.dir; if(c) return c; } return 0; });
-  else if(D.manualSort) idx.sort((x,y)=>D.manualSort[x]-D.manualSort[y]);
+  if(ids){ const st=new Set(ids); idx=idx.filter(i=>st.has(D.id[i])); }
+  if(D.manualSort) idx.sort((x,y)=>D.manualSort[x]-D.manualSort[y]);
   return idx;
 }
-function anxTableHtml(T,sec,idx){
-  const fs=anxChamps(T,sec);
-  if(!idx.length) return '<div class="mt-vide anx-vide">Aucune ligne.</div>';
-  return '<div class="anx-defil"><table class="app-table anx-table"><thead><tr>'+fs.map(f=>'<th style="min-width:'+Math.min(320,Math.max(70,f.width))+'px">'+esc(f.label)+'</th>').join("")+
-    '</tr></thead><tbody>'+idx.map(i=>'<tr>'+fs.map(f=>{
-      const st=anxStyle(T,f,i), t=anxTexte(T,f,i);
-      return '<td style="'+anxCss(st)+'"'+(t.length>140?' title="'+esc(t)+'"':'')+'>'+esc(t.length>400?t.slice(0,400)+"…":t)+'</td>';
-    }).join("")+'</tr>').join("")+'</tbody></table></div>';
+/* ---------- présentation épurée ---------- */
+function anxEtatStatut(t){
+  const s=anxPli(t);
+  if(!s) return "";
+  if(/interromp|abandon|suspen/.test(s)) return "gris";
+  if(/termin|realis|clos|solde|^4/.test(s)) return "vert";
+  if(/retard/.test(s)) return "rouge";
+  if(/aengager|nonengag|^1|afaire|nondemarr/.test(s)) return "rouge";
+  if(/cours|engag|^2|^3/.test(s)) return "orange";
+  return "";
 }
-
+const ANX_COUL={vert:["#4E7D2A","#9BBB59"],orange:["#A2551A","#F79646"],rouge:["#C0504D","#C0504D"],gris:["#55554F","#9A948E"]};
+function anxNombre(T,f,i){
+  let v=anxValeur(T,f,i);
+  if(typeof v==="string" && /^\s*-?\d+([.,]\d+)?\s*$/.test(v)) v=parseFloat(v.replace(",","."));
+  return typeof v==="number" ? v : null;
+}
+function anxPourcent(T,f,i){
+  const n=anxNombre(T,f,i);
+  if(n!==null) return Math.round(n<=1 ? n*100 : n);
+  const m=String(anxValeur(T,f,i)||"").match(/([+-]?)\s*(\d+)/);
+  return m ? Number(m[2]) : null;
+}
+function anxCellule(T,f,i,ctx){
+  const t=anxTexte(T,f,i);
+  if(f.role==="statut"){
+    const k=anxEtatStatut(t), c=ANX_COUL[k];
+    return t ? '<span class="anx-st"'+(c?' style="color:'+c[0]+'"':'')+'><i style="background:'+(c?c[1]:"#c5cfe8")+'"></i>'+esc(t)+'</span>' : "";
+  }
+  if(f.role==="avct"){
+    const n=anxPourcent(T,f,i);
+    if(n===null && !t) return "";
+    const lib=anxNombre(T,f,i)!==null ? (n+" %") : t;
+    const coul=n>=76?"#9BBB59":n>=26?"#FFCC00":n>=1?"#F79646":"#C0504D";
+    return '<div class="anx-av"><div class="anx-av-b"><i style="width:'+Math.max(0,Math.min(100,n||0))+'%;background:'+coul+'"></i></div><span>'+esc(lib)+'</span></div>';
+  }
+  if(f.role==="ech"){
+    const v=anxValeur(T,f,i);
+    const retard=typeof v==="number" && v<aujourdHuiUTC() && ctx && ctx.statut && anxEtatStatut(anxTexte(T,ctx.statut,i))!=="vert";
+    return '<span'+(retard?' class="app-ret"':'')+'>'+esc(t)+'</span>';
+  }
+  if(f.role==="comm") return t ? '<div class="anx-comm" title="'+esc(t)+'">'+esc(t)+'</div>' : "";
+  if(f.role==="id") return '<b class="anx-id">'+esc(t)+'</b>';
+  return esc(t);
+}
+function anxTableHtml(T,sec,idx,fam){
+  const fs=anxChamps(T,sec);
+  const ctx={statut:fs.find(f=>f.role==="statut")};
+  const F=fam ? anxFiltresCol(fam) : null;
+  if(!idx.length) return '<div class="mt-vide anx-vide">Aucune ligne'+(F&&Object.keys(F.val).length?" ne correspond aux filtres du tableau":"")+'.</div>';
+  const th=f=>{
+    let h='<th class="anx-th-'+(f.role||"txt")+'">'+esc(f.label);
+    if(fam && f.role!=="comm"){
+      const on=(F.val[f.colId]&&F.val[f.colId].length)||(F.tri&&F.tri.col===f.colId);
+      h+='<button type="button" class="anx-f'+(on?" on":"")+'" data-fcol="'+esc(f.colId)+'" title="Filtrer / trier">'+(F.tri&&F.tri.col===f.colId?(F.tri.dir>0?"↑":"↓"):"▾")+'</button>';
+    }
+    return h+'</th>';
+  };
+  return '<div class="anx-defil"><table class="app-table anx-table"><thead><tr>'+fs.map(th).join("")+
+    '</tr></thead><tbody>'+idx.map(i=>'<tr>'+fs.map(f=>'<td class="anx-td-'+(f.role||"txt")+'">'+anxCellule(T,f,i,ctx)+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>';
+}
+/* ---------- filtres et tri par colonne (comme dans Excel) ---------- */
+ANX.fc={mec:{val:{},tri:null}, pap:{val:{},tri:null}};
+function anxFiltresCol(fam){ return ANX.fc[fam]; }
+function anxAppliquerCol(T,fs,idx,fam,sauf){
+  const F=anxFiltresCol(fam);
+  let r=idx;
+  Object.keys(F.val).forEach(col=>{
+    if(col===sauf) return;
+    const vals=F.val[col]; if(!vals||!vals.length) return;
+    const f=fs.find(x=>x.colId===col); if(!f) return;
+    const st=new Set(vals);
+    r=r.filter(i=>st.has(anxTexte(T,f,i)||"(vide)"));
+  });
+  if(F.tri && sauf===undefined){
+    const f=fs.find(x=>x.colId===F.tri.col);
+    if(f){
+      const cle=i=>{ const v=anxValeur(T,f,i); return f.role==="avct" ? (anxPourcent(T,f,i)??-1) : (typeof v==="number"?v:anxTexte(T,f,i)); };
+      r=r.slice().sort((a,b)=>{ const x=cle(a), y=cle(b);
+        const c=(typeof x==="number"&&typeof y==="number") ? x-y : String(x).localeCompare(String(y),"fr",{numeric:true,sensitivity:"base"});
+        return c*F.tri.dir; });
+    }
+  }
+  return r;
+}
+function anxPopupFiltre(bouton,T,fs,idxBase,fam,redessiner){
+  document.querySelectorAll(".anx-pop").forEach(x=>x.remove());
+  const col=bouton.dataset.fcol, f=fs.find(x=>x.colId===col), F=anxFiltresCol(fam);
+  const dispo=anxAppliquerCol(T,fs,idxBase,fam,col);
+  const comptes=new Map();
+  dispo.forEach(i=>{ const v=anxTexte(T,f,i)||"(vide)"; comptes.set(v,(comptes.get(v)||0)+1); });
+  const valeurs=[...comptes.keys()].sort((a,b)=>a==="(vide)"?1:b==="(vide)"?-1:a.localeCompare(b,"fr",{numeric:true,sensitivity:"base"}));
+  const choisis=new Set(F.val[col]||[]);
+  const pop=document.createElement("div"); pop.className="anx-pop";
+  pop.innerHTML='<div class="anx-pop-tri"><button type="button" data-tri="1">↑ A→Z</button><button type="button" data-tri="-1">↓ Z→A</button></div>'+
+    (valeurs.length>8?'<input type="search" class="anx-pop-q" placeholder="Rechercher…">':'')+
+    '<div class="anx-pop-liste">'+valeurs.map(v=>'<label><input type="checkbox" value="'+esc(v)+'"'+(choisis.has(v)?" checked":"")+'><span>'+esc(v.length>70?v.slice(0,70)+"…":v)+'</span><small>'+comptes.get(v)+'</small></label>').join("")+'</div>'+
+    '<div class="anx-pop-pied"><button type="button" class="fil-lien" data-eff="1">Effacer</button><button type="button" class="btn" data-ok="1">Appliquer</button></div>';
+  document.body.appendChild(pop);
+  const r=bouton.getBoundingClientRect();
+  pop.style.top=(r.bottom+4)+"px"; pop.style.left=Math.max(8,Math.min(window.innerWidth-pop.offsetWidth-8,r.left-120))+"px";
+  const q=pop.querySelector(".anx-pop-q");
+  if(q){ q.focus(); q.oninput=()=>{ const t=anxPli(q.value); pop.querySelectorAll(".anx-pop-liste label").forEach(l=>{ l.hidden=!!t && anxPli(l.textContent).indexOf(t)<0; }); }; }
+  pop.querySelectorAll("[data-tri]").forEach(b=>b.onclick=()=>{ F.tri={col,dir:Number(b.dataset.tri)}; pop.remove(); redessiner(); });
+  pop.querySelector("[data-eff]").onclick=()=>{ delete F.val[col]; if(F.tri&&F.tri.col===col) F.tri=null; pop.remove(); redessiner(); };
+  pop.querySelector("[data-ok]").onclick=()=>{
+    const v=[...pop.querySelectorAll(".anx-pop-liste input:checked")].map(x=>x.value);
+    if(v.length) F.val[col]=v; else delete F.val[col];
+    pop.remove(); redessiner();
+  };
+  setTimeout(()=>{ const fermer=e=>{ if(!pop.contains(e.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
+}
 /* identifiants rattachés aux filtres Groupement / Sponsor, calculés par l'état (null = pas de filtre) */
 function anxFiltres(){ return {g:MENUS["m-groupement"].sel.slice(), sp:(MENUS["m-sponsor"]||{sel:[]}).sel.slice()}; }
 async function anxIds(){
   const f=anxFiltres();
   if(!f.g.length && !f.sp.length) return null;
-  await chargerModule("etat");
-  const t0=Date.now();
-  while(Date.now()-t0<25000){
-    const w=fenetreModule("etat");
-    if(w && w.etatPret && w.etatPret() && w.lignesAnnexes) return w.lignesAnnexes(f.g,f.sp);
-    await new Promise(r=>setTimeout(r,250));
-  }
+  const w=await anxEtatPret().catch(()=>null);
+  if(w && w.lignesAnnexes) return w.lignesAnnexes(f.g,f.sp);
   throw new Error("le rattachement aux groupements (calculé par l'état) n'a pas pu être lu");
 }
 
@@ -17033,21 +17162,31 @@ async function rendreAnnexes(){
     const [ids, Tm, Tp]=await Promise.all([anxIds(), anxTable(anxNomTable("mec")).catch(e=>({erreur:e.message})), anxTable(anxNomTable("pap")).catch(e=>({erreur:e.message}))]);
     if(jeton!==ANX.jeton) return;
     const parFam={mec:Tm, pap:Tp};
-    const lignes=fam=>{ const T=parFam[fam]; if(T.erreur) return null; const sec=anxSection(T); if(!sec) return null;
-      return {T, sec, idx:anxOrdre(T,sec, ids ? (fam==="mec"?ids.mec:ids.pap) : null)}; };
-    const L={mec:lignes("mec"), pap:lignes("pap")};
-    const f=ANX.onglet, cur=L[f], T=parFam[f];
-    const info=ids ? "lignes rattachées aux filtres de la console" : "toutes les lignes (filtrez un groupement ou un sponsor pour restreindre)";
+    const prep=fam=>{ const T=parFam[fam]; if(T.erreur) return null; const sec=anxSection(T), fs=anxChamps(T,sec);
+      const base=anxOrdre(T,sec, ids ? (fam==="mec"?ids.mec:ids.pap) : null);
+      return {T, sec, fs, base, idx:anxAppliquerCol(T,fs,base,fam)}; };
+    const L={mec:prep("mec"), pap:prep("pap")};
+    const f=ANX.onglet, cur=L[f], T=parFam[f], F=anxFiltresCol(f);
+    const info=ids ? "lignes rattachées aux filtres de la console" : "toutes les lignes · filtrez un groupement ou un sponsor pour restreindre";
+    const pastilles=cur ? Object.keys(F.val).filter(k=>F.val[k]&&F.val[k].length).map(k=>{
+      const fc=cur.fs.find(x=>x.colId===k); const v=F.val[k];
+      return '<span class="anx-fc">'+esc((fc?fc.label:k)+" : "+(v.length>2?v.slice(0,2).join(", ")+" +"+(v.length-2):v.join(", ")))+'<button type="button" data-fx="'+esc(k)+'" title="Retirer">✕</button></span>'; }) : [];
+    if(cur && F.tri){ const fc=cur.fs.find(x=>x.colId===F.tri.col); if(fc) pastilles.push('<span class="anx-fc">Tri : '+esc(fc.label)+(F.tri.dir>0?" ↑":" ↓")+'<button type="button" data-ftri="1">✕</button></span>'); }
     z.innerHTML='<div class="anx-outils"><div class="anx-onglets">'+["mec","pap"].map(k=>
         '<button type="button" class="anx-og'+(f===k?" actif":"")+'" data-anx="'+k+'">'+ANX_FAMILLES[k].titre+'<b>'+(L[k]?L[k].idx.length:"—")+'</b></button>').join("")+'</div>'+
-      '<span class="anx-lect">👁 Consultation seule'+(cur?' · vue Grist <i>'+esc((cur.sec.pageName?cur.sec.pageName+" › ":"")+(cur.sec.title||"Sans titre"))+'</i>':'')+' · '+info+'</span>'+
-      '<span class="fil-esp"></span>'+
-      (cur?'<button type="button" class="anx-xl" id="anx-xl">⬇ Exporter en .xlsx</button><button type="button" class="fil-lien" id="anx-vue-btn">🔒 Vue lue</button>':'')+'</div>'+
-      (cur ? anxTableHtml(cur.T,cur.sec,cur.idx)
-           : '<div class="app-vide">'+esc(T.erreur||("Aucune vue Grist ne présente la table « "+anxNomTable(f)+" ».")))+'</div>';
+      '<span class="anx-lect">👁 Consultation seule · '+info+'</span><span class="fil-esp"></span>'+
+      (cur?'<button type="button" class="anx-pdf" id="anx-pdf">🖨 État PDF</button><button type="button" class="anx-xl" id="anx-xl">⬇ Exporter en .xlsx</button>':'')+'</div>'+
+      (cur ? '<div class="anx-actifs">'+(pastilles.length?'Filtres du tableau : '+pastilles.join("")+'<button type="button" class="fil-lien" id="anx-fz">Tout effacer</button>':'<span>Filtrez ou triez avec ▾ dans l\'en-tête des colonnes.</span>')+
+          '<span class="fil-esp"></span><span>'+cur.idx.length+' ligne'+(cur.idx.length>1?"s":"")+' sur '+cur.base.length+(pastilles.length?" · l'export Excel reprend ces filtres":"")+'</span></div>'+anxTableHtml(cur.T,cur.sec,cur.idx,f)
+           : '<div class="app-vide">'+esc(T.erreur||("Table « "+anxNomTable(f)+" » introuvable."))+'</div>');
+    const redessiner=()=>rendreAnnexes();
     z.querySelectorAll("[data-anx]").forEach(b=>b.onclick=()=>{ ANX.onglet=b.dataset.anx; rendreAnnexes(); });
+    z.querySelectorAll("[data-fcol]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); anxPopupFiltre(b,cur.T,cur.fs,cur.base,f,redessiner); });
+    z.querySelectorAll("[data-fx]").forEach(b=>b.onclick=()=>{ delete F.val[b.dataset.fx]; redessiner(); });
+    z.querySelectorAll("[data-ftri]").forEach(b=>b.onclick=()=>{ F.tri=null; redessiner(); });
+    const fz=$("#anx-fz"); if(fz) fz.onclick=()=>{ F.val={}; F.tri=null; redessiner(); };
     const bx=$("#anx-xl"); if(bx) bx.onclick=()=>anxExporter(cur.T,cur.sec,cur.idx,ANX_FAMILLES[f].titre).catch(e=>toast("Export impossible : "+e.message,true));
-    const bv=$("#anx-vue-btn"); if(bv) bv.onclick=()=>anxChoisirVue(cur.T);
+    const bp=$("#anx-pdf"); if(bp) bp.onclick=()=>{ toast("Préparation de l'état "+ANX_FAMILLES[f].titre+"…"); anxImprimer(f).catch(e=>toast("État PDF impossible : "+e.message,true)); };
   }catch(e){
     if(jeton===ANX.jeton) z.innerHTML='<div class="app-vide">MEC 2023 / PAPRIPACT indisponibles : '+esc(e.message)+'.</div>';
   }
@@ -17072,14 +17211,71 @@ async function annexesSousListe(){
       const idx=anxOrdre(T,sec, fam==="mec"?ids.mec:ids.pap);
       if(!idx.length) return;
       h+='<div class="anx-bloc"><div class="anx-bloc-tete"><b>'+ANX_FAMILLES[fam].titre+'</b><span>'+idx.length+' ligne'+(idx.length>1?"s":"")+' rattachée'+(idx.length>1?"s":"")+' · consultation seule</span>'+
-        '<span class="fil-esp"></span><button type="button" class="anx-xl petit" data-xl="'+fam+'">⬇ Excel</button></div>'+anxTableHtml(T,sec,idx)+'</div>';
+        '<span class="fil-esp"></span><button type="button" class="anx-pdf petit" data-pdf="'+fam+'">🖨 État PDF</button><button type="button" class="anx-xl petit" data-xl="'+fam+'">⬇ Excel</button></div>'+anxTableHtml(T,sec,idx)+'</div>';
       d._anx=d._anx||{}; d._anx[fam]={T,sec,idx};
     });
     d.innerHTML=h;
+    d.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=()=>{ toast("Préparation de l'état…"); anxImprimer(b.dataset.pdf).catch(e=>toast("État PDF impossible : "+e.message,true)); });
     d.querySelectorAll("[data-xl]").forEach(b=>b.onclick=()=>{ const o=d._anx[b.dataset.xl];
       anxExporter(o.T,o.sec,o.idx,ANX_FAMILLES[b.dataset.xl].titre).catch(e=>toast("Export impossible : "+e.message,true)); });
   }catch(e){
     if(jeton===ANX.jeton && d.isConnected) d.innerHTML='<div class="anx-charge">MEC 2023 / PAPRIPACT : '+esc(e.message)+'.</div>';
+  }
+}
+
+/* ---------- Mon travail : MEC 2023 et PAPRIPACT du groupement de l'agent ---------- */
+function anxAllerGroupement(grp){
+  const m=MENUS["m-groupement"];
+  const pli=anxPli(grp);
+  const opt=m.opts.find(o=>anxPli(o[0])===pli) || m.opts.find(o=>anxPli(o[1])===pli) || m.opts.find(o=>anxPli(o[0]).indexOf(pli)>=0);
+  m.sel = opt ? [opt[0]] : [];
+  if(MENUS["m-sponsor"]) MENUS["m-sponsor"].sel=[];
+  majEtiquetteMenu("m-groupement"); rendreOptionsMenu("m-groupement");
+  if(MENUS["m-sponsor"]){ majEtiquetteMenu("m-sponsor"); rendreOptionsMenu("m-sponsor"); }
+  APP.retour=null; allerVue("portefeuille","annexes");
+}
+async function annexesMonTravail(ag, grille){
+  if(!grille || !ag) return;
+  const cartes=["mec","pap"].map(fam=>{
+    const d=document.createElement("div"); d.className="mt-carte"; d.dataset.anxCarte=fam;
+    d.innerHTML='<h3>'+ANX_FAMILLES[fam].titre+' — mon groupement<span>…</span></h3><div class="mt-vide">Recherche des lignes du groupement…</div>';
+    const notifs=grille.querySelector(".mt-carte-notifs");
+    grille.insertBefore(d, notifs||null);
+    return d;
+  });
+  const jeton=(ANX.jetonMt=(ANX.jetonMt||0)+1);
+  try{
+    const w=await anxEtatPret();
+    if(jeton!==ANX.jetonMt || !grille.isConnected) return;
+    const grp=w.groupementCollaborateur ? w.groupementCollaborateur(nomAgent(ag)) : "";
+    if(!grp){ cartes.forEach(d=>d.remove()); return; }
+    const ids=w.lignesAnnexes([grp],[]);
+    const [Tm,Tp]=await Promise.all([anxTable(anxNomTable("mec")).catch(()=>null), anxTable(anxNomTable("pap")).catch(()=>null)]);
+    if(jeton!==ANX.jetonMt || !grille.isConnected) return;
+    [["mec",Tm],["pap",Tp]].forEach(([fam,T],k)=>{
+      const d=cartes[k];
+      if(!T){ d.remove(); return; }
+      const sec=anxSection(T), fs=anxChamps(T,sec);
+      const fId=fs.find(f=>f.role==="id"), fSt=fs.find(f=>f.role==="statut"), fAv=fs.find(f=>f.role==="avct"), fEch=fs.find(f=>f.role==="ech");
+      const f2=fs.find(f=>f.label===(fam==="mec"?"Recommandation / Rappel":"Famille")),
+            fPor=fs.find(f=>f.label==="Porteur"||f.label==="Service porteur");
+      const ouverts=anxOrdre(T,sec, fam==="mec"?ids.mec:ids.pap)
+        .filter(i=>{ const e=fSt?anxEtatStatut(anxTexte(T,fSt,i)):""; return e!=="vert" && e!=="gris"; });
+      if(fEch) ouverts.sort((a,b)=>(anxValeur(T,fEch,a)||9e12)-(anxValeur(T,fEch,b)||9e12));
+      const ligne=i=>{
+        const st=fSt?anxTexte(T,fSt,i):"", c=ANX_COUL[anxEtatStatut(st)];
+        const sous=[f2?anxTexte(T,f2,i):"", fPor?anxTexte(T,fPor,i):""].filter(Boolean).map(esc);
+        if(st) sous.push('<span class="anx-st" style="'+(c?"color:"+c[0]:"")+'">'+esc(st)+'</span>');
+        const droite = fEch && typeof anxValeur(T,fEch,i)==="number" ? delaiHtml(anxValeur(T,fEch,i)) : (fAv?anxCellule(T,fAv,i):"");
+        return '<div class="mt-it anx-mt" data-grp="1"><div class="mt-x"><b class="mt-lib">'+esc(fId?anxTexte(T,fId,i):"Ligne "+T.data.id[i])+'</b><small>'+sous.join(" · ")+'</small></div>'+droite+'</div>';
+      };
+      d.innerHTML='<h3>'+ANX_FAMILLES[fam].titre+' — mon groupement ('+esc(grp)+')<span>'+ouverts.length+' en cours</span></h3>'+
+        (ouverts.length ? ouverts.slice(0,8).map(ligne).join("")+'<button type="button" class="fil-lien mt-anx-tout" data-grp="1">Voir tout dans MEC · PAPRIPACT →</button>'
+                        : '<div class="mt-vide">Rien en cours pour le groupement.</div>');
+      d.querySelectorAll("[data-grp]").forEach(x=>x.onclick=()=>anxAllerGroupement(grp));
+    });
+  }catch(e){
+    cartes.forEach(d=>{ if(d.isConnected) d.querySelector(".mt-vide") && (d.querySelector(".mt-vide").textContent="Lignes du groupement indisponibles : "+e.message); });
   }
 }
 
@@ -18444,7 +18640,7 @@ html.integre #filtersPanel, html.integre #chipArchives{display:none!important;}
 .nm-aussi{font-weight:normal;font-size:11px;color:var(--faint);margin-left:6px;}
 .nm-archive{font-weight:normal;font-size:11px;color:var(--faint);margin-left:6px;}
 #gantt-table tr.row-axe td{height:26px;}
-#gantt-table tr.row-axe td.task-name-cell{font-size:12.5px;font-weight:bold;}
+#gantt-table tr.row-axe td.task-name-cell{font-size:12.5px;font-weight:bold;padding-right:120px!important;position:relative;}
 #gantt-table tr.row-grp td{height:30px;background:var(--grp-bg);border-top:2px solid #c5cfe8;border-bottom:1px solid #dde2ea;}
 #gantt-table tr.row-grp td.task-name-cell{background:var(--grp-bg);font-weight:bold;letter-spacing:.03em;text-transform:uppercase;font-size:12px;color:var(--grp-text);cursor:pointer;}
 .grp-stat{color:#6b7484;text-transform:none;letter-spacing:0;font-weight:normal;margin-left:10px;}
@@ -20375,7 +20571,7 @@ function nFinaliser(ctx){
       else nT(pdf,PW-NP.m,34,sec,{px:10.5,style:"bold",c:NC.taupe,align:"right"});
     }
     let yp=PH-NP.hPied/2+3.5;
-    if(i===n && (ctx.yFin[i]||PH)<=PH-hb-6){       // bandeau du bas : dernière page seulement
+    if(!ctx.sansBandeauBas && i===n && (ctx.yFin[i]||PH)<=PH-hb-6){       // bandeau du bas : dernière page seulement
       pdf.addImage(IMG_BANDEAU_BAS,"PNG",0,PH-hb,PW,hb,"bandeauBas","FAST");
       yp=PH-hb+14;
     }else nL(pdf,NP.m,PH-NP.hPied,PW-NP.m,PH-NP.hPied,NC.filet,1);
@@ -20508,6 +20704,13 @@ function natureIn(r, mappings, list){
     return natureValues(r[mappings.natureAction]).some(v=>l.includes(v))
 }
 function libelleDe(r, mappings){ return displayValue(r[mappings.task]).trim() }
+function nomAction(r, mappings){
+    const nom = libelleDe(r, mappings)
+    const col = CONFIG.colsHier && CONFIG.colsHier.act
+    const k = col ? displayValue(r[col]).trim() : ""
+    if(k && k!==nom && decouperLibelleAction(k).num && !decouperLibelleAction(nom).num) return k
+    return nom
+}
 /* « 2026_08_P_MEO1_Cadrer… » -> {num:"MEO1", texte:"Cadrer…"} ; sans numéro, le libellé entier */
 function decouperLibelleAction(lib){
     const s0=String(lib||"")
@@ -20881,10 +21084,11 @@ function renderRow(row, units, mappings){
     if(selectedRowId!==null && String(selectedRowId)===String(r.id)) trCls = "sel"
     const nom = libelleDe(r, mappings)
     if(row.t==="meo"){
-        const d = decouperLibelleAction(nom)
-        const lib = row.num ? d.texte : nom
+        const nomA = nomAction(r, mappings)
+        const d = decouperLibelleAction(nomA)
+        const lib = row.num ? d.texte : nomA
         const numHtml = row.num ? `<span class="nm-num">${row.num}.</span> ` : ""
-        nameCell = `<td class="task-name-cell${pctCls}" style="padding-left:${row.depth===2?40:26}px" title="${escapeAttr(nom)}"><div class="nm-meo">${numHtml}${escapeHtml(lib||"(sans libellé)")}${statutHtml(spec.state, spec.av)}</div>${pct}</td>`
+        nameCell = `<td class="task-name-cell${pctCls}" style="padding-left:${row.depth===2?40:26}px" title="${escapeAttr(nomA)}"><div class="nm-meo">${numHtml}${escapeHtml(lib||"(sans libellé)")}${statutHtml(spec.state, spec.av)}</div>${pct}</td>`
         return `<tr class="${trCls}"${attrs}>${nameCell}${renderBarCells(row, spec, units, mappings)}</tr>`
     }
     // projet (ou ligne simple hors hiérarchie)
@@ -21349,7 +21553,7 @@ function pgLigne(row, mappings){
     } else if(row.t==="task"){
         lib = displayValue(row.rec[taskCfg.label]) || "(sans libellé)"
     } else {
-        const nom = libelleDe(row.rec, mappings) || "(sans libellé)"
+        const nom = (row.t==="meo" ? nomAction(row.rec, mappings) : libelleDe(row.rec, mappings)) || "(sans libellé)"
         if(row.t==="meo" && row.num) lib = row.num+". "+(decouperLibelleAction(nom).texte||nom)
         else lib = nom
         if(row.others && row.others.length) sous = "aussi dans : "+row.others.join(", ")
@@ -21393,6 +21597,8 @@ function pgGantt(ctx, rows, per){
             const d = decouperCodeProjet(r.lib)
             if(d.code){ r._code = d.code; r._tag = nW(pdf,d.code,9,"bold")+12+6; libT = d.titre; larg -= r._tag }
         }
+        /* axe : le libellé s'arrête avant « n actions · x % », posé à droite */
+        if(r.t==="axe" && r.sous) larg -= nW(pdf,r.sous,9.5,"normal")+16
         r._l=nCoupe(pdf,libT,larg,s.px,s.st)
         if(!r._l.length) r._l=["(sans libellé)"]
         r._s = r.sous && r.t!=="axe" ? nCoupe(pdf,r.sous,larg,9.5,"normal",1) : []
@@ -21558,7 +21764,7 @@ function pgTableActions(ctx, item, mappings){
         g.acts.forEach(a=>{
             const row={t:"meo", rec:a.rec, num:a.num, teinte:g.teinte}
             const sp=barSpec(row, mappings)
-            const nom=libelleDe(a.rec,mappings)
+            const nom=nomAction(a.rec,mappings)
             const pc=sp.state ? pastillePleineCouleurs(sp.state, sp.av, sp.inter) : null
             const cel={
                 num:{t:String(a.num), c:NC.gris},
@@ -21579,11 +21785,13 @@ function construirePlanningDoc(sortie, format43){
     const mappings = currentMappings, model = lastView.model
     PW = (sortie==="odp" || format43) ? 1059 : 1123
     try{
-        const titre = "Planning des projets"
+        let titre = "Planning des projets"
+        const projsEdites = model.hier ? model.blocks.flatMap(b=>b.items).filter(it=>it && it.rec) : []
+        if(projsEdites.length===1) titre = displayValue(projsEdites[0].rec[mappings.task]).trim() || titre
         const pdf = sortie==="odp" ? odpSortieNouvelle()
             : new window.jspdf.jsPDF({orientation:"landscape",unit:"px",format:[PW,PH],compress:true})
-        const ctx = {pdf, mode:"planning", sortie, titre, pages:0, y:0, yBas:0, secs:{}, som:[], sec:"", yFin:{}, decal:{}, bandeauHaut:false,   // pas de bandeau photo en tête du planning
-            pied:"SDIS de l'Ain · Planning des projets édité le "+new Date().toLocaleDateString("fr-FR")}
+        const ctx = {pdf, mode:"planning", sortie, titre, pages:0, y:0, yBas:0, secs:{}, som:[], sec:"", yFin:{}, decal:{}, bandeauHaut:false, sansBandeauBas:true,   // ni bandeau photo en tête ni en pied
+            pied:"SDIS de l'Ain · "+titre+" · édité le "+new Date().toLocaleDateString("fr-FR")}
         const per = pgColonnes(lastView.units, lastView.min, lastView.max)
         const grpActif = !!(groupBy && mappings[groupBy])
         const conv = rows => rows.map(r=>pgLigne(r, mappings))
@@ -21631,7 +21839,7 @@ function construirePlanningDoc(sortie, format43){
         }
         nFinaliser(ctx)
         const jour = new Date().toISOString().slice(0,10)
-        return {pdf:ctx.pdf, nom:"Planning_projets_"+jour+(sortie==="odp"?".odp":".pdf"), pages:ctx.pages}
+        return {pdf:ctx.pdf, nom:(projsEdites.length===1 ? "Planning_"+titre.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\w\-]+/g,"_").replace(/^_+|_+$/g,"").slice(0,80)+"_" : "Planning_projets_")+jour+(sortie==="odp"?".odp":".pdf"), pages:ctx.pages}
     } finally { PW = 1123 }
 }
 
@@ -25179,6 +25387,45 @@ if (INTEGRE){
   }, true);
 }
 window.etatPret = () => !!D.pretes;
+/* Pour la console (Mon travail) : groupement d'un agent, lu dans la table des collaborateurs
+   (nom identique, ou mêmes mots dans un autre ordre). */
+window.groupementCollaborateur = nom => {
+  if (!D.pretes || !nom) return "";
+  const TC = reglages.tCollaborateur;
+  const mots = x => norm(x).split(/[^a-z0-9]+/).filter(Boolean).sort().join(" ");
+  const cible = mots(nom);
+  const l = ligneCollaborateurDe(nom)
+    || ctxDe(TC).lignes.find(x => mots(texte(TC, x, "Nom_Prénom", "Nom_Prenom", "Nom")) === cible);
+  return l ? texte(TC, l, "Groupement") : "";
+};
+/* Pour la console : état PDF des seules lignes MEC 2023 ou PAPRIPACT, avec les filtres,
+   les tris et la présentation de l'état (document complet, prêt à imprimer). */
+window.htmlAnnexeConsole = (famille, groupements, sponsors) => {
+  if (!D.pretes) return null;
+  const g = groupements || [], sp = sponsors || [];
+  let e, enSponsor = false;
+  if (!g.length && !sp.length) e = construireEtat(TOUS, true);
+  else {
+    window.appliquerFiltreConsole(g, sp, null);
+    enSponsor = vue === "sponsor";
+    e = enSponsor ? construireEtatSponsor(sponsorCourant) : construireEtat(groupementCourant || TOUS, true);
+  }
+  if (!e) return null;
+  const avecGrp = p => Object.assign({}, p.a, { groupement: p.grpAff || p.a.groupement || "" });
+  const brut = famille === "mec" ? e.mec : e.papripact;
+  const lignes = enSponsor ? brut.map(avecGrp) : brut;
+  const nom = famille === "mec" ? "MEC 2023" : "PAPRIPACT";
+  const corps = annexesHtml(famille === "mec" ? lignes : [], famille === "mec" ? [] : lignes, enSponsor || e.tous)
+    .replace('<div class="titre-partie">Annexes</div>', "");
+  const styles = Array.from(document.querySelectorAll("style")).map(x => x.outerHTML).join("");
+  const date = new Date().toLocaleDateString("fr-FR");
+  return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + nom + " — " + echapper(e.titre) + "</title>" + styles
+    + "<style>@page{size:A4 landscape;margin:10mm}.annexes{break-before:auto!important;page-break-before:auto!important}"
+    + ".entete-impression{display:flex!important}body{background:#fff}</style></head><body><div id=\"contenu\" class=\"contenu\">"
+    + '<div class="entete-impression">' + LOGO_HTML + '<div class="txt-ent"><div class="t">' + nom + " — " + echapper(e.titre)
+    + '</div><div class="d">Édité le ' + date + " · " + lignes.length + " ligne" + (lignes.length > 1 ? "s" : "") + "</div></div></div>"
+    + (corps || '<div class="vide-etat">Aucune ligne ' + nom + " pour cette sélection.</div>") + "</div></body></html>";
+};
 /* Pour la console : identifiants des lignes MEC 2023 et PAPRIPACT rattachées aux groupements
    et sponsors donnés (listes vides = pas de filtre sur ce critère). */
 window.lignesAnnexes = (groupements, sponsors) => {
