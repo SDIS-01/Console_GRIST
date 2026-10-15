@@ -1845,6 +1845,16 @@ body.app-ctx-projet .app-filtres, body.app-ctx-projet #kpi-app{display:none!impo
 body{font-family:"Inter","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased;}
 table,.kpi-app,.app-av,.mt-delai,.anx-av{font-variant-numeric:tabular-nums;}
 @media print{body{font-family:Tahoma,Verdana,Geneva,sans-serif;}}
+.mt-raison{color:#A2551A;font-weight:600;} .mt-rien{font-size:14px;color:#4E7D2A;}
+/* bandeau clair : fond bleu très pâle, texte bleu foncé */
+body:not(.mob) .topbar{background:#E8EEFB;color:#1c2f6b;border-bottom:1px solid #c5cfe8;}
+body:not(.mob) .topbar .marque{color:#1c2f6b;}
+body:not(.mob) .app-nav button{color:#4a5a85;}
+body:not(.mob) .app-nav button:hover{color:#1c2f6b;}
+body:not(.mob) .app-nav button.actif{color:#1c2f6b;border-bottom-color:#F5A623;}
+body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo):not(.btn-pf):not(.btn-xlsx){
+  background:#fff;color:#1c2f6b;border-color:#c5cfe8;}
+body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo):not(.btn-pf):not(.btn-xlsx):hover{background:#dbe4f7;}
 </style>
 </head>
 <body>
@@ -16585,24 +16595,33 @@ function rendreTravail(){
     '<small>'+(n.collab?'Demandé à <b>'+esc(n.collab)+'</b>':'Sans collaborateur désigné')+(n.date?' le '+dateVersFR(n.date).slice(0,5):'')+
     ' · '+libelleProjetHtml(lire(c.tblMain,n.p,c.colLibelle))+'</small></div>'+delaiHtml(n.ech)+'</div>';
   const tous=[];
+  /* seules les cartes qui ont quelque chose à traiter s'affichent */
   const bloc=(titre,compte,items,rendu)=>{
-    const h='<div class="mt-carte"><h3>'+titre+'<span>'+compte+'</span></h3>'+
-      (items.length?items.slice(0,12).map(n=>{ tous.push(n); return rendu(n,tous.length-1); }).join(""):'<div class="mt-vide">Rien pour le moment.</div>')+'</div>';
-    return h;
+    if(!items.length) return "";
+    return '<div class="mt-carte"><h3>'+titre+'<span>'+compte+'</span></h3>'+
+      items.slice(0,12).map(n=>{ tous.push(n); return rendu(n,tous.length-1); }).join("")+'</div>';
   };
+  /* projets qui demandent une intervention : retard (projet, action, tâche, instance), échéance à moins de 30 jours,
+     avancement non renseigné ; ni terminés, ni interrompus, ni archivés */
+  const projetsATraiter=mesProjets.filter(p=>!estArchive(p) && !["termine","interrompu"].includes(etatDe(p))).map(p=>{
+    const raisons=[], e=echeanceProjet(p), al=alerteProjet(p);
+    if(e && e<auj) raisons.push("projet en retard de "+Math.round((auj-e)/86400)+" j");
+    if(al.retard) raisons.push(al.retard+" échéance"+(al.retard>1?"s":"")+" dépassée"+(al.retard>1?"s":""));
+    if(e && e>=auj && e-auj<=30*86400) raisons.push("échéance dans "+Math.round((e-auj)/86400)+" j");
+    if(pct(p[c.colAvancement])==null) raisons.push("avancement non renseigné");
+    return raisons.length ? {p,lib:lire(c.tblMain,p,c.colLibelle),genre:"projet",raisons,ech:e} : null;
+  }).filter(Boolean).sort((a,b)=>(a.ech||9e12)-(b.ech||9e12));
   z.innerHTML='<div class="mt-grille">'+
-    bloc(M+"projets et actions",mesProjets.length+" porteur",mesProjets.map(p=>({p,lib:lire(c.tblMain,p,c.colLibelle),genre:"projet"})),
-      (n,i)=>{ const e=echeanceProjet(n.p);
-        return '<div class="mt-it" data-i="'+i+'"><div class="mt-x"><b class="mt-projet">'+liseret(n.p)+libelleProjetHtml(n.lib)+'</b><small>'+esc(lire(c.tblMain,n.p,c.colGroupement))+
-          (e&&etatDe(n.p)!=="termine"?' · échéance '+dateVersFR(e):'')+'</small></div>'+barreAppHtml(n.p)+'</div>'; })+
+    bloc(M+"projets et actions",projetsATraiter.length+" à traiter",projetsATraiter,
+      (n,i)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x"><b class="mt-projet">'+liseret(n.p)+libelleProjetHtml(n.lib)+'</b>'+
+        '<small><span class="mt-raison">'+esc(n.raisons.join(" · "))+'</span></small></div>'+barreAppHtml(n.p)+'</div>')+
     bloc(M+"actions de mise en œuvre",acts.length,acts,(n,i)=>it(n,i,delaiHtml(n.ech)))+
     bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,delaiHtml(n.ech)))+
     (dem.length?bloc("Demandes du journal",dem.length,dem,(n,i)=>it(n,i,delaiHtml(n.ech))):"")+
     (S.cfg.colJnlAuteur && S.cfg.colJnlDelai ? bloc(M+"demandes à suivre",demandes.length+" en attente",demandes,itDemande) : "")+
-    (autre?"":carteNotifs(ag,autre,nl,tous))+
+    (autre||!nl.length?"":carteNotifs(ag,autre,nl,tous))+
   '</div>';
-  /* lignes MEC 2023 et PAPRIPACT du groupement de l'agent (rattachement calculé par l'état) */
-  if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mt-grille"));
+  if(!z.querySelector(".mt-carte")) z.querySelector(".mt-grille").outerHTML='<div class="app-vide mt-rien">✓ Rien à traiter pour le moment.</div>';
   const ntout=$("#mt-tout-lu");
   if(ntout) ntout.onclick=()=>{ const k=nl.length; marquerLues(nl); toast(k+" notification"+(k>1?"s":"")+" marquée"+(k>1?"s":"")+" comme lue"+(k>1?"s":"")); };
   z.querySelectorAll("[data-mtf]").forEach(b=>b.onclick=()=>{ APP.filtreNotifs=b.dataset.mtf; rendreTravail(); });
