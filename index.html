@@ -1715,6 +1715,26 @@ body:not(.mob) #btn-notif{display:none!important;}
 .mt-notif.lu{border-left-color:transparent;opacity:.7;}
 .mt-lu{flex:0 0 auto;border:1px solid var(--trait);background:#fff;border-radius:6px;color:var(--gris);padding:2px 8px;cursor:pointer;}
 .mt-lu:hover{background:var(--bleu-clair);color:var(--bleu);}
+/* barre de filtres horizontale (ordinateur) */
+body:not(.mob) .layout>.panneau{display:none!important;}
+body:not(.mob) #btn-panneau{display:none!important;}
+.app-filtres{display:flex;align-items:center;gap:6px 6px;flex-wrap:wrap;padding:7px 16px;background:#f7f8fa;
+  border-bottom:1px solid var(--trait);flex:0 0 auto;}
+body:not(.app-hors-fiche) .app-filtres, body.app-revues .app-filtres{display:none;}
+.app-filtres .recherche,.app-filtres .filtres{display:contents;}
+.app-filtres #q{width:230px;flex:0 0 auto;padding:5px 9px;border:1px solid var(--trait);border-radius:6px;background:#fff;font-size:12.5px;}
+.app-filtres .msel{flex:0 0 auto;}
+.app-filtres .msel-btn{width:auto;max-width:320px;display:inline-flex;align-items:center;border-radius:14px;padding:4px 11px;background:#fff;color:#3c4a6b;font-size:12px;white-space:nowrap;}
+.app-filtres .msel-btn.on{background:#e8ecf7;border-color:#c5cfe8;font-weight:bold;}
+.msel-x{display:inline-block;margin-left:6px;padding:0 3px;border-radius:50%;color:#3c4a6b;font-weight:bold;}
+.msel-x:hover{background:#c5cfe8;}
+.app-filtres .filtre-date{grid-column:auto;flex:0 0 auto;margin:0;gap:4px;font-size:12px;color:var(--gris);}
+.app-filtres .filtre-date input{width:86px;flex:0 0 86px;padding:4px 6px;border-radius:6px;background:#fff;}
+.app-filtres .filtre-archives{grid-column:auto;flex:0 0 auto;margin:0;font-size:12px;border:1px solid var(--trait);
+  border-radius:14px;padding:3px 10px;background:#fff;color:#3c4a6b;}
+.app-filtres .compteur{margin-left:auto;border:0;padding:0;min-height:0;font-size:12px;gap:10px;}
+.app-filtres .btn-raz{font-size:12px;}
+.app-filtres .msel-lib{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 </style>
 </head>
 <body>
@@ -3420,8 +3440,14 @@ function majEtiquetteMenu(id){
   const etiq = n===0 ? m.tous
     : n===1 ? (m.opts.find(o=>o[0]===m.sel[0])||[,m.sel[0]])[1]
     : n+" sélectionnés";
-  wrap.querySelector(".msel-btn").textContent=etiq+" ▾";
+  const btn=wrap.querySelector(".msel-btn");
+  const court=(MENUS_COURTS[id]||m.tous);
+  btn.classList.toggle("on",n>0);
+  if(n>0) btn.innerHTML='<span class="msel-lib">'+esc(court+" : "+etiq)+'</span><span class="msel-x" data-x title="Retirer ce filtre">✕</span>';
+  else btn.textContent=court+" ▾";
 }
+const MENUS_COURTS={"m-groupement":"Groupement","m-sponsor":"Sponsor CODIR","m-porteur":"Porteur","m-priorite":"Priorité",
+  "m-etat":"État","m-millesime":"Millésime P2A","m-avct":"Avancement"};
 
 function rendreMenu(id){
   const m=MENUS[id], wrap=$("#"+id);
@@ -3480,7 +3506,12 @@ function rendreOptionsMenu(id){
 function brancherMenu(id){
   const wrap=$("#"+id);
   if(!wrap) return;
-  wrap.querySelector(".msel-btn").onclick=()=>{
+  wrap.querySelector(".msel-btn").onclick=e=>{
+    if(e && e.target.closest(".msel-x")){
+      const m=MENUS[id]; m.sel=[]; majEtiquetteMenu(id); rendreOptionsMenu(id);
+      document.querySelectorAll(".msel-pan").forEach(x=>x.hidden=true);
+      (m.maj||rendreListe)(); return;
+    }
     const pan=wrap.querySelector(".msel-pan");
     const ouvrir=pan.hidden;
     document.querySelectorAll(".msel-pan").forEach(x=>x.hidden=true);
@@ -16509,7 +16540,18 @@ function attendreModule(nom,fonction,agir,pret){
     else if(++n>150){ clearInterval(t); toast("Le module « "+nom+" » ne répond pas.",true); }
   },100);
 }
+/* ---------- barre de filtres horizontale (remplace le panneau de gauche sur ordinateur) ---------- */
+function installerBarreFiltres(){
+  if($("#barre-filtres")) return;
+  const fil=$("#fil-app"), rech=document.querySelector(".panneau .recherche"), cpt=document.querySelector(".panneau .compteur");
+  if(!fil || !rech) return;
+  const bar=document.createElement("div");
+  bar.id="barre-filtres"; bar.className="app-filtres";
+  bar.appendChild(rech); if(cpt) bar.appendChild(cpt);
+  fil.after(bar);
+}
 function brancherApp(){
+  installerBarreFiltres();
   document.querySelectorAll(".app-nav [data-vue]").forEach(b=>b.onclick=()=>{ APP.retour=null; allerVue(b.dataset.vue); });
   const be=$("#btn-editions"), me=$("#menu-editions");
   be.onclick=e=>{
