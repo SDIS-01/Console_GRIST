@@ -1977,6 +1977,30 @@ body.app-monpf .app-filtres{display:none;}
 .onglets{position:relative;}
 .onglet-impr{margin-left:auto;align-self:center;border:1px solid var(--trait);background:#fff;color:#1c2f6b;border-radius:6px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;}
 .onglet-impr:hover{border-color:#1c2f6b;}
+.mt-notif-btns{justify-content:flex-start;margin-top:5px;}.mt-notif .jnl-boite{margin-top:4px;}
+/* post-it du projet */
+#entete{position:relative;}
+.pi-note{position:absolute;right:18px;top:10px;width:330px;max-width:40vw;background:#fff6b8;border:1px solid #e8d46a;border-radius:4px 4px 4px 14px;
+  box-shadow:0 8px 22px rgba(80,60,0,.18);padding:11px 13px 9px;transform:rotate(-.8deg);z-index:30;font-size:12.5px;color:#3d3200;}
+.pi-note h4{margin:0 0 6px;font-size:12.5px;color:#6b5400;display:flex;align-items:center;gap:8px;}
+.pi-nv{background:#c0392b;color:#fff;border-radius:9px;font-size:10px;padding:1px 7px;font-weight:600;}
+.pi-e,.pi-e2{line-height:1.45;white-space:pre-wrap;}
+.pi-e small,.pi-e2 small{display:block;color:#8a7420;font-size:11px;margin-top:2px;white-space:normal;}
+.pi-e2{margin-top:6px;font-size:11.5px;}
+.pi-old{border-top:1px dashed #e0cd6a;margin-top:8px;padding-top:5px;font-size:11.5px;color:#8a7420;}
+.pi-old summary{cursor:pointer;}
+.pi-fin{margin-top:8px;font-size:11px;color:#8a7420;display:flex;align-items:center;gap:6px;}
+.pi-fin input{width:96px;font-size:11px;padding:2px 5px;border:1px solid #d9c463;border-radius:4px;background:#fffbe0;}
+.pi-b{display:flex;gap:6px;justify-content:flex-end;margin-top:8px;}
+.pi-b button,.pi-ajout button{font:inherit;font-size:11.5px;border-radius:6px;padding:4px 9px;border:1px solid #b89a1c;background:#fff;color:#6b5400;cursor:pointer;}
+.pi-b .pi-l{background:#6b5400;color:#fff;border-color:#6b5400;}
+.pi-mini,.pi-ajout{position:absolute;right:18px;top:12px;z-index:30;}
+.pi-mini{background:#fff6b8;border:1px solid #e8d46a;border-radius:14px;padding:3px 11px;font-size:12px;color:#6b5400;cursor:pointer;}
+.pi-ajout button{background:transparent;border-style:dashed;}
+.pi-pin{display:inline-block;margin-left:6px;background:#fff6b8;border:1px solid #e8d46a;border-radius:10px;font-size:10.5px;padding:0 6px;color:#6b5400;vertical-align:1px;}
+.pi-pin.n{background:#c0392b;color:#fff;border-color:#c0392b;font-weight:600;}
+.pi-mob{background:#fff6b8!important;border-color:#e8d46a!important;}
+.pi-mob .pi-e{margin:6px 0 8px;}
 </style>
 </head>
 <body>
@@ -4700,6 +4724,7 @@ function rendreProjet(){
   const bio=$("#btn-impr-onglet"); if(bio) bio.onclick=()=>imprimerOnglet();
 
   VUES[S.onglet](p);
+  if(typeof piAfficher==="function") piAfficher(p);
   if(S.fenetreAction && document.querySelector(".fa-voile")) rendreFenetreAction();
 }
 
@@ -15666,7 +15691,7 @@ function mbSynthese(p){
      réunies : c'est ce qui a bougé en dernier sur le dossier. */
   const derns=derniersJournaux(p,3);
 
-  $("#mb-corps").innerHTML=
+  $("#mb-corps").innerHTML=(typeof piCarteMobile==="function"?piCarteMobile(p):'')+
     '<div class="mb-carte"><div class="mb-ident">'+donut(a,58,i)+
       '<div class="txt"><b>'+esc(lire(c.tblMain,p,c.colLibelle)||"(sans libellé)")+'</b>'+
       '<span>'+esc(lire(c.tblMain,p,c.colGroupement))+'</span></div></div>'+
@@ -15732,6 +15757,7 @@ function mbSynthese(p){
   const det=document.querySelector(".mb-pj");
   if(det) det.ontoggle=()=>{ S.mob.pjOuvert=det.open; };
   brancherPJ();
+  if(typeof piBrancherMobile==="function") piBrancherMobile(p);
   document.querySelectorAll(".mb-com-projet [data-bulle-t]").forEach(b=>b.onclick=e=>{
     e.stopPropagation();
     ouvrirBulle(b,b.dataset.bulleT,Number(b.dataset.bulleR),b.dataset.bulleC,()=>rendreMobile());
@@ -16569,7 +16595,7 @@ function rendreListeApp(){
     const sous=[lire(c.tblMain,p,c.colNature), c.colSponsor?lire(c.tblMain,p,c.colSponsor):""].filter(Boolean).join(" · ");
     const n=actionsDe(p).length+tachesP(p).length, ouvert=E.ouverts.has(p.id)||E.meo||E.taches;
     return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+
-      '<span class="et-chev" data-chev="'+p.id+'">'+(n?(ouvert?"▾":"▸"):"")+'</span>'+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+
+      '<span class="et-chev" data-chev="'+p.id+'">'+(n?(ouvert?"▾":"▸"):"")+'</span>'+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+(typeof piPastille==="function"?piPastille(p):'')+
       (estArchive(p)?' <span class="app-mut">(archivé)</span>':'')+(sous?'<div class="app-sous">'+esc(sous)+'</div>':'')+'</td>'+
       '<td>'+esc(lire(c.tblMain,p,c.colGroupement))+'</td><td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>'+
       '<td>'+pastillePriorite(lire(c.tblMain,p,c.colPriorite))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
@@ -16786,6 +16812,7 @@ function rendreTravail(){
   /* demandes à l'administrateur (et, pour lui, demandes reçues) */
   if(typeof demCartesTravail==="function"){ demCartesTravail(z.querySelector(".mt-grille"), z); demCharger().then(()=>{ /* rafraîchi au prochain rendu */ }); }
   jnlBrancherTravail(z,jnl.items,ag);
+  if(typeof jnlBrancherNotifs==="function") jnlBrancherNotifs(z,tous,ag);
   z.querySelectorAll("[data-mtp]").forEach(x=>x.onclick=e=>{ e.stopPropagation();
     ouvrirFiche(S.data.main.find(r=>r.id===Number(x.dataset.mtp))); });
   const ntout=$("#mt-tout-lu");
@@ -16833,7 +16860,7 @@ function carteNotifs(ag,autre,nl,tous){
       const sl=sousLigneTravail(n);
       h+='<div class="mt-it mt-notif'+(lu?" lu":"")+'" data-i="'+i+'" data-notif="1"><div class="mt-x">'+
         '<span class="mt-genre">'+(MT_GENRE[n.genre]||"")+'</span><b class="mt-lib">'+esc(texte||"(sans libellé)")+'</b>'+
-        '<small>'+avant+sl+'</small></div>'+delaiHtml(n.ech)+
+        '<small>'+avant+sl+'</small>'+(typeof jnlActionsNotif==="function"?jnlActionsNotif(n,i,autre):'')+'</div>'+delaiHtml(n.ech)+
         (!autre && !lu ? '<button type="button" class="mt-lu" data-mtlu="'+i+'" title="Marquer comme lu">✓</button>' : '')+'</div>';
     });
     h+='</div>'; });
@@ -17048,7 +17075,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 15 h 50</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 16 h 10</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18275,19 +18302,17 @@ function jnlEmailAgent(ag){
 function jnlAuteurNom(j){ const c=S.cfg; return c.colJnlAuteur ? txt(lire(c.tblJournal,j,c.colJnlAuteur)).trim() : ""; }
 /* l'entrée a-t-elle été écrite par l'agent ? */
 function jnlEcritPar(j,ag){
-  const e=jnlEmail(j);
-  if(e){ const m=jnlEmailAgent(ag); if(m) return e===m; }
-  return auteurEst(j,ag);
+  /* le nom saisi fait foi (l'administrateur peut écrire au nom d'un agent) ; l'adresse sert à défaut */
+  if(jnlAuteurNom(j)) return auteurEst(j,ag);
+  const e=jnlEmail(j), m=jnlEmailAgent(ag);
+  return !!(e && m && e===m);
 }
 /* deux entrées du même auteur ? */
 function jnlMemeAuteur(a,b){
-  /* même auteur seulement si rien ne les distingue : deux adresses différentes,
-     ou deux noms saisis différents, suffisent à les séparer */
-  const ea=jnlEmail(a), eb=jnlEmail(b);
-  if(ea && eb && ea!==eb) return false;
   const na=motsTries(jnlAuteurNom(a)), nb=motsTries(jnlAuteurNom(b));
   if(na && nb) return na===nb;
-  return !!(ea && eb);
+  const ea=jnlEmail(a), eb=jnlEmail(b);
+  return !!(ea && eb && ea===eb);
 }
 /* seul l'auteur de la demande (ou l'administrateur connecté sous cet agent) peut la clôturer */
 function jnlPeutClore(j){
@@ -18461,7 +18486,7 @@ function jnlCartesTravail(ag,autre,M,lues){
           (nouveau?'<span class="jnl-st jnl-st-n">nouveau</span>':'')+jnlStatutHtml(n.j)+
           '<span class="fil-esp"></span>'+(rep?'':delaiHtml(n.ech))+'</div>'+
         '<div class="jnl-txt">'+esc(jnlCourt(n.lib))+'</div>'+jnlFilHtml(n,2)+
-        (autre?'':(JNLM.ouverts.has(k)
+        ((JNLM.ouverts.has(k)
           ? boite(k,"Votre réponse…",'<button type="button" class="btn" data-jenv="'+i+'">Répondre</button>')
           : '<div class="jnl-btns">'+(rep?'':'<button type="button" class="btn-2" data-jfait="'+i+'">✓ Fait</button>')+
             '<button type="button" class="btn'+(rep?"-2":"")+'" data-jouv="'+k+'">'+(rep?"Compléter…":"Répondre…")+'</button></div>'))+
@@ -18480,7 +18505,7 @@ function jnlCartesTravail(ag,autre,M,lues){
         '<div class="jnl-tete">À <b>'+esc(n.collab||"(sans destinataire)")+'</b>'+(n.a?' · '+esc(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte||""):'')+
           jnlStatutHtml(n.j)+'<span class="fil-esp"></span>'+(rep?'':delaiHtml(n.ech))+'</div>'+
         '<div class="jnl-txt">'+esc(jnlCourt(n.lib))+'</div>'+jnlFilHtml(n,3)+
-        (autre?(c.colJnlTraite?'<div class="jnl-btns"><button type="button" class="btn'+(rep?"":"-2")+'" data-jclo="'+i+'">✓ Clôturer</button></div>':''):(JNLM.ouverts.has(k)
+        ((JNLM.ouverts.has(k)
           ? boite(k,"Relance ou précision…",'<button type="button" class="btn" data-jenv="'+i+'">Envoyer</button>')
           : '<div class="jnl-btns"><button type="button" class="btn-2" data-jouv="'+k+'">'+(rep?"Relancer / préciser…":"Relancer…")+'</button>'+
             (c.colJnlTraite?'<button type="button" class="btn'+(rep?"":"-2")+'" data-jclo="'+i+'">✓ Clôturer</button>':'')+'</div>'))+
@@ -18494,7 +18519,7 @@ function jnlCartesTravail(ag,autre,M,lues){
 function jnlBrancherTravail(z,items,ag){
   const c=S.cfg;
   const apres=async msg=>{ await charger(); toast(msg); rendreTravail(); if(typeof majBadgeTravail==="function") majBadgeTravail(); };
-  const lu=n=>{ if(n && n.cle && n.genre==="journal" && !notifsLues().has(n.cle)) marquerLues([n]); };
+  const lu=n=>{ if(!APP.agentVu && n && n.cle && n.genre==="journal" && !notifsLues().has(n.cle)) marquerLues([n]); };
   z.querySelectorAll("[data-jouv]").forEach(b=>b.onclick=e=>{
     e.stopPropagation(); JNLM.ouverts.add(b.dataset.jouv); rendreTravail();
     const t=z.querySelector('[data-jbox="'+b.dataset.jouv+'"] textarea'); if(t) t.focus();
@@ -18639,6 +18664,44 @@ function jnlBrancherFormulaire(o){
   majBtn(); majDl();
 }
 
+/* ---------- réponse et clôture depuis la carte Notifications ---------- */
+function jnlActionsNotif(n,i,autre){
+  if(n.genre!=="reponse" && n.genre!=="relance") return "";
+  const c=S.cfg, k="n"+n.cle;
+  if(JNLM.ouverts.has(k))
+    return '<div class="jnl-boite" data-jbox="'+k+'"><textarea placeholder="Votre réponse…"></textarea>'+
+      '<div class="jnl-btns"><button type="button" class="btn-2" data-jann="'+k+'">Annuler</button>'+
+      '<button type="button" class="btn" data-nenv="'+i+'">Envoyer</button></div></div>';
+  return '<div class="jnl-btns mt-notif-btns"><button type="button" class="btn-2" data-jouv="'+k+'">Répondre…</button>'+
+    (n.genre==="reponse" && c.colJnlTraite && jnlPeutClore(n.j)?'<button type="button" class="btn" data-nclo="'+i+'">✓ Clôturer</button>':'')+'</div>';
+}
+function jnlBrancherNotifs(z,tous,ag){
+  const apres=async msg=>{ await charger(); toast(msg); rendreTravail(); if(typeof majBadgeTravail==="function") majBadgeTravail(); };
+  z.querySelectorAll("[data-nenv]").forEach(b=>b.onclick=async e=>{
+    e.stopPropagation();
+    const n=tous[Number(b.dataset.nenv)], box=b.closest(".jnl-boite"), t=box&&box.querySelector("textarea");
+    const texte=t?t.value.trim():"";
+    if(!n) return;
+    if(!texte){ toast("Saisissez votre message.",true); return; }
+    b.disabled=true;
+    try{ await jnlAjouterReponse({j:n.j,p:n.p},texte,ag); }
+    catch(err){ b.disabled=false; toast("Échec de l'enregistrement : "+err.message,true); return; }
+    JNLM.ouverts.delete(box.dataset.jbox);
+    if(!APP.agentVu) marquerLues([n]);
+    await apres("Message envoyé");
+  });
+  z.querySelectorAll("[data-nclo]").forEach(b=>b.onclick=async e=>{
+    e.stopPropagation();
+    const n=tous[Number(b.dataset.nclo)]; if(!n) return;
+    b.disabled=true;
+    try{ await jnlCloturer(n.j); }
+    catch(err){ b.disabled=false; toast("Impossible de clôturer : "+err.message,true); return; }
+    if(!APP.agentVu){ const xs=(S.notifs||[]).filter(x=>x.genre==="reponse" && x.j.id===n.j.id); if(xs.length) marquerLues(xs); }
+    await apres("Demande clôturée");
+  });
+  z.querySelectorAll(".mt-notif .jnl-boite, .mt-notif .jnl-btns").forEach(x=>x.addEventListener("click",e=>e.stopPropagation()));
+}
+
 /* =======================================================================
    Mon portefeuille
    - Moi : les projets dont je suis porteur (avec leurs actions), puis mes
@@ -18713,7 +18776,7 @@ function rendreMonPf(){
   };
   const ligneP=p=>{
     const e=echeanceProjet(p), ret=projetEnRetard(p);
-    return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+
+    return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+piPastille(p)+
       (ret?' <span class="app-alerte">en retard</span>':'')+'<div class="app-sous">'+esc(lire(c.tblMain,p,c.colGroupement))+'</div></td>'+
       '<td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
       ech(e,etatDe(p)==="termine")+'</tr>';
@@ -18898,6 +18961,111 @@ function mpMarque(td,p){
   const c=S.cfg, g=lire(c.tblMain,p,c.colGroupement).split(/\s*,\s*/)[0];
   if(!g) return td;
   return td.replace(/^<td/,'<td style="box-shadow:inset -5px 0 0 '+couleurGroupement(g)+';padding-right:14px" title="Projet porté par le groupement '+esc(g)+'"');
+}
+
+/* =======================================================================
+   Post-it d'un projet : un seul par projet (colonne Post_it de la table
+   principale), complété comme un commentaire (entrées datées et signées,
+   la plus récente en tête). Il s'ouvre à l'ouverture du projet tant que
+   l'utilisateur ne l'a pas lu ; « ✓ Lu » le replie pour lui seul (lecture
+   enregistrée dans Notifications_Lues). Un nouvel ajout le rouvre pour tous.
+   Colonne facultative Post_it_Fin : au-delà, il n'est plus affiché.
+   ======================================================================= */
+const PI={ouverts:{}};
+function piCol(nom){
+  const c=S.cfg, cols=(typeof colonnesDe==="function"?colonnesDe(c.tblMain):[])||[];
+  const pli=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const k=cols.find(x=>pli(x.colId)===pli(nom)) || cols.find(x=>pli(x.label)===pli(nom));
+  return k?k.colId:"";
+}
+function piTexte(p){ const col=piCol("Post_it"); return col&&p ? txt(p[col]).trim() : ""; }
+function piActif(p){
+  const t=piTexte(p); if(!t) return false;
+  const cf=piCol("Post_it_Fin"), fin=cf?Number(p[cf])||null:null;
+  return !fin || fin>=aujourdHuiUTC();
+}
+function piCle(p){
+  let h=5381; const t=piTexte(p);
+  for(let i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))>>>0;
+  return "postit:"+p.id+":"+h.toString(36);
+}
+function piLu(p){ return notifsLues().has(piCle(p)); }
+function piEntrees(p){
+  return piTexte(p).split(/\n\s*\n(?=\d{2}\/\d{2}\/\d{4} — )/).map(s=>{
+    const m=/^(\d{2}\/\d{2}\/\d{4}) — ([^:\n]*?) : ([\s\S]*)$/.exec(s.trim());
+    return m?{date:m[1],auteur:m[2],texte:m[3]}:{date:"",auteur:"",texte:s.trim()};
+  }).filter(e=>e.texte);
+}
+/* pastille des listes : 📌, en rouge « nouveau » tant que non lu */
+function piPastille(p){
+  if(!piCol("Post_it") || !piActif(p)) return "";
+  const nl=!piLu(p);
+  return ' <span class="pi-pin'+(nl?" n":"")+'" title="Post-it'+(nl?" non lu":"")+'">📌'+(nl?" nouveau":"")+'</span>';
+}
+function piMarquerLu(p){
+  const cle=piCle(p);
+  if(!notifsLues().has(cle)) marquerLues([{cle}]);
+}
+/* fiche (poste) : note en haut à droite de l'entête, ou pastille repliée */
+function piAfficher(p){
+  const ent=$("#entete"); if(!ent || !p) return;
+  ent.querySelectorAll(".pi-note,.pi-mini,.pi-ajout").forEach(x=>x.remove());
+  const col=piCol("Post_it"); if(!col) return;
+  const c=S.cfg, d=document.createElement("div");
+  if(!piActif(p)){
+    d.className="pi-ajout"; d.innerHTML='<button type="button" title="Ajouter un post-it au projet">+ 📌 Post-it</button>';
+    ent.appendChild(d);
+    d.querySelector("button").onclick=e=>{ e.stopPropagation(); piCompleter(d.querySelector("button"),p); };
+    return;
+  }
+  const lu=piLu(p), ouvert=!lu || PI.ouverts[p.id];
+  const es=piEntrees(p), der=es[0]||{texte:piTexte(p)};
+  if(!ouvert){
+    d.className="pi-mini"; d.innerHTML='📌 Post-it'+(der.date?' · '+esc(der.date.slice(0,5)):'');
+    d.title="Ouvrir le post-it"; ent.appendChild(d);
+    d.onclick=()=>{ PI.ouverts[p.id]=true; piAfficher(p); };
+    return;
+  }
+  const cf=piCol("Post_it_Fin"), fin=cf?Number(p[cf])||null:null;
+  d.className="pi-note";
+  d.innerHTML='<h4>📌 Post-it'+(!lu?'<span class="pi-nv">nouveau</span>':'')+'</h4>'+
+    '<div class="pi-e">'+esc(der.texte)+(der.date||der.auteur?'<small>'+esc(der.date)+(der.auteur?' — '+esc(der.auteur):'')+'</small>':'')+'</div>'+
+    (es.length>1?'<details class="pi-old"><summary>'+(es.length-1)+' message'+(es.length>2?"s":"")+' précédent'+(es.length>2?"s":"")+'</summary>'+
+      es.slice(1).map(e=>'<div class="pi-e2">'+esc(e.texte)+'<small>'+esc(e.date)+(e.auteur?' — '+esc(e.auteur):'')+'</small></div>').join("")+'</details>':'')+
+    (cf?'<div class="pi-fin">Afficher jusqu\'au '+champDateFR('class="pi-fin-d"','',fin?dateVersFR(fin):'')+'</div>':'')+
+    '<div class="pi-b"><button type="button" class="pi-c">+ Compléter</button>'+
+      (lu?'<button type="button" class="pi-r">Replier</button>':'<button type="button" class="pi-l">✓ Lu</button>')+'</div>';
+  ent.appendChild(d);
+  d.querySelector(".pi-c").onclick=e=>{ e.stopPropagation(); piCompleter(e.target,p); };
+  const bl=d.querySelector(".pi-l"); if(bl) bl.onclick=()=>{ PI.ouverts[p.id]=false; piMarquerLu(p); piAfficher(p); };
+  const br=d.querySelector(".pi-r"); if(br) br.onclick=()=>{ PI.ouverts[p.id]=false; piAfficher(p); };
+  const fd=d.querySelector(".pi-fin-d");
+  if(fd) fd.onchange=async()=>{
+    const v=frVersDate(fd.value);
+    if(v===undefined){ toast("Date invalide : jj/mm/aaaa.",true); return; }
+    try{ await grist.docApi.applyUserActions([["UpdateRecord",c.tblMain,p.id,{[cf]:v}]]); p[cf]=v; toast(v?"Post-it affiché jusqu'au "+dateVersFR(v):"Post-it sans date de fin"); }
+    catch(err){ toast("Enregistrement impossible : "+err.message,true); }
+  };
+}
+/* ajout d'un message (même bulle que les commentaires) ; l'auteur a lu ce qu'il vient d'écrire */
+function piCompleter(bouton,p){
+  const c=S.cfg, col=piCol("Post_it");
+  ouvrirBulle(bouton,c.tblMain,p.id,col,()=>{
+    const np=S.data.main.find(r=>r.id===p.id)||p;
+    S.projetSel=np; piMarquerLu(np); PI.ouverts[np.id]=true;
+    rendreProjet();
+  });
+}
+/* mobile : carte en tête de l'onglet Synthèse */
+function piCarteMobile(p){
+  if(!piCol("Post_it") || !piActif(p)) return "";
+  const es=piEntrees(p), der=es[0]||{texte:piTexte(p)}, lu=piLu(p);
+  return '<div class="mb-carte pi-mob'+(lu?" lu":"")+'"><h3>📌 Post-it'+(!lu?' <span class="pi-nv">nouveau</span>':'')+'</h3>'+
+    '<div class="pi-e">'+esc(der.texte)+'<small>'+esc(der.date||"")+(der.auteur?' — '+esc(der.auteur):'')+'</small></div>'+
+    (!lu?'<button type="button" class="mb-chip" id="pi-mob-lu">✓ Lu</button>':'')+'</div>';
+}
+function piBrancherMobile(p){
+  const b=$("#pi-mob-lu"); if(b) b.onclick=()=>{ piMarquerLu(p); rendreMobile(); };
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
