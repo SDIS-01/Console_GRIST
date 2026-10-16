@@ -1957,6 +1957,7 @@ body.app-monpf .app-filtres{display:none;}
 .mp-table tr.mp-sousp td{padding:7px 10px 3px 24px;background:#fafbfd;border-bottom:0;font-weight:600;color:#1c2f6b;font-size:12.5px;}
 .mp-table tr.mp-sousp .mp-pp{margin-left:10px;font-weight:400;color:var(--gris);font-size:11.5px;}
 .mp-table tr.mp-sous-it td.et-lib{padding-left:44px;}
+.anx-compte b{font-size:16px;color:#1c2f6b;margin-right:4px;}
 </style>
 </head>
 <body>
@@ -17017,7 +17018,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 12 h 05</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 12 h 20</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17642,6 +17643,11 @@ async function annexesMonTravail(ag, grille){
       const ouverts=anxOrdre(T,sec, fam==="mec"?ids.mec:ids.pap)
         .filter(i=>{ const e=fSt?anxEtatStatut(anxTexte(T,fSt,i)):""; return e!=="vert" && e!=="gris"; });
       if(fEch) ouverts.sort((a,b)=>(anxValeur(T,fEch,a)||9e12)-(anxValeur(T,fEch,b)||9e12));
+      /* lignes complètes, gardées pour l'état PDF de Mon portefeuille */
+      ANX.mtDonnees=ANX.mtDonnees&&ANX.mtDonnees.grp===grp?ANX.mtDonnees:{grp};
+      ANX.mtDonnees[fam]=ouverts.map(i=>({id:fId?anxTexte(T,fId,i):"Ligne "+T.data.id[i], f2:f2?anxTexte(T,f2,i):"",
+        por:fPor?anxTexte(T,fPor,i):"", st:fSt?anxTexte(T,fSt,i):"",
+        ech:fEch&&typeof anxValeur(T,fEch,i)==="number"?anxValeur(T,fEch,i):null, av:fAv?anxTexte(T,fAv,i):""}));
       const ligne=i=>{
         const st=fSt?anxTexte(T,fSt,i):"", c=ANX_COUL[anxEtatStatut(st)];
         const sous=[f2?anxTexte(T,f2,i):"", fPor?anxTexte(T,fPor,i):""].filter(Boolean).map(esc);
@@ -17649,9 +17655,10 @@ async function annexesMonTravail(ag, grille){
         const droite = fEch && typeof anxValeur(T,fEch,i)==="number" ? delaiHtml(anxValeur(T,fEch,i)) : (fAv?anxCellule(T,fAv,i):"");
         return '<div class="mt-it anx-mt" data-grp="1"><div class="mt-x"><b class="mt-lib">'+esc(fId?anxTexte(T,fId,i):"Ligne "+T.data.id[i])+'</b><small>'+sous.join(" · ")+'</small></div>'+droite+'</div>';
       };
-      d.innerHTML='<h3>'+ANX_FAMILLES[fam].titre+' — mon groupement ('+esc(grp)+')<span>'+ouverts.length+' en cours</span></h3>'+
-        (ouverts.length ? ouverts.slice(0,8).map(ligne).join("")+'<button type="button" class="fil-lien mt-anx-tout" data-grp="1">Voir tout dans MEC · PAPRIPACT →</button>'
-                        : '<div class="mt-vide">Rien en cours pour le groupement.</div>');
+      d.innerHTML='<h3>'+ANX_FAMILLES[fam].titre+' — '+esc(grp)+'</h3>'+
+        /* seulement le nombre en cours, et le lien vers l'onglet MEC · PAPRIPACT filtré sur le groupement */
+        '<div class="mt-vide anx-compte"><b>'+ouverts.length+'</b> '+(ouverts.length>1?"lignes":"ligne")+' en cours</div>'+
+        '<button type="button" class="fil-lien mt-anx-tout" data-grp="1">Voir tout dans MEC · PAPRIPACT →</button>';
       d.querySelectorAll("[data-grp]").forEach(x=>x.onclick=()=>anxAllerGroupement(grp));
     });
   }catch(e){
@@ -18536,7 +18543,8 @@ function rendreMonPf(){
   const nbA=mesProjets.reduce((s,p)=>s+actsDe(p).length,0);
   const qui=enGrp?"du groupement":"";
   z.innerHTML='<div class="mp-outils"><span></span><button type="button" class="mt-chip'+(M.voir100?" on":"")+'" id="mp-100">'+
-      (M.voir100?"☑":"☐")+' Afficher les 100 %'+(nb100Moi?' ('+nb100Moi+')':'')+'</button></div>'+
+      (M.voir100?"☑":"☐")+' Afficher les 100 %'+(nb100Moi?' ('+nb100Moi+')':'')+'</button>'+
+      '<button type="button" class="anx-pdf" id="mp-pdf" title="Imprimer ce portefeuille tel qu\'il est affiché">🖨 État PDF</button></div>'+
     (enGrp?'<div class="mp-outils"><span>'+M.noms.length+' collaborateur'+(M.noms.length>1?"s":"")+' rattaché'+(M.noms.length>1?"s":"")+' à '+esc(M.grp)+'</span>'+
       '<button type="button" class="mt-chip'+(M.parCollab?" on":"")+'" id="mp-collab">'+(M.parCollab?"☑":"☐")+' Regrouper par collaborateur</button></div>':'')+
     '<div class="mp-carte"><h3>'+(enGrp?"Projets & actions du groupement":Mes+" projets & actions")+'<span>'+mesProjets.length+' projet'+(mesProjets.length>1?"s":"")+
@@ -18556,6 +18564,7 @@ function rendreMonPf(){
   z.querySelectorAll("tr[data-a]").forEach(tr=>tr.onclick=()=>ouvrirFicheDepuisLigne(Number(tr.dataset.a)));
   const bc=$("#mp-collab"); if(bc) bc.onclick=()=>{ M.parCollab=!M.parCollab; rendreMonPf(); };
   const b100=$("#mp-100"); if(b100) b100.onclick=()=>{ M.voir100=!M.voir100; rendreMonPf(); };
+  const bp=$("#mp-pdf"); if(bp) bp.onclick=()=>mpImprimer("Portefeuille de "+nomAgent(ag), M.grp);
   if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mp-annexes"));
 }
 
@@ -18629,7 +18638,7 @@ function mpRendreGroupe(z,ag,est,u){
     '<div class="mp-outils"><span>'+M.noms.length+' collaborateur'+(M.noms.length>1?"s":"")+' rattaché'+(M.noms.length>1?"s":"")+' à '+esc(M.grp)+'</span>'+
       '<button type="button" class="mt-chip'+(M.parCollab?" on":"")+'" id="mp-collab">'+(M.parCollab?"☑":"☐")+' Regrouper par collaborateur</button>'+
       '<button type="button" class="mt-chip'+(M.voir100?" on":"")+'" id="mp-100">'+(M.voir100?"☑":"☐")+' Afficher les 100 %'+(nb100?' ('+nb100+')':'')+'</button>'+
-      '<button type="button" class="anx-pdf" id="mp-pdf" title="État du groupement : projets, actions et tâches, tout ce qui implique le groupement">🖨 État PDF du groupement</button></div>'+
+      '<button type="button" class="anx-pdf" id="mp-pdf" title="Imprimer le groupement tel qu\'il est affiché, avec MEC 2023 et PAPRIPACT">🖨 État PDF du groupement</button></div>'+
     '<div class="mp-carte"><h3>Projets, actions et tâches du groupement<span>'+
       [[n("P"),"projet"],[n("A"),"action"],[n("T"),"tâche"]].map(([v,lb])=>v+" "+lb+(v>1?"s":"")).join(" · ")+'</span></h3>'+
       (items.length
@@ -18640,15 +18649,58 @@ function mpRendreGroupe(z,ag,est,u){
   z.querySelectorAll("tr[data-a]").forEach(tr=>tr.onclick=()=>ouvrirFicheDepuisLigne(Number(tr.dataset.a)));
   $("#mp-collab").onclick=()=>{ M.parCollab=!M.parCollab; rendreMonPf(); };
   $("#mp-100").onclick=()=>{ M.voir100=!M.voir100; rendreMonPf(); };
-  $("#mp-pdf").onclick=async()=>{
-    const b=$("#mp-pdf"); b.disabled=true; const lib=b.textContent; b.textContent="Préparation…";
-    try{
-      await etImprimer(false,{g:[M.grp],sp:[],porteur:"",origine:"",service:"",recherche:"",
-        meo:true,taches:true,rappel:false,termine:false,interrompu:false,perimetre:"implication"});
-    }catch(e){ toast("État indisponible : "+e.message,true); }
-    finally{ b.disabled=false; b.textContent=lib; }
-  };
+  $("#mp-pdf").onclick=()=>mpImprimer("Groupement "+M.grp, M.grp);
+
   if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mp-annexes"));
+}
+
+/* État PDF de Mon portefeuille : ce qui est affiché (mêmes regroupements, mêmes
+   filtres), puis les lignes MEC 2023 et PAPRIPACT en cours du groupement. */
+function mpImprimer(titre, grp){
+  const z=$("#zone-monpf");
+  if(!z) return;
+  const styles=[...document.querySelectorAll("style")].map(s=>s.textContent).join("\n");
+  const cartes=[...z.querySelectorAll(".mp-carte")].map(cd=>{
+    const h=cd.querySelector("h3"), tb=cd.querySelector("table");
+    if(!tb) return "";
+    return '<h2 class="pdf-h2">'+(h?h.innerHTML:"")+'</h2>'+tb.outerHTML;
+  }).join("");
+  const D=(typeof ANX!=="undefined" && ANX.mtDonnees && ANX.mtDonnees.grp===grp)?ANX.mtDonnees:null;
+  const anx=fam=>{
+    const l=D&&D[fam];
+    if(!l || !l.length) return "";
+    return '<h2 class="pdf-h2">'+esc(ANX_FAMILLES[fam].titre)+' — '+esc(grp)+'<span>'+l.length+' en cours</span></h2>'+
+      '<table class="app-table pdf-anx"><thead><tr><th>Libellé</th><th>'+(fam==="mec"?"Recommandation / rappel":"Famille")+'</th><th>Porteur</th><th>Statut</th><th>'+
+      (l.some(x=>x.ech)?"Échéance":"Avancement")+'</th></tr></thead><tbody>'+
+      l.map(x=>'<tr><td>'+esc(x.id)+'</td><td>'+esc(x.f2)+'</td><td>'+esc(x.por)+'</td><td>'+esc(x.st)+'</td><td>'+
+        (x.ech?esc(dateVersFR(x.ech)):esc(x.av))+'</td></tr>').join("")+'</tbody></table>';
+  };
+  const corps=cartes+anx("mec")+anx("pap");
+  if(!corps){ toast("Rien à imprimer.",true); return; }
+  const doc='<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>'+esc(titre)+'</title><style>'+styles+'</style><style>'+
+    '@page{size:A4 portrait;margin:12mm 10mm}'+
+    'html,body{background:#fff!important;height:auto!important;overflow:visible!important;font-family:Tahoma,Verdana,sans-serif!important;}'+
+    'body{padding:0;margin:0;font-size:10.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
+    '.pdf-t{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #1c2f6b;padding-bottom:4px;margin-bottom:8px;}'+
+    '.pdf-t b{font-size:15px;color:#1c2f6b}.pdf-t span{color:#6b7591;font-size:10px}'+
+    '.pdf-h2{display:flex;align-items:baseline;gap:8px;font-size:12.5px;color:#1c2f6b;margin:14px 0 5px;break-after:avoid;page-break-after:avoid;}'+
+    '.pdf-h2 span{margin-left:auto;font-weight:400;font-size:10px;color:#6b7591}'+
+    '.app-table{width:100%;border-collapse:collapse;font-size:10px}.app-table th{font-size:8.5px}.app-table td,.app-table th{padding:4px 6px}'+
+    '.app-table thead{display:table-header-group}.app-table tr{break-inside:avoid;page-break-inside:avoid}'+
+    '.app-table tr.et-grp,.app-table tr.mp-sousp{break-after:avoid;page-break-after:avoid}'+
+    '.app-av-b{min-width:60px}.mp-table tr{cursor:default}'+
+    '.app-table td,.app-table td *{font-size:10px!important;line-height:1.3}'+
+    '.app-table td .app-sous,.app-table td .app-sous *,.app-table td .mp-pp{font-size:8.5px!important;color:#6b7591}'+
+    '.app-table td .et-t{font-size:7.5px!important}.app-table td .app-alerte{font-size:8px!important;padding:0 5px}'+
+    '.app-table tr.mp-sousp td,.app-table tr.mp-sousp td b{font-size:10.5px!important}.app-table tr.et-grp td{font-size:11px!important}'+
+    '.app-table tr.et-grp td small{font-size:8.5px!important}'+
+    '</style></head><body><div class="pdf-t"><b>'+esc(titre)+'</b><span>État au '+esc(new Date().toLocaleDateString("fr-FR"))+'</span></div>'+corps+'</body></html>';
+  const fr=document.createElement("iframe");
+  fr.style.cssText="position:fixed;left:-12000px;top:0;width:800px;height:1120px;border:0;";
+  document.body.appendChild(fr);
+  fr.onload=()=>{ setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast("Impression impossible : "+e.message,true); }
+    setTimeout(()=>fr.remove(),60000); },250); };
+  fr.srcdoc=doc;
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
