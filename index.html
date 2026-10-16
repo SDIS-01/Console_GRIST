@@ -1953,11 +1953,19 @@ body.app-monpf .app-filtres{display:none;}
 /* navigation comme un autre agent */
 .nav-vu{display:inline-flex;align-items:center;gap:8px;margin-left:10px;padding:3px 6px 3px 11px;border-radius:14px;background:#fff1d6;color:#7a4b00;font-size:12px;border:1px solid #f0c36a;}
 .nav-vu b{color:#5a3700;}
-.nav-vu button{border:0;background:#7a4b00;color:#fff;border-radius:10px;padding:2px 9px;font:inherit;font-size:11.5px;cursor:pointer;}
+.app-nav .nav-vu button,.nav-vu button{border:1px solid #c98a1a!important;background:#fff!important;color:#5a3700!important;border-radius:10px!important;padding:2px 10px!important;font:inherit;font-size:11.5px!important;font-weight:600!important;cursor:pointer;height:auto!important;line-height:1.5!important;box-shadow:none!important;}
+.app-nav .nav-vu button:hover{background:#5a3700!important;color:#fff!important;}
 .mp-table tr.mp-sousp td{padding:7px 10px 3px 24px;background:#fafbfd;border-bottom:0;font-weight:600;color:#1c2f6b;font-size:12.5px;}
 .mp-table tr.mp-sousp .mp-pp{margin-left:10px;font-weight:400;color:var(--gris);font-size:11.5px;}
 .mp-table tr.mp-sous-it td.et-lib{padding-left:44px;}
 .anx-compte b{font-size:16px;color:#1c2f6b;margin-right:4px;}
+/* Mes notifications : le projet en entête, ses éléments dessous */
+.mt-proj{padding:8px 12px 3px;font-size:12px;font-weight:600;color:#1c2f6b;cursor:pointer;border-top:1px solid #eef1f7;}
+.mt-carte>h3+.mt-proj,.mt-grp+.mt-proj{border-top:0;}
+.mt-proj:hover{text-decoration:underline;}
+.mt-sousprojet{padding-left:14px;}
+.mt-sousprojet .mt-it{border-left:2px solid #e3e8f3;}
+.jnl-carte .mt-sousprojet{padding:0 8px 0 18px;}
 </style>
 </head>
 <body>
@@ -16663,13 +16671,20 @@ function demandesDe(ag){
 /* ligne grise : projet (code en étiquette), puis action parente si elle n'est pas le sujet ;
    jamais ce qui répète l'intitulé */
 function sousLigneTravail(n){
+  /* le projet est en entête du groupe : sous l'élément, seulement l'action qui porte une tâche ou une entrée */
   const c=S.cfg, norme=x=>String(x||"").replace(/\s+/g," ").trim().toLowerCase();
-  const lib=norme(n.lib), vus=new Set([lib]), parts=[];
-  const ajoute=(t,html)=>{ const k=norme(t); if(k && !vus.has(k) && !(lib && (lib.indexOf(k)===0 || k.indexOf(lib)===0))){ vus.add(k); parts.push(html||esc(t)); } };
-  const pl=lire(c.tblMain,n.p,c.colLibelle);
-  ajoute(pl, libelleProjetHtml(pl));
-  if(n.a && n.genre!=="action") ajoute(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte);
-  return parts.join(" · ");
+  if(!n.a || n.genre==="action") return "";
+  const t=decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte||lire(c.tblMain,n.a,c.colLibelle);
+  return (t && norme(t)!==norme(n.lib)) ? "› "+esc(t) : "";
+}
+/* regroupe des éléments par projet, dans l'ordre de leur première apparition */
+function mtParProjet(list){
+  const m=new Map();
+  list.forEach(n=>{ const k=n.p?n.p.id:0; if(!m.has(k)) m.set(k,{p:n.p,items:[]}); m.get(k).items.push(n); });
+  return [...m.values()];
+}
+function mtTeteProjet(p){
+  return p ? '<div class="mt-proj" data-mtp="'+p.id+'">'+libelleProjetHtml(lire(S.cfg.tblMain,p,S.cfg.colLibelle))+'</div>' : '';
 }
 /* pastille de délai : rouge en retard, orange à moins de 15 jours, date grise sinon */
 function delaiHtml(ts){
@@ -16732,10 +16747,12 @@ function rendreTravail(){
       (sl?'<small>'+sl+'</small>':'')+'</div>'+(droite||"")+'</div>'; };
   const tous=[];
   /* seules les cartes qui ont quelque chose à traiter s'affichent */
-  const bloc=(titre,compte,items,rendu)=>{
+  const bloc=(titre,compte,items,rendu,parProjet)=>{
     if(!items.length) return "";
+    const un=n=>{ tous.push(n); return rendu(n,tous.length-1); };
     return '<div class="mt-carte"><h3>'+titre+'<span>'+compte+'</span></h3>'+
-      items.slice(0,12).map(n=>{ tous.push(n); return rendu(n,tous.length-1); }).join("")+'</div>';
+      (parProjet ? mtParProjet(items.slice(0,12)).map(g=>mtTeteProjet(g.p)+'<div class="mt-sousprojet">'+g.items.map(un).join("")+'</div>').join("")
+                 : items.slice(0,12).map(un).join(""))+'</div>';
   };
   /* projets qui demandent une intervention : retard (projet, action, tâche, instance), échéance à moins de 30 jours,
      avancement non renseigné ; ni terminés, ni interrompus, ni archivés */
@@ -16751,8 +16768,8 @@ function rendreTravail(){
     bloc(M+"projets et actions",projetsATraiter.length+" à traiter",projetsATraiter,
       (n,i)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x"><b class="mt-projet">'+liseret(n.p)+libelleProjetHtml(n.lib)+'</b>'+
         '<small><span class="mt-raison">'+esc(n.raisons.join(" · "))+'</span></small></div>'+barreAppHtml(n.p)+'</div>')+
-    bloc(M+"actions de mise en œuvre",acts.length,acts,(n,i)=>it(n,i,delaiHtml(n.ech)))+
-    bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,delaiHtml(n.ech)))+
+    bloc(M+"actions de mise en œuvre",acts.length,acts,(n,i)=>it(n,i,delaiHtml(n.ech)),true)+
+    bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,delaiHtml(n.ech)),true)+
     jnl.html+
     (autre||!nl.length?"":carteNotifs(ag,autre,nl,tous))+
   '</div>';
@@ -16760,6 +16777,8 @@ function rendreTravail(){
   /* demandes à l'administrateur (et, pour lui, demandes reçues) */
   if(typeof demCartesTravail==="function"){ demCartesTravail(z.querySelector(".mt-grille"), z); demCharger().then(()=>{ /* rafraîchi au prochain rendu */ }); }
   jnlBrancherTravail(z,jnl.items,ag);
+  z.querySelectorAll("[data-mtp]").forEach(x=>x.onclick=e=>{ e.stopPropagation();
+    ouvrirFiche(S.data.main.find(r=>r.id===Number(x.dataset.mtp))); });
   const ntout=$("#mt-tout-lu");
   if(ntout) ntout.onclick=()=>{ const k=nl.length; marquerLues(nl); toast(k+" notification"+(k>1?"s":"")+" marquée"+(k>1?"s":"")+" comme lue"+(k>1?"s":"")); };
   z.querySelectorAll("[data-mtf]").forEach(b=>b.onclick=()=>{ APP.filtreNotifs=b.dataset.mtf; rendreTravail(); });
@@ -16792,7 +16811,8 @@ function carteNotifs(ag,autre,nl,tous){
     const ls=vus.filter(n=>groupe(n)===g);
     if(!ls.length) return;
     h+='<div class="mt-grp mt-grp-'+g+'">'+titres[g]+' · '+ls.length+'</div>';
-    ls.forEach(n=>{
+    mtParProjet(ls).forEach(gp=>{ h+=mtTeteProjet(gp.p)+'<div class="mt-sousprojet">';
+    gp.items.forEach(n=>{
       tous.push(n); const i=tous.length-1;
       const lu=lues.has(n.cle);
       let texte=(n.lib||"").length>140?(n.lib||"").slice(0,140)+"…":(n.lib||"");
@@ -16807,6 +16827,7 @@ function carteNotifs(ag,autre,nl,tous){
         '<small>'+avant+sl+'</small></div>'+delaiHtml(n.ech)+
         (!autre && !lu ? '<button type="button" class="mt-lu" data-mtlu="'+i+'" title="Marquer comme lu">✓</button>' : '')+'</div>';
     });
+    h+='</div>'; });
   });
   return h+'</div>';
 }
@@ -17018,7 +17039,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 12 h 20</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 14 h 30</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18267,11 +18288,11 @@ function jnlCartesTravail(ag,autre,M,lues){
     const nb=recues.filter(n=>n.statut==="attente").length;
     h+='<div class="mt-carte jnl-carte"><h3>Demandes qui '+(autre?"lui":"me")+' sont adressées<span>'+
       (nb?nb+" à traiter":"répondues")+'</span></h3>';
-    recues.slice(0,15).forEach(n=>{
+    mtParProjet(recues.slice(0,15)).forEach(gp=>{ h+=mtTeteProjet(gp.p)+'<div class="mt-sousprojet">'; gp.items.forEach(n=>{
       items.push(n); const i=items.length-1, k="r"+i, rep=n.statut==="repondue";
       const nouveau=!autre && lues && !lues.has(n.cle);
       h+='<div class="jnl-it'+(rep?" jnl-faite":"")+'" data-ji="'+i+'">'+
-        '<div class="jnl-tete"><b>'+esc(n.auteur||"Auteur inconnu")+'</b> · '+libelleProjetHtml(lire(c.tblMain,n.p,c.colLibelle))+
+        '<div class="jnl-tete">De <b>'+esc(n.auteur||"auteur inconnu")+'</b>'+(n.a?' · '+esc(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte||""):'')+
           (nouveau?'<span class="jnl-st jnl-st-n">nouveau</span>':'')+jnlStatutHtml(n.j)+
           '<span class="fil-esp"></span>'+(rep?'':delaiHtml(n.ech))+'</div>'+
         '<div class="jnl-txt">'+esc(jnlCourt(n.lib))+'</div>'+jnlFilHtml(n,2)+
@@ -18280,17 +18301,17 @@ function jnlCartesTravail(ag,autre,M,lues){
           : '<div class="jnl-btns">'+(rep?'':'<button type="button" class="btn-2" data-jfait="'+i+'">✓ Fait</button>')+
             '<button type="button" class="btn'+(rep?"-2":"")+'" data-jouv="'+k+'">'+(rep?"Compléter…":"Répondre…")+'</button></div>'))+
       '</div>';
-    });
+    }); h+='</div>'; });
     h+='</div>';
   }
   if(suivies.length){
     const nr=suivies.filter(n=>n.statut==="repondue").length, na=suivies.length-nr;
     h+='<div class="mt-carte jnl-carte"><h3>'+M+'demandes à suivre<span>'+
       [na?na+" en attente":"",nr?nr+" répondue"+(nr>1?"s":""):""].filter(Boolean).join(" · ")+'</span></h3>';
-    suivies.slice(0,15).forEach(n=>{
+    mtParProjet(suivies.slice(0,15)).forEach(gp=>{ h+=mtTeteProjet(gp.p)+'<div class="mt-sousprojet">'; gp.items.forEach(n=>{
       items.push(n); const i=items.length-1, k="s"+i, rep=n.statut==="repondue";
       h+='<div class="jnl-it'+(rep?" jnl-ok":"")+'" data-ji="'+i+'">'+
-        '<div class="jnl-tete">À <b>'+esc(n.collab||"(sans destinataire)")+'</b> · '+libelleProjetHtml(lire(c.tblMain,n.p,c.colLibelle))+
+        '<div class="jnl-tete">À <b>'+esc(n.collab||"(sans destinataire)")+'</b>'+(n.a?' · '+esc(decouperLibelleAction(lire(c.tblMain,n.a,c.colLibelle)).texte||""):'')+
           jnlStatutHtml(n.j)+'<span class="fil-esp"></span>'+(rep?'':delaiHtml(n.ech))+'</div>'+
         '<div class="jnl-txt">'+esc(jnlCourt(n.lib))+'</div>'+jnlFilHtml(n,3)+
         (autre?'':(JNLM.ouverts.has(k)
@@ -18298,7 +18319,7 @@ function jnlCartesTravail(ag,autre,M,lues){
           : '<div class="jnl-btns"><button type="button" class="btn-2" data-jouv="'+k+'">'+(rep?"Relancer / préciser…":"Relancer…")+'</button>'+
             (c.colJnlTraite?'<button type="button" class="btn'+(rep?"":"-2")+'" data-jclo="'+i+'">✓ Clôturer</button>':'')+'</div>'))+
       '</div>';
-    });
+    }); h+='</div>'; });
     h+='</div>';
   }
   return {html:h,items};
@@ -18505,7 +18526,7 @@ function rendreMonPf(){
   const autresTous=[];
   tous.filter(p=>!idsMes.has(p.id)).forEach(p=>actionsDe(p).forEach(a=>{ if(est(a)) autresTous.push({a,p}); }));
   const autres=autresTous.filter(x=>garde(x.a));
-  const nb100Moi=mesTous.filter(fini).length+mesTous.reduce((s,p)=>s+actionsDe(p).filter(fini).length,0)+autresTous.filter(x=>fini(x.a)).length;
+  const nb100Moi=mesTous.filter(fini).length+autresTous.filter(x=>fini(x.a)).length;
 
   const ech=(e,fini)=>'<td class="'+(e&&e<auj&&!fini?"app-ret":"")+'">'+(e?dateVersFR(e):"—")+'</td>';
   const libAction=a=>{
@@ -18530,7 +18551,7 @@ function rendreMonPf(){
       ech(e,etatDe(p)==="termine")+'</tr>';
   };
   const tete=(cols)=>'<thead><tr>'+cols.map(x=>'<th>'+x+'</th>').join("")+'</tr></thead>';
-  const colsP=["Projet / action","Porteur","Statut","Avancement","Échéance"];
+  const colsP=["Projet","Porteur","Statut","Avancement","Échéance"];
   const colsA=["Action","Porteur","Porteur du projet","Statut","Avancement","Échéance"];
   /* regroupement par collaborateur (vue groupement) */
   const grouper=(items,cle,rendu,nbCol)=>{
@@ -18547,11 +18568,10 @@ function rendreMonPf(){
       '<button type="button" class="anx-pdf" id="mp-pdf" title="Imprimer ce portefeuille tel qu\'il est affiché">🖨 État PDF</button></div>'+
     (enGrp?'<div class="mp-outils"><span>'+M.noms.length+' collaborateur'+(M.noms.length>1?"s":"")+' rattaché'+(M.noms.length>1?"s":"")+' à '+esc(M.grp)+'</span>'+
       '<button type="button" class="mt-chip'+(M.parCollab?" on":"")+'" id="mp-collab">'+(M.parCollab?"☑":"☐")+' Regrouper par collaborateur</button></div>':'')+
-    '<div class="mp-carte"><h3>'+(enGrp?"Projets & actions du groupement":Mes+" projets & actions")+'<span>'+mesProjets.length+' projet'+(mesProjets.length>1?"s":"")+
-      (nbA?' · '+nbA+' action'+(nbA>1?"s":""):'')+'</span></h3>'+
+    '<div class="mp-carte"><h3>'+(enGrp?"Projets & actions du groupement":Mes+" projets")+'<span>'+mesProjets.length+' projet'+(mesProjets.length>1?"s":"")+'</span></h3>'+
       (mesProjets.length
         ? '<table class="app-table mp-table">'+tete(colsP)+'<tbody>'+
-          grouper(mesProjets,p=>lire(c.tblMain,p,c.colPorteur),p=>ligneP(p)+actsDe(p).map(a=>ligneA(a,p,false)).join(""),5)+'</tbody></table>'
+          grouper(mesProjets,p=>lire(c.tblMain,p,c.colPorteur),p=>ligneP(p),5)+'</tbody></table>'
         : '<div class="mt-vide">'+(enGrp?"Aucun projet porté par un collaborateur du groupement.":(autre?nomAgent(ag)+" n'est porteur d'aucun projet.":"Vous n'êtes porteur d'aucun projet."))+'</div>')+'</div>'+
     '<div class="mp-carte"><h3>'+(enGrp?"Actions de mise en œuvre du groupement":Mes+" actions de mise en œuvre")+'<span>'+autres.length+' action'+(autres.length>1?"s":"")+
       ' dans des projets portés '+(enGrp?"hors du groupement":"par d'autres")+'</span></h3>'+
