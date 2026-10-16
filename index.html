@@ -1948,7 +1948,7 @@ body:not(.mob) .app-nav .nav-contact{color:#1e5fa5;}
 .mp-annexes:empty{display:none;}
 body.app-monpf .app-filtres{display:none;}
 .mp-outils{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--gris);}
-.mp-outils .mt-chip{margin-left:auto;}
+.mp-outils>span:first-child{flex:1;}
 .ed-version{padding:6px 12px 2px;font-size:10.5px;color:var(--gris);border-top:1px solid var(--trait);margin-top:4px;}
 /* navigation comme un autre agent */
 .nav-vu{display:inline-flex;align-items:center;gap:8px;margin-left:10px;padding:3px 6px 3px 11px;border-radius:14px;background:#fff1d6;color:#7a4b00;font-size:12px;border:1px solid #f0c36a;}
@@ -17039,7 +17039,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 14 h 30</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 14 h 40</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18541,7 +18541,7 @@ function rendreMonPf(){
       (avecProjet?'<div class="app-sous">'+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+'</div>':'')+'</td>'+
       '<td>'+esc(lire(c.tblMain,a,c.colPorteur))+'</td>'+
       (avecProjet?'<td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>':'')+
-      '<td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td><td>'+etBarre(av)+'</td>'+ech(e,av>=100||inter)+'</tr>';
+      '<td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td><td>'+etBarre(av)+'</td>'+mpMarque(ech(e,av>=100||inter),avecProjet?p:null)+'</tr>';
   };
   const ligneP=p=>{
     const e=echeanceProjet(p), ret=projetEnRetard(p);
@@ -18622,14 +18622,14 @@ function mpRendreGroupe(z,ag,est,u){
     if(it.k==="A"){
       const a=it.a, av=pct(a[c.colAvancement]), inter=interrompu(a);
       return '<tr class="et-action mp-sous-it" data-a="'+a.id+'"><td class="et-lib">'+u.libAction(a)+'</td>'+
-        '<td>'+esc(it.porteur)+'</td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td><td>'+etBarre(av)+'</td>'+u.ech(it.ech,av>=100||inter)+'</tr>';
+        '<td>'+esc(it.porteur)+'</td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td><td>'+etBarre(av)+'</td>'+mpMarque(u.ech(it.ech,av>=100||inter),it.p)+'</tr>';
     }
     const x=it.t, av=pct(x[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,x,c.colTacheStatut);
     return '<tr class="et-tache mp-sous-it" '+(it.a?'data-a="'+it.a.id+'"':'data-p="'+it.p.id+'"')+'><td class="et-lib"><span class="et-t">Tâche</span>'+
       esc(lire(c.tblTache,x,c.colTacheLibelle)||"(sans libellé)")+
       (it.a?'<div class="app-sous">'+esc(decouperLibelleAction(lire(c.tblMain,it.a,c.colLibelle)).texte||lire(c.tblMain,it.a,c.colLibelle))+'</div>':'')+'</td>'+
       '<td>'+esc(it.porteur)+'</td><td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,x,c.colTacheStatut):"",av||0,inter)+'</td>'+
-      '<td>'+(av==null?"":etBarre(av))+'</td>'+u.ech(it.ech,av>=100||inter)+'</tr>';
+      '<td>'+(av==null?"":etBarre(av))+'</td>'+mpMarque(u.ech(it.ech,av>=100||inter),it.p)+'</tr>';
   };
   /* un lot de lignes : projets portés d'abord, puis chaque autre projet en entête
      avec, dessous, les actions et tâches qui s'y rattachent */
@@ -18721,6 +18721,15 @@ function mpImprimer(titre, grp){
   fr.onload=()=>{ setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast("Impression impossible : "+e.message,true); }
     setTimeout(()=>fr.remove(),60000); },250); };
   fr.srcdoc=doc;
+}
+
+/* en bout de ligne, la couleur du groupement porteur du projet (actions et tâches
+   rattachées au projet d'un autre porteur) */
+function mpMarque(td,p){
+  if(!p) return td;
+  const c=S.cfg, g=lire(c.tblMain,p,c.colGroupement).split(/\s*,\s*/)[0];
+  if(!g) return td;
+  return td.replace(/^<td/,'<td style="box-shadow:inset -5px 0 0 '+couleurGroupement(g)+';padding-right:14px" title="Projet porté par le groupement '+esc(g)+'"');
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
