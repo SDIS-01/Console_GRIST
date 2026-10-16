@@ -17014,7 +17014,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 11 h 45</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 11 h 55</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -23271,7 +23271,7 @@ function appliquerContexteConsole(){
     if(cx.type==="projet"){ colorBy = ""; includeOptionalNature = true; colorByAxis = !!cx.axes; taches = !!cx.tachesSeules }
     else if(cx.type==="sponsor"){ colorBy = kGrp; if(kGrp) sortLevels = [kGrp,"",""] }
     else if(cx.type==="groupement"){ colorBy = ""; projetParAvancement = true }
-    else colorBy = null
+    else { colorBy = kGrp || null; if(kGrp) sortLevels = [kGrp,"",""] }   // planning général : tri et couleur par groupement
     setChip("chipNature", includeOptionalNature)
     setChip("chipAxes", colorByAxis)
     if(taches && !showTasks){ showTasks = true; setChip("chipTasks", true); loadTasks() }
