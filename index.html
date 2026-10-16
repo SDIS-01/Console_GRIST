@@ -1974,6 +1974,9 @@ body.app-monpf .app-filtres{display:none;}
 .dem-charge{font-size:12px;color:var(--gris);padding:6px 0;}
 .dem-filtre{width:100%;box-sizing:border-box;margin-bottom:6px;border:1px solid var(--trait);border-radius:6px;padding:7px 10px;font:inherit;font-size:12.5px;}
 .mt-carte-vide .mt-vide{color:var(--gris);font-style:italic;}
+.onglets{position:relative;}
+.onglet-impr{margin-left:auto;align-self:center;border:1px solid var(--trait);background:#fff;color:#1c2f6b;border-radius:6px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;}
+.onglet-impr:hover{border-color:#1c2f6b;}
 </style>
 </head>
 <body>
@@ -4688,11 +4691,13 @@ function rendreProjet(){
     '</div></div>'+boutonPerso()+'</div>'+
     '<div class="onglets">'+ONGLETS.map(([k,l])=>
       '<button class="onglet'+(S.onglet===k?" actif":"")+'" data-o="'+k+'">'+l+
-      (nb[k]!==undefined?'<span class="n">'+nb[k]+'</span>':'')+'</button>').join("")+'</div>';
+      (nb[k]!==undefined?'<span class="n">'+nb[k]+'</span>':'')+'</button>').join("")+
+      '<button type="button" class="onglet-impr" id="btn-impr-onglet" title="Imprimer cet onglet (PDF)">🖨 Imprimer l\'onglet</button></div>';
 
   $("#entete").querySelectorAll(".onglet").forEach(b=>b.onclick=()=>{
     S.onglet=b.dataset.o; reverrouiller(); rendreProjet();
   });
+  const bio=$("#btn-impr-onglet"); if(bio) bio.onclick=()=>imprimerOnglet();
 
   VUES[S.onglet](p);
   if(S.fenetreAction && document.querySelector(".fa-voile")) rendreFenetreAction();
@@ -17043,7 +17048,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 15 h 40</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 15 h 50</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17120,6 +17125,58 @@ function brancherApp(){
 }
 
 vueInitiale();
+
+/* ---------- impression de l'onglet affiché d'un projet ----------
+   L'onglet tel qu'il est à l'écran, figé : les champs deviennent du texte,
+   les boutons, filtres et formulaires de saisie disparaissent. */
+function imprimerOnglet(){
+  const c=S.cfg, p=S.projetSel, src=$("#corps");
+  if(!p || !src) return;
+  const lib=(ONGLETS.find(o=>o[0]===S.onglet)||["",S.onglet])[1];
+  const cl=src.cloneNode(true);
+  /* valeurs des champs, relevées sur l'original (même ordre que dans la copie) */
+  const orig=[...src.querySelectorAll("input,select,textarea")], copie=[...cl.querySelectorAll("input,select,textarea")];
+  copie.forEach((el,k)=>{
+    const o=orig[k]; if(!o) return;
+    let v="";
+    if(o.tagName==="SELECT") v=o.selectedOptions[0]?o.selectedOptions[0].textContent:"";
+    else if(o.type==="checkbox"||o.type==="radio") v=o.checked?"☑":"☐";
+    else if(o.type==="file"||o.type==="hidden"||o.type==="search") v=null;
+    else v=o.value;
+    if(v===null){ el.remove(); return; }
+    const s=document.createElement("span"); s.className="impr-val"+(o.tagName==="TEXTAREA"?" impr-multi":"");
+    s.textContent=v||""; el.replaceWith(s);
+  });
+  /* un bouton qui porte un libellé (nom d'action cliquable…) garde son texte */
+  cl.querySelectorAll("button.lien-action,button.fil-lien.lien,button[data-ouvrir]").forEach(bt=>{
+    const s=document.createElement("span"); s.className=bt.className.replace(/\blien-action\b/,"impr-lien"); s.innerHTML=bt.innerHTML; bt.replaceWith(s); });
+  cl.querySelectorAll("button,.btn,.btn-2,.barre-actions,.barre-filtres,.app-filtres,.jb-form,.jb-filtres,.jb-pills,.jc-outils,.jc-edit-pied,"+
+    ".msel-pan,datalist,.pj-ajout,.chevron-ouvrir,.no-print").forEach(x=>x.remove());
+  cl.querySelectorAll("details").forEach(d=>d.setAttribute("open",""));
+  cl.querySelectorAll("[hidden]").forEach(x=>{ if(!x.closest("details")) x.remove(); });
+  const styles=[...document.querySelectorAll("style")].map(s=>s.textContent).join("\n");
+  const titre=lire(c.tblMain,p,c.colLibelle)||"Projet";
+  const meta=[lire(c.tblMain,p,c.colGroupement), lire(c.tblMain,p,c.colPorteur)?"Porteur : "+lire(c.tblMain,p,c.colPorteur):""].filter(Boolean).join(" · ");
+  const doc='<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>'+esc(titre+" — "+lib)+'</title><style>'+styles+'</style><style>'+
+    '@page{size:A4 portrait;margin:12mm 10mm}'+
+    'html,body{background:#fff!important;height:auto!important;overflow:visible!important;font-family:Tahoma,Verdana,sans-serif!important;}'+
+    'body{margin:0;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
+    '.impr-t{border-bottom:2px solid #1c2f6b;padding-bottom:5px;margin-bottom:10px;}'+
+    '.impr-t h1{font-size:15px;color:#1c2f6b;margin:0 0 2px}.impr-t div{display:flex;justify-content:space-between;font-size:10px;color:#6b7591}'+
+    '.impr-t b{color:#1c2f6b;font-size:11px}'+
+    '.impr-val{display:inline-block;min-width:20px}.impr-multi{display:block;white-space:pre-wrap}'+
+    '.impr-lien,.impr-lien *{color:inherit!important;text-decoration:none!important;background:none;border:0;padding:0;font:inherit;text-align:left}'+
+    '#corps-impr{display:block!important}#corps-impr .carte,#corps-impr article,#corps-impr tr{break-inside:avoid;page-break-inside:avoid}'+
+    '#corps-impr table{width:100%}#corps-impr thead{display:table-header-group}'+
+    '</style></head><body><div class="impr-t"><h1>'+esc(titre)+'</h1><div><span>'+esc(meta)+'</span><span><b>'+esc(lib)+'</b> · édité le '+
+    esc(new Date().toLocaleDateString("fr-FR"))+'</span></div></div><div id="corps-impr" class="corps">'+cl.innerHTML+'</div></body></html>';
+  const fr=document.createElement("iframe");
+  fr.style.cssText="position:fixed;left:-12000px;top:0;width:800px;height:1120px;border:0;";
+  document.body.appendChild(fr);
+  fr.onload=()=>{ setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast("Impression impossible : "+e.message,true); }
+    setTimeout(()=>fr.remove(),60000); },300); };
+  fr.srcdoc=doc;
+}
 
 /* =======================================================================
    MEC 2023 et PAPRIPACT — consultation seule et export Excel fidèle.
