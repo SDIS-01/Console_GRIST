@@ -1880,6 +1880,31 @@ body:not(.mob) .app-nav .nav-contact{color:#1e5fa5;}
 .mb-com-tete{display:flex;justify-content:flex-end;margin:2px 0 6px;}
 .mb-com-tete .btn-bulle{font-size:12px;padding:6px 10px;border:1px solid var(--trait);background:#fff;}
 .mb-com .com-lecture{font-size:13px;white-space:pre-wrap;}
+.mb-com-projet h3{margin-bottom:0;}
+.mb-com-projet .mb-com-tete{margin-top:-24px;}
+.mb-com-projet .com-lecture{font-size:13px;}
+
+/* Journal : demandes, réponses, clôture (Mon travail et fiche) */
+.jnl-st{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:9px;margin-left:6px;vertical-align:1px;}
+.jnl-st-v{background:#dff3e5;color:#1f6b38;}
+.jnl-st-g{background:#e8ecf5;color:#4a5677;}
+.jnl-st-n{background:#fde8e6;color:#b3261e;}
+.jnl-carte .jnl-it{border-left:3px solid #e0a100;background:#fffaf0;border-radius:0 7px 7px 0;padding:8px 10px;margin:0 0 8px;cursor:pointer;}
+.jnl-carte .jnl-it.jnl-faite{border-color:#9aa6c4;background:#f5f7fb;opacity:.85;}
+.jnl-carte .jnl-it.jnl-ok{border-color:#3a9a5b;background:#f1faf3;}
+.jnl-tete{display:flex;align-items:center;flex-wrap:wrap;gap:2px;font-size:11.5px;color:var(--gris);}
+.jnl-tete b{color:var(--texte,#1c2333);}
+.jnl-txt{margin-top:4px;font-size:13px;line-height:1.45;white-space:pre-wrap;}
+.jnl-rep{margin:6px 0 0 12px;border-left:2px solid #3a9a5b;background:#fff;padding:4px 8px;font-size:12.5px;white-space:pre-wrap;}
+.jnl-rep.jnl-rep-auteur{border-left-color:#9aa6c4;}
+.jnl-rep small{display:block;color:var(--gris);font-size:11px;}
+.jnl-btns{display:flex;justify-content:flex-end;gap:6px;margin-top:7px;}
+.jnl-btns .btn,.jnl-btns .btn-2{font-size:12px;padding:5px 11px;}
+.jnl-boite{cursor:default;}
+.jnl-boite textarea{width:100%;box-sizing:border-box;min-height:58px;margin-top:7px;font:inherit;font-size:12.5px;padding:7px;border:1px solid var(--trait);border-radius:6px;}
+.jc-notes-ant{margin-top:14px;border:1px dashed var(--trait);border-radius:9px;padding:8px 11px;background:#fafbfd;}
+.jc-notes-ant>summary{cursor:pointer;color:var(--gris);font-weight:600;font-size:12.5px;}
+.jc-notes-ant .jc{opacity:.8;}
 </style>
 </head>
 <body>
@@ -4042,6 +4067,7 @@ function notifsDe(ag){
         vus.add(j.id);
         if(!designe(c.tblJournal,j,c.colJnlCollab,ag)) return;
         const clos=!!(c.colJnlTraite && j[c.colJnlTraite]===true);
+        if(clos) return;                          // demande clôturée : plus rien à signaler
         out.push({cle:"journal:"+j.id+":collab",genre:"journal",p,a:x.id!==p.id?x:null,j,
           lib:txt(lire(c.tblJournal,j,c.colJnlTexte)).trim(),date:num(j[c.colJnlDate]),
           ech:clos?null:num(j[c.colJnlDelai]),
@@ -4052,9 +4078,11 @@ function notifsDe(ag){
   /* rappel de ses propres demandes du journal, en retard ou à moins de 15 jours */
   if(typeof demandesDe==="function") demandesDe(ag).forEach(n=>{
     const e=etatNotif(n.ech);
-    if(e && (e.k==="retard"||e.k==="proche") && !out.some(o=>o.genre==="journal" && o.j.id===n.j.id))
+    if(e && (e.k==="retard"||e.k==="proche") && n.statut!=="repondue" && !out.some(o=>o.genre==="journal" && o.j.id===n.j.id))
       out.push(Object.assign({},n,{genre:"rappel",cle:"rappel:"+n.j.id}));
   });
+  /* réponses reçues à ses demandes, relances reçues sur les demandes qui lui sont adressées */
+  if(typeof jnlNotifs==="function") jnlNotifs(ag,out);
   /* ce qui existait à la dernière remise à zéro est réputé lu pour cet agent */
   const B=baseNotifs();
   return B.size ? out.filter(n=>!B.has(ag.id+"|"+n.cle)) : out;
@@ -4176,7 +4204,9 @@ const NT_GENRES={
   action:{lib:"Actions",ic:"A",phrase:"Vous êtes porteur de l'action"},
   tache:{lib:"Tâches",ic:"T",phrase:"Vous êtes porteur de la tâche"},
   journal:{lib:"Journal de bord",ic:"J",phrase:"Vous êtes désigné dans le journal de bord"},
-  rappel:{lib:"Rappels",ic:"R",phrase:"Rappel de votre demande"}};
+  rappel:{lib:"Rappels",ic:"R",phrase:"Rappel de votre demande"},
+  reponse:{lib:"Réponses",ic:"↩",phrase:"Réponse à votre demande"},
+  relance:{lib:"Relances",ic:"↻",phrase:"Relance d'une demande qui vous est adressée"}};
 function etatNotif(ts){
   if(!ts) return null;
   const j=Math.round((ts-aujourdHuiUTC())/86400);
@@ -4293,7 +4323,7 @@ function ouvrirNotifMobile(n){
   const m=S.mob;
   m.ecran="fiche";
   let cible=null;
-  if(n.genre==="journal" || n.genre==="rappel"){
+  if(["journal","rappel","reponse","relance"].includes(n.genre)){
     m.onglet="journal";
     rendreMobile(); window.scrollTo(0,0);
     const b=document.querySelector('#mb-corps [data-mbrep="'+n.j.id+'"], #mb-corps [data-mbclore="'+n.j.id+'"]');
@@ -4318,7 +4348,8 @@ function ouvrirNotifMobile(n){
    (Utilisateur = e-mail du compte). Protégé par le mot de passe des réglages.
    Les messageries étant sécurisées, rien n'est envoyé : adresse, objet et
    message se copient, le message avec sa mise en forme (HTML + texte brut). */
-const NR_GEN={action:"Porteur de l'action",tache:"Porteur de la tâche",journal:"Désigné dans le journal de bord"};
+const NR_GEN={action:"Porteur de l'action",tache:"Porteur de la tâche",journal:"Désigné dans le journal de bord",
+  rappel:"Rappel de sa demande",reponse:"Réponse à sa demande",relance:"Relance d'une demande"};
 function recapNotifs(){
   const c=S.cfg, luesPar=new Map();
   if(notifTableOk() && c.colNotifUtil)
@@ -7060,9 +7091,10 @@ function vueJournal(p){
     return e?'<span class="pastille jc-ech jc-'+e.k+'" title="Délai d\'exécution">⏱ '+
       esc(dateVersFR(e.ts))+(e.k==="solde"?'':' <em>'+libEch(e)+'</em>')+'</span>':'';
   };
-  const caseSolde=j=>(c.colJnlTraite && c.colJnlDelai && Number(j[c.colJnlDelai]))
-    ? '<label class="jc-solde'+(j[c.colJnlTraite]===true?" coche":"")+'" title="Marquer l\'échéance comme soldée">'+
-      '<input type="checkbox" data-soldej="'+j.id+'"'+(j[c.colJnlTraite]===true?" checked":"")+'> Soldé</label>'
+  const caseSolde=j=>(c.colJnlTraite && ((c.colJnlDelai && Number(j[c.colJnlDelai])) ||
+      (!mereJnl(j) && c.colJnlCollab && txt(lire(c.tblJournal,j,c.colJnlCollab)).trim())))
+    ? '<label class="jc-solde'+(j[c.colJnlTraite]===true?" coche":"")+'" title="Clôturer la demande">'+
+      '<input type="checkbox" data-soldej="'+j.id+'"'+(j[c.colJnlTraite]===true?" checked":"")+'> Clôturée</label>'
     : '';
   const crayon=j=>'<button type="button" class="jc-crayon" data-edj="'+j.id+'" title="Modifier l\'entrée" '+
     'aria-label="Modifier l\'entrée">'+CRAYON+'</button>';
@@ -7103,7 +7135,7 @@ function vueJournal(p){
         (nat?'<span class="pastille jc-nat">'+marque(nat)+'</span>':'')+
         (act?'<span class="pastille p-action" title="'+esc(act)+'">'+marque(act)+'</span>':'')+
         (collab?'<span class="pastille p-collab">'+marque(collab)+'</span>':'')+
-        pastEch(j)+
+        jnlStatutHtml(j)+pastEch(j)+
         '<span class="jc-outils">'+caseSolde(j)+crayon(j)+'</span>'+
       '</div>'+
       (ed ? edition(j,false)
@@ -7123,9 +7155,18 @@ function vueJournal(p){
     '</article>';
   };
 
+  /* entrées sans destinataire (anciennes notes) : repliées, en lecture seule */
+  const estDemande=f=>!c.colJnlCollab || !!txt(lire(c.tblJournal,f.j,c.colJnlCollab)).trim();
+  const notesAnt=visibles.filter(f=>!estDemande(f));
+  const notesHtml=notesAnt.length
+    ? '<details class="jc-notes-ant" id="jc-notes-ant"'+(S.jnlNotesOuv?" open":"")+'><summary>Notes antérieures (lecture seule) · '+
+      notesAnt.length+'</summary>'+notesAnt.slice().sort((a,b)=>(Number(b.j[c.colJnlDate])||0)-(Number(a.j[c.colJnlDate])||0))
+        .map(f=>carte(f).replace(/<span class="jc-outils">[\s\S]*?<\/span>/g,"")
+          .replace(/<button type="button" class="jc-lien" data-repj="\d+">[^<]*<\/button>/g,"")).join("")+'</details>'
+    : '';
   /* chronologie : mois de la date de l'événement, du plus récent au plus ancien */
   const groupes=new Map();
-  visibles.slice().sort((a,b)=>(Number(b.j[c.colJnlDate])||0)-(Number(a.j[c.colJnlDate])||0))
+  visibles.filter(estDemande).slice().sort((a,b)=>(Number(b.j[c.colJnlDate])||0)-(Number(a.j[c.colJnlDate])||0))
     .forEach(f=>{
       const ts=Number(f.j[c.colJnlDate]);
       const k=ts?dateVersISO(ts).slice(0,7):"sans-date";
@@ -7151,7 +7192,7 @@ function vueJournal(p){
         '<span>'+fs.length+' entrée'+(fs.length>1?"s":"")+'</span></div>'+fs.map(carte).join("")+'</section>').join("")
     : (fils.length
         ? '<div class="vide"><b>Aucune entrée ne correspond aux filtres</b>Élargissez la recherche ou réinitialisez les filtres.</div>'
-        : '<div class="vide"><b>Journal vide</b>Ajoutez la première entrée avec « + Nouvelle entrée ».</div>');
+        : '<div class="vide"><b>Journal vide</b>Adressez une première demande avec « ✉ Nouvelle demande ».</div>');
 
   const legende=natures.length
     ? '<div class="jc-legende">'+natures.map(n=>'<span><i style="background:'+couleurNature(n)+'"></i>'+
@@ -7173,14 +7214,14 @@ function vueJournal(p){
         champAction(p,"j-action",null)+'</div>':'')+
       (c.colJnlAuteur?'<div class="champ"><label>Auteur de la saisie</label>'+
         champOuvert(c.tblJournal,c.colJnlAuteur,"j-auteur")+'</div>':'')+
-      (c.colJnlCollab?'<div class="champ"><label>Collaborateur concerné</label>'+
+      (c.colJnlCollab&&!S.reponseA?'<div class="champ"><label>Destinataire (collaborateur concerné)</label>'+
         champOuvert(c.tblJournal,c.colJnlCollab,"j-collab")+'</div>':'')+
-      (c.colJnlDelai?'<div class="champ"><label>Délai d\'exécution <em>(facultatif)</em></label>'+
+      (c.colJnlDelai?'<div class="champ"><label>Délai d\'exécution'+(S.reponseA?' <em>(facultatif)</em>':'')+'</label>'+
         champDateFR('id="j-delai"','','')+'</div>':'')+
-      '<div class="champ pleine"><label>Commentaire</label><textarea id="j-texte" class="auto-h"></textarea></div>'+
+      '<div class="champ pleine"><label>'+(S.reponseA?"Réponse":"Demande")+'</label><textarea id="j-texte" class="auto-h"></textarea></div>'+
       '</div><div class="jb-form-pied">'+
         '<button type="button" class="btn-2" id="j-fermer">Annuler</button>'+
-        '<button class="btn" id="j-ajouter">'+(S.reponseA?"Répondre":"Ajouter au journal")+'</button>'+
+        '<button class="btn" id="j-ajouter">'+(S.reponseA?"Répondre":"Envoyer la demande")+'</button>'+
       '</div></div>';
 
   $("#corps").innerHTML=
@@ -7191,7 +7232,7 @@ function vueJournal(p){
           (v?'':' disabled')+' aria-pressed="'+(F.etat===k)+'"><i></i><b>'+v+'</b> '+l+'</button>').join("")+
         '</div>'+
         '<button type="button" class="btn" id="jb-nouv" aria-expanded="'+!!S.jnlForm+'">'+
-          (S.jnlForm?"Fermer le formulaire":"+ Nouvelle entrée")+'</button>'+
+          (S.jnlForm?"Fermer le formulaire":"✉ Nouvelle demande")+'</button>'+
       '</div>'+
       formulaire+
       '<div class="jb-filtres">'+
@@ -7214,13 +7255,14 @@ function vueJournal(p){
         (filtreActif?'<button type="button" class="btn-raz" id="jf-raz">Réinitialiser</button>':'')+
       '</div>'+legende+
     '</div>'+
-    '<div id="jb-chrono">'+chrono+'</div>';
+    '<div id="jb-chrono">'+chrono+notesHtml+'</div>';
 
   brancherAutoHauteur();
   brancherEcheances(p);
   brancherPJ();
   brancherEditeurs();
   brancherLibelleDate("j-nature","j-date-lib");
+  const dna=$("#jc-notes-ant"); if(dna) dna.ontoggle=()=>{ S.jnlNotesOuv=dna.open; };
 
   /* --- filtres --- */
   document.querySelectorAll("[data-jpill]").forEach(b=>b.onclick=()=>{
@@ -7256,7 +7298,7 @@ function vueJournal(p){
       cb.checked=!val; return;
     }
     const l=ligneDe(c.tblJournal,id); if(l) l[c.colJnlTraite]=val;
-    toast(val?"Échéance soldée":"Échéance rouverte");
+    toast(val?"Demande clôturée":"Demande rouverte");
     vueJournal(p);
     charger().then(()=>{ if(S.onglet==="journal") rendreProjet(); }).catch(e=>console.warn(e.message));
   });
@@ -7298,6 +7340,10 @@ function vueJournal(p){
       if(va===undefined) return;
       champs[c.colJnlAuteur]=va;
     }
+    if(!S.reponseA && c.colJnlCollab && $("#j-collab") && !String($("#j-collab").value||"").trim()){
+      toast("Indiquez le destinataire de la demande.",true); return; }
+    if(!S.reponseA && c.colJnlDelai && $("#j-delai") && !String($("#j-delai").value||"").trim()){
+      toast("Indiquez le délai d'exécution.",true); return; }
     if(c.colJnlCollab && $("#j-collab")){
       const vc=lireOuvert("j-collab",c.tblJournal,c.colJnlCollab,"Collaborateur concerné");
       if(vc===undefined) return;
@@ -15586,6 +15632,11 @@ function mbSynthese(p){
         '<div class="mb-desc">'+esc(lire(c.tblMain,p,c.colDescriptif))+'</div></div>'
       : '')+
 
+    (c.colCommentaire
+      ? '<div class="mb-carte mb-com-projet"><h3>Commentaire</h3>'+mbBoutonCom(c.tblMain,p,c.colCommentaire)+
+        commentaireLecture(p[c.colCommentaire])+'</div>'
+      : '')+
+
     '<div class="mb-carte"><h3>Échéances</h3>'+
       (ech.length
         ? ech.map(e=>'<div class="mb-item '+(e.etat==="depasse"?"retard":(e.etat==="proche"?"proche":""))+'">'+
@@ -15630,6 +15681,10 @@ function mbSynthese(p){
   const det=document.querySelector(".mb-pj");
   if(det) det.ontoggle=()=>{ S.mob.pjOuvert=det.open; };
   brancherPJ();
+  document.querySelectorAll(".mb-com-projet [data-bulle-t]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    ouvrirBulle(b,b.dataset.bulleT,Number(b.dataset.bulleR),b.dataset.bulleC,()=>rendreMobile());
+  });
 }
 
 /* Actions et tâches réunis : une action se déplie sur ses tâches. */
@@ -15871,7 +15926,7 @@ function mbJournal(p){
         ? '<i>⏱ '+esc(dateVersFR(j[c.colJnlDelai]))+'</i>':'')+
       (c.colJnlCollab&&lire(c.tblJournal,j,c.colJnlCollab)
         ? '<span class="pastille p-collab">'+
-          esc(lire(c.tblJournal,j,c.colJnlCollab))+'</span>':'')+'</div>'+
+          esc(lire(c.tblJournal,j,c.colJnlCollab))+'</span>':'')+(rep?'':jnlStatutHtml(j))+'</div>'+
       '<p>'+(rep?'↳ ':'')+esc(lire(c.tblJournal,j,c.colJnlTexte))+'</p>'+
       (c.colJnlReponse&&!rep
         ? '<button type="button" class="mb-chip" data-mbrep="'+j.id+'" '+
@@ -15886,14 +15941,14 @@ function mbJournal(p){
             (e.jours<0?"en retard de "+(-e.jours)+" j":(e.jours===0?"aujourd\'hui":"dans "+e.jours+" j"))+
           '</i>'+
           (c.colJnlCollab&&lire(c.tblJournal,e.j,c.colJnlCollab)
-            ? '<span class="pastille p-collab">'+esc(lire(c.tblJournal,e.j,c.colJnlCollab))+'</span>':'')+
+            ? '<span class="pastille p-collab">'+esc(lire(c.tblJournal,e.j,c.colJnlCollab))+'</span>':'')+jnlStatutHtml(e.j)+
           '</div><p>'+esc(lire(c.tblJournal,e.j,c.colJnlTexte)||"(sans commentaire)")+'</p>'+
           (c.colJnlTraite?'<button type="button" class="mb-chip" data-mbclore="'+e.j.id+'" '+
-            'style="margin-top:6px">Traité</button>':'')+
+            'style="margin-top:6px">✓ Clôturer</button>':'')+
           '</div>').join("")+'</div>'
       : '')+
     '<details class="mb-carte mb-pj mb-jform" id="mbj-form"'+(S.reponseA||S.mob.jnlForm?' open':'')+'>'+
-      '<summary><span>'+(S.reponseA?"Répondre":"Ajouter une entrée")+'</span></summary>'+
+      '<summary><span>'+(S.reponseA?"Répondre":"✉ Nouvelle demande")+'</span></summary>'+
       '<div class="dedans mb-form">'+
       (S.reponseA
         ? '<p class="sous">En réponse à '+esc(dateVersFR(S.reponseA[c.colJnlDate]))+' — '+
@@ -15903,7 +15958,7 @@ function mbJournal(p){
       '<label>Commentaire</label><textarea id="mbj-texte"></textarea>'+
       (c.colJnlAuteur?'<label>Auteur de la saisie</label>'+
         champOuvert(c.tblJournal,c.colJnlAuteur,"mbj-auteur"):'')+
-      (c.colJnlCollab?'<label>Collaborateur concerné</label>'+
+      (c.colJnlCollab&&!S.reponseA?'<label>Destinataire (collaborateur concerné)</label>'+
         champOuvert(c.tblJournal,c.colJnlCollab,"mbj-collab"):'')+
       (c.colJnlNature?'<label>Nature / origine</label>'+
         champVierge(c.tblJournal,c.colJnlNature,"mbj-nature"):'')+
@@ -15956,6 +16011,10 @@ function mbJournal(p){
       if(va===undefined) return;
       champs[c.colJnlAuteur]=va;
     }
+    if(!S.reponseA && c.colJnlCollab && $("#mbj-collab") && !String($("#mbj-collab").value||"").trim()){
+      toast("Indiquez le destinataire de la demande.",true); return; }
+    if(!S.reponseA && c.colJnlDelai && $("#mbj-delai") && !String($("#mbj-delai").value||"").trim()){
+      toast("Indiquez le délai d'exécution.",true); return; }
     if(c.colJnlCollab && $("#mbj-collab")){
       const vc=lireOuvert("mbj-collab",c.tblJournal,c.colJnlCollab,"Collaborateur concerné");
       if(vc===undefined) return;
@@ -16545,22 +16604,18 @@ function auteurEst(j,ag){
   return !!a && a===n;
 }
 function demandesDe(ag){
+  /* demandes de premier niveau écrites par l'agent, adressées à quelqu'un ou assorties d'un délai, non clôturées */
   const c=S.cfg, out=[];
-  if(!ag || !c.tblJournal || !c.colJnlLien || !c.colJnlAuteur || !c.colJnlDelai) return out;
-  const vus=new Set();
-  S.data.main.filter(r=>estProjet(r) && !estArchive(r)).forEach(p=>{
-    [p].concat(actionsDe(p)).forEach(x=>journalDe(x).forEach(j=>{
-      if(vus.has(j.id)) return;
-      vus.add(j.id);
-      const ech=Number(j[c.colJnlDelai])||null;
-      if(!ech || (c.colJnlTraite && j[c.colJnlTraite]===true) || !auteurEst(j,ag)) return;
-      out.push({cle:"demande:"+j.id, genre:"demande", p, a:x.id!==p.id?x:null, j, ech,
-        lib:txt(lire(c.tblJournal,j,c.colJnlTexte)).trim(),
-        date:Number(j[c.colJnlDate])||null,
-        collab:c.colJnlCollab?lire(c.tblJournal,j,c.colJnlCollab):""});
-    }));
+  if(!ag || !c.tblJournal || !c.colJnlLien) return out;
+  jnlDemandes((m,p,a)=>{
+    if(jnlClos(m)) return;
+    const collab=c.colJnlCollab?txt(lire(c.tblJournal,m,c.colJnlCollab)).trim():"";
+    const ech=c.colJnlDelai?(Number(m[c.colJnlDelai])||null):null;
+    if((!collab && !ech) || !jnlEcritPar(m,ag)) return;
+    out.push(Object.assign(jnlElement(m,p,a),{cle:"demande:"+m.id,genre:"demande"}));
   });
-  return out.sort((a,b)=>a.ech-b.ech);
+  const rang=n=>n.statut==="repondue"?0:1;
+  return out.sort((x,y)=>rang(x)-rang(y)||((x.ech||9e12)-(y.ech||9e12)));
 }
 /* ligne grise : projet (code en étiquette), puis action parente si elle n'est pas le sujet ;
    jamais ce qui répète l'intitulé */
@@ -16582,7 +16637,7 @@ function delaiHtml(ts){
   if(e.k==="proche") return '<span class="mt-delai p" title="Échéance '+dateVersFR(ts)+'">'+(j===0?"aujourd'hui":"dans "+j+" j")+'</span>';
   return '<span class="mt-delai a">'+dateVersFR(ts)+'</span>';
 }
-const MT_GENRE={action:"Action",tache:"Tâche",journal:"Journal",rappel:"Rappel",demande:"Journal",projet:"Projet"};
+const MT_GENRE={action:"Action",tache:"Tâche",journal:"Journal",rappel:"Rappel",demande:"Journal",projet:"Projet",reponse:"Réponse",relance:"Relance"};
 
 function rendreTravail(){
   const z=$("#zone-travail"), c=S.cfg;
@@ -16618,7 +16673,8 @@ function rendreTravail(){
   /* une information n'apparaît qu'à un seul endroit : non lue, elle est dans Notifications ;
      une fois lue, elle rejoint sa carte (actions, tâches, journal, demandes). Les échéances
      sont portées par chaque ligne, triée par date. */
-  const L=notifsLues(), nl=autre ? [] : (S.notifs||[]).filter(n=>!L.has(n.cle));
+  /* les demandes reçues du journal ont leur propre carte (réponse sur place) */
+  const L=notifsLues(), nl=autre ? [] : (S.notifs||[]).filter(n=>!L.has(n.cle) && n.genre!=="journal");
   const ident=n=>n.genre==="action"?"a:"+n.a.id : n.genre==="tache"?"t:"+n.t.id : n.genre==="journal"?"j:"+n.j.id
     : (n.genre==="rappel"||n.genre==="demande")?"d:"+n.j.id : n.cle;
   const enNotif=new Set(nl.map(ident));
@@ -16626,16 +16682,11 @@ function rendreTravail(){
   const parDate=(a,b)=>(a.ech||9e12)-(b.ech||9e12);
   const acts=els.filter(n=>n.genre==="action" && (!idsMesProjets.has(n.p.id) || urgente(n)) && libre(n)).sort(parDate),
         taches=els.filter(n=>n.genre==="tache" && libre(n)).sort(parDate),
-        dem=els.filter(n=>n.genre==="journal" && n.ech && libre(n)).sort(parDate);
+        jnl=jnlCartesTravail(ag,autre,M,L);
   const dateHtml=t=>'<span class="'+(t<auj?"app-ret":"app-mut")+'">'+dateVersFR(t)+'</span>';
   const it=(n,i,droite)=>{ const sl=sousLigneTravail(n);
     return '<div class="mt-it" data-i="'+i+'"><div class="mt-x">'+esc(n.lib||"(sans libellé)")+
       (sl?'<small>'+sl+'</small>':'')+'</div>'+(droite||"")+'</div>'; };
-  const demandes=demandesDe(ag).filter(libre);
-  const itDemande=(n,i)=>'<div class="mt-it" data-i="'+i+'"><div class="mt-x"><span class="mt-genre">Journal</span><b class="mt-lib">'+
-    esc((n.lib||"(entrée sans commentaire)").length>120?n.lib.slice(0,120)+"…":(n.lib||"(entrée sans commentaire)"))+'</b>'+
-    '<small>'+(n.collab?'Demandé à <b>'+esc(n.collab)+'</b>':'Sans collaborateur désigné')+(n.date?' le '+dateVersFR(n.date).slice(0,5):'')+
-    ' · '+libelleProjetHtml(lire(c.tblMain,n.p,c.colLibelle))+'</small></div>'+delaiHtml(n.ech)+'</div>';
   const tous=[];
   /* seules les cartes qui ont quelque chose à traiter s'affichent */
   const bloc=(titre,compte,items,rendu)=>{
@@ -16659,13 +16710,13 @@ function rendreTravail(){
         '<small><span class="mt-raison">'+esc(n.raisons.join(" · "))+'</span></small></div>'+barreAppHtml(n.p)+'</div>')+
     bloc(M+"actions de mise en œuvre",acts.length,acts,(n,i)=>it(n,i,delaiHtml(n.ech)))+
     bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,delaiHtml(n.ech)))+
-    (dem.length?bloc("Demandes du journal",dem.length,dem,(n,i)=>it(n,i,delaiHtml(n.ech))):"")+
-    (S.cfg.colJnlAuteur && S.cfg.colJnlDelai ? bloc(M+"demandes à suivre",demandes.length+" en attente",demandes,itDemande) : "")+
+    jnl.html+
     (autre||!nl.length?"":carteNotifs(ag,autre,nl,tous))+
   '</div>';
   if(!z.querySelector(".mt-carte")) z.querySelector(".mt-grille").outerHTML='<div class="app-vide mt-rien">✓ Rien à traiter pour le moment.</div>';
   /* demandes à l'administrateur (et, pour lui, demandes reçues) */
   if(typeof demCartesTravail==="function"){ demCartesTravail(z.querySelector(".mt-grille"), z); demCharger().then(()=>{ /* rafraîchi au prochain rendu */ }); }
+  jnlBrancherTravail(z,jnl.items,ag);
   const ntout=$("#mt-tout-lu");
   if(ntout) ntout.onclick=()=>{ const k=nl.length; marquerLues(nl); toast(k+" notification"+(k>1?"s":"")+" marquée"+(k>1?"s":"")+" comme lue"+(k>1?"s":"")); };
   z.querySelectorAll("[data-mtf]").forEach(b=>b.onclick=()=>{ APP.filtreNotifs=b.dataset.mtf; rendreTravail(); });
@@ -16702,8 +16753,10 @@ function carteNotifs(ag,autre,nl,tous){
       tous.push(n); const i=tous.length-1;
       const lu=lues.has(n.cle);
       let texte=(n.lib||"").length>140?(n.lib||"").slice(0,140)+"…":(n.lib||"");
-      if(n.genre==="journal") texte=texte||"(entrée sans commentaire)";
+      if(n.genre==="journal"||n.genre==="reponse"||n.genre==="relance") texte=texte||"(entrée sans commentaire)";
       const avant = n.genre==="journal" ? (n.auteur?'Désigné par <b>'+esc(n.auteur)+'</b> · ':'Désigné dans le journal · ')
+        : n.genre==="reponse" ? '<b>'+esc(n.auteur||"Réponse")+'</b> a répondu à « '+esc(jnlCourt(n.demande,60))+' » · '
+        : n.genre==="relance" ? '<b>'+esc(n.auteur||"L\'auteur")+'</b> relance « '+esc(jnlCourt(n.demande,60))+' » · ' 
         : n.genre==="rappel" ? (n.collab?'Votre demande à <b>'+esc(n.collab)+'</b> · ':'Votre demande · ') : '';
       const sl=sousLigneTravail(n);
       h+='<div class="mt-it mt-notif'+(lu?" lu":"")+'" data-i="'+i+'" data-notif="1"><div class="mt-x">'+
@@ -17959,6 +18012,280 @@ async function demOuvrirAdmin(focusId){
     const f=v.querySelector(".dem-focus"); if(f) f.scrollIntoView({block:"center"});
   };
   rendre();
+}
+
+/* =======================================================================
+   Journal de bord = communications : demande → réponse → clôture.
+   Une demande est une entrée de premier niveau adressée à un collaborateur
+   (avec un délai). Le destinataire répond depuis Mon travail ; la réponse
+   est une entrée « Réponse à » la demande, et notifie l'auteur. L'auteur
+   clôture (case « Traité ») ou relance, ce qui notifie le destinataire.
+   L'auteur est reconnu par la colonne Auteur_Email (formule d'initialisation
+   user.Email) quand elle existe, sinon par son nom.
+   ======================================================================= */
+let JNL={src:null,idx:new Map()};
+const JNLM={ouverts:new Set()};
+
+function jnlColEmail(){
+  const c=S.cfg;
+  if(!c.tblJournal) return "";
+  const cols=(typeof colonnesDe==="function"?colonnesDe(c.tblJournal):[])||[];
+  const pli=x=>String(x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const k=cols.find(x=>pli(x.colId)==="auteuremail") || cols.find(x=>pli(x.label)==="auteuremail");
+  return k ? k.colId : "";
+}
+function jnlEmail(j){ const ce=jnlColEmail(); return ce&&j ? txt(j[ce]).trim().toLowerCase() : ""; }
+function jnlEmailAgent(ag){
+  const c=S.cfg;
+  if(!ag) return "";
+  const m=(c.colAgentCompte && infoCol(c.tblAgent,c.colAgentCompte)) ? txt(lire(c.tblAgent,ag,c.colAgentCompte)).trim().toLowerCase() : "";
+  if(m) return m;
+  return (S.notifAgent && ag.id===S.notifAgent.id && S.moiEmail) ? String(S.moiEmail).toLowerCase() : "";
+}
+function jnlAuteurNom(j){ const c=S.cfg; return c.colJnlAuteur ? txt(lire(c.tblJournal,j,c.colJnlAuteur)).trim() : ""; }
+/* l'entrée a-t-elle été écrite par l'agent ? */
+function jnlEcritPar(j,ag){
+  const e=jnlEmail(j);
+  if(e){ const m=jnlEmailAgent(ag); if(m) return e===m; }
+  return auteurEst(j,ag);
+}
+/* deux entrées du même auteur ? */
+function jnlMemeAuteur(a,b){
+  const ea=jnlEmail(a), eb=jnlEmail(b);
+  if(ea && eb) return ea===eb;
+  const na=motsTries(jnlAuteurNom(a)), nb=motsTries(jnlAuteurNom(b));
+  return !!na && na===nb;
+}
+function jnlClos(j){ const c=S.cfg; return !!(c.colJnlTraite && j[c.colJnlTraite]===true); }
+
+/* réponses de chaque fil (un seul niveau), les plus anciennes d'abord */
+function jnlIndex(){
+  const c=S.cfg, js=S.data.journal||[];
+  if(JNL.src===js) return JNL.idx;
+  const parId=new Map(js.map(j=>[j.id,j])), idx=new Map();
+  if(c.colJnlReponse) js.forEach(j=>{
+    if(!mereJnl(j)) return;
+    const r=racineJnl(j,parId);
+    if(!r || r===j) return;
+    if(!idx.has(r.id)) idx.set(r.id,[]);
+    idx.get(r.id).push(j);
+  });
+  idx.forEach(l=>l.sort((a,b)=>((Number(a[c.colJnlDate])||0)-(Number(b[c.colJnlDate])||0))||(a.id-b.id)));
+  JNL={src:js,idx};
+  return idx;
+}
+function jnlReponses(m){ return jnlIndex().get(m.id)||[]; }
+/* « clos », « repondue » (dernier mot à quelqu'un d'autre que l'auteur) ou « attente » */
+function jnlStatut(m){
+  if(jnlClos(m)) return "clos";
+  const reps=jnlReponses(m), der=reps[reps.length-1];
+  if(!der || jnlMemeAuteur(der,m)) return "attente";
+  return "repondue";
+}
+const JNL_STATUTS={attente:["en attente","g"],repondue:["répondue","v"],clos:["clôturée","g"]};
+function jnlStatutHtml(m){
+  const c=S.cfg;
+  if(!c.colJnlCollab || !txt(lire(c.tblJournal,m,c.colJnlCollab)).trim()) return "";
+  const s=JNL_STATUTS[jnlStatut(m)];
+  return '<span class="jnl-st jnl-st-'+s[1]+'">'+s[0]+'</span>';
+}
+
+/* parcourt les demandes de premier niveau des projets non archivés */
+function jnlDemandes(f){
+  const c=S.cfg;
+  if(!c.tblJournal || !c.colJnlLien) return;
+  const vus=new Set();
+  S.data.main.filter(r=>estProjet(r) && !estArchive(r)).forEach(p=>{
+    [p].concat(actionsDe(p)).forEach(x=>journalDe(x).forEach(m=>{
+      if(vus.has(m.id) || mereJnl(m)) return;
+      vus.add(m.id);
+      f(m,p,x.id!==p.id?x:null);
+    }));
+  });
+}
+function jnlElement(m,p,a){
+  const c=S.cfg;
+  return {p,a,j:m,lib:txt(lire(c.tblJournal,m,c.colJnlTexte)).trim(),
+    date:Number(m[c.colJnlDate])||null, ech:Number(m[c.colJnlDelai])||null,
+    auteur:jnlAuteurNom(m), collab:c.colJnlCollab?lire(c.tblJournal,m,c.colJnlCollab):"",
+    reps:jnlReponses(m), statut:jnlStatut(m)};
+}
+
+/* notifications : réponse reçue (auteur), relance reçue (destinataire) */
+function jnlNotifs(ag,out){
+  const c=S.cfg;
+  if(!ag || !c.colJnlReponse) return;
+  jnlDemandes((m,p,a)=>{
+    if(jnlClos(m)) return;
+    const reps=jnlReponses(m);
+    if(!reps.length) return;
+    const base={p,a,j:m,date:Number(m[c.colJnlDate])||null,ech:null,
+      demande:txt(lire(c.tblJournal,m,c.colJnlTexte)).trim()};
+    if(jnlEcritPar(m,ag))
+      reps.filter(r=>!jnlMemeAuteur(r,m)).forEach(r=>out.push(Object.assign({},base,
+        {cle:"reponse:"+r.id,genre:"reponse",r,lib:txt(lire(c.tblJournal,r,c.colJnlTexte)).trim(),auteur:jnlAuteurNom(r)})));
+    else if(c.colJnlCollab && designe(c.tblJournal,m,c.colJnlCollab,ag))
+      reps.filter(r=>jnlMemeAuteur(r,m)).forEach(r=>out.push(Object.assign({},base,
+        {cle:"relance:"+r.id,genre:"relance",r,lib:txt(lire(c.tblJournal,r,c.colJnlTexte)).trim(),auteur:jnlAuteurNom(r)})));
+  });
+}
+
+/* demandes adressées à l'agent, non clôturées */
+function jnlRecues(ag){
+  const c=S.cfg, out=[];
+  if(!ag || !c.colJnlCollab) return out;
+  jnlDemandes((m,p,a)=>{
+    if(jnlClos(m) || !designe(c.tblJournal,m,c.colJnlCollab,ag)) return;
+    out.push(Object.assign(jnlElement(m,p,a),{cle:"journal:"+m.id+":collab",genre:"journal"}));
+  });
+  const rang=n=>n.statut==="attente"?0:1;
+  return out.sort((x,y)=>rang(x)-rang(y)||((x.ech||9e12)-(y.ech||9e12)));
+}
+
+/* valeur à écrire pour désigner l'agent dans une colonne (Ref, RefList, Choice, texte) */
+function jnlValeurAgent(tableId,col,ag){
+  const c=S.cfg, info=infoCol(tableId,col), nom=nomAgent(ag);
+  if(!info) return nom||null;
+  const m=/^(Ref|RefList):(.+)$/.exec(info.type);
+  if(m){
+    let id=null;
+    if(info.refTable===c.tblAgent) id=ag.id;
+    else{
+      const map=S.refLabels[info.refTable+"."+info.refDisplay]||{};
+      const k=Object.keys(map).find(i=>pliColonne(map[i])===pliColonne(nom));
+      id=k?Number(k):null;
+    }
+    if(!id) return null;
+    return m[1]==="RefList" ? ["L",id] : id;
+  }
+  return nom||null;
+}
+
+async function jnlAjouterReponse(n,texte,ag){
+  const c=S.cfg, m=n.j;
+  const champs={[c.colJnlTexte]:texte};
+  if(c.colJnlDate) champs[c.colJnlDate]=aujourdHuiUTC();
+  if(c.colJnlAuteur && ag){ const v=jnlValeurAgent(c.tblJournal,c.colJnlAuteur,ag); if(v!=null) champs[c.colJnlAuteur]=v; }
+  const lien=m[c.colJnlLien];
+  champs[c.colJnlLien]=Array.isArray(lien)?lien.slice():lien;
+  if(c.colJnlAction){ const v=m[c.colJnlAction]; if(v!==undefined && v!==null && v!=="") champs[c.colJnlAction]=Array.isArray(v)?v.slice():v; }
+  const ir=infoCol(c.tblJournal,c.colJnlReponse);
+  champs[c.colJnlReponse]=(ir&&ir.type.startsWith("RefList:"))?["L",m.id]:m.id;
+  await appliquer([["AddRecord",c.tblJournal,null,champs]],traceCreation(c.tblJournal,champs,n.p));
+}
+async function jnlCloturer(m){
+  const c=S.cfg;
+  await appliquer([["UpdateRecord",c.tblJournal,m.id,{[c.colJnlTraite]:true}]],
+    [traceModif(c.tblJournal,m.id,c.colJnlTraite,true)]);
+}
+
+/* ---------- cartes de Mon travail ---------- */
+function jnlFilHtml(n,max){
+  const c=S.cfg, reps=n.reps.slice(-(max||3));
+  return reps.map(r=>'<div class="jnl-rep'+(jnlMemeAuteur(r,n.j)?" jnl-rep-auteur":"")+'"><small>'+
+    esc(dateVersFR(r[c.colJnlDate])||"")+(jnlAuteurNom(r)?' — '+esc(jnlAuteurNom(r)):'')+' :</small>'+
+    esc(lire(c.tblJournal,r,c.colJnlTexte)||"")+'</div>').join("");
+}
+function jnlCourt(t,n){ t=t||"(entrée sans commentaire)"; return t.length>(n||160)?t.slice(0,n||160)+"…":t; }
+
+function jnlCartesTravail(ag,autre,M,lues){
+  const c=S.cfg, items=[];
+  if(!c.tblJournal || !c.colJnlLien) return {html:"",items};
+  const recues=jnlRecues(ag), suivies=demandesDe(ag);
+  const boite=(k,ph,btns)=>JNLM.ouverts.has(k)
+    ? '<div class="jnl-boite" data-jbox="'+k+'"><textarea placeholder="'+ph+'"></textarea>'+
+      '<div class="jnl-btns"><button type="button" class="btn-2" data-jann="'+k+'">Annuler</button>'+btns+'</div></div>' : '';
+  let h="";
+  if(recues.length){
+    const nb=recues.filter(n=>n.statut==="attente").length;
+    h+='<div class="mt-carte jnl-carte"><h3>Demandes qui '+(autre?"lui":"me")+' sont adressées<span>'+
+      (nb?nb+" à traiter":"répondues")+'</span></h3>';
+    recues.slice(0,15).forEach(n=>{
+      items.push(n); const i=items.length-1, k="r"+i, rep=n.statut==="repondue";
+      const nouveau=!autre && lues && !lues.has(n.cle);
+      h+='<div class="jnl-it'+(rep?" jnl-faite":"")+'" data-ji="'+i+'">'+
+        '<div class="jnl-tete"><b>'+esc(n.auteur||"Auteur inconnu")+'</b> · '+libelleProjetHtml(lire(c.tblMain,n.p,c.colLibelle))+
+          (nouveau?'<span class="jnl-st jnl-st-n">nouveau</span>':'')+jnlStatutHtml(n.j)+
+          '<span class="fil-esp"></span>'+(rep?'':delaiHtml(n.ech))+'</div>'+
+        '<div class="jnl-txt">'+esc(jnlCourt(n.lib))+'</div>'+jnlFilHtml(n,2)+
+        (autre?'':(JNLM.ouverts.has(k)
+          ? boite(k,"Votre réponse…",'<button type="button" class="btn" data-jenv="'+i+'">Répondre</button>')
+          : '<div class="jnl-btns">'+(rep?'':'<button type="button" class="btn-2" data-jfait="'+i+'">✓ Fait</button>')+
+            '<button type="button" class="btn'+(rep?"-2":"")+'" data-jouv="'+k+'">'+(rep?"Compléter…":"Répondre…")+'</button></div>'))+
+      '</div>';
+    });
+    h+='</div>';
+  }
+  if(suivies.length){
+    const nr=suivies.filter(n=>n.statut==="repondue").length, na=suivies.length-nr;
+    h+='<div class="mt-carte jnl-carte"><h3>'+M+'demandes à suivre<span>'+
+      [na?na+" en attente":"",nr?nr+" répondue"+(nr>1?"s":""):""].filter(Boolean).join(" · ")+'</span></h3>';
+    suivies.slice(0,15).forEach(n=>{
+      items.push(n); const i=items.length-1, k="s"+i, rep=n.statut==="repondue";
+      h+='<div class="jnl-it'+(rep?" jnl-ok":"")+'" data-ji="'+i+'">'+
+        '<div class="jnl-tete">À <b>'+esc(n.collab||"(sans destinataire)")+'</b> · '+libelleProjetHtml(lire(c.tblMain,n.p,c.colLibelle))+
+          jnlStatutHtml(n.j)+'<span class="fil-esp"></span>'+(rep?'':delaiHtml(n.ech))+'</div>'+
+        '<div class="jnl-txt">'+esc(jnlCourt(n.lib))+'</div>'+jnlFilHtml(n,3)+
+        (autre?'':(JNLM.ouverts.has(k)
+          ? boite(k,"Relance ou précision…",'<button type="button" class="btn" data-jenv="'+i+'">Envoyer</button>')
+          : '<div class="jnl-btns"><button type="button" class="btn-2" data-jouv="'+k+'">'+(rep?"Relancer / préciser…":"Relancer…")+'</button>'+
+            (c.colJnlTraite?'<button type="button" class="btn'+(rep?"":"-2")+'" data-jclo="'+i+'">✓ Clôturer</button>':'')+'</div>'))+
+      '</div>';
+    });
+    h+='</div>';
+  }
+  return {html:h,items};
+}
+
+function jnlBrancherTravail(z,items,ag){
+  const c=S.cfg;
+  const apres=async msg=>{ await charger(); toast(msg); rendreTravail(); if(typeof majBadgeTravail==="function") majBadgeTravail(); };
+  const lu=n=>{ if(n && n.cle && n.genre==="journal" && !notifsLues().has(n.cle)) marquerLues([n]); };
+  z.querySelectorAll("[data-jouv]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation(); JNLM.ouverts.add(b.dataset.jouv); rendreTravail();
+    const t=z.querySelector('[data-jbox="'+b.dataset.jouv+'"] textarea'); if(t) t.focus();
+  });
+  z.querySelectorAll("[data-jann]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); JNLM.ouverts.delete(b.dataset.jann); rendreTravail(); });
+  z.querySelectorAll(".jnl-boite").forEach(x=>x.onclick=e=>e.stopPropagation());
+  z.querySelectorAll("[data-jenv]").forEach(b=>b.onclick=async e=>{
+    e.stopPropagation();
+    const n=items[Number(b.dataset.jenv)], box=b.closest(".jnl-boite"), t=box&&box.querySelector("textarea");
+    const texte=t?t.value.trim():"";
+    if(!n) return;
+    if(!texte){ toast("Saisissez votre message.",true); return; }
+    b.disabled=true;
+    try{ await jnlAjouterReponse(n,texte,ag); }
+    catch(err){ b.disabled=false; toast("Échec de l'enregistrement : "+err.message,true); return; }
+    JNLM.ouverts.delete(box.dataset.jbox); lu(n);
+    await apres(jnlEcritPar(n.j,ag)?"Message envoyé à "+(n.collab||"au destinataire"):"Réponse envoyée à "+(n.auteur||"l'auteur"));
+  });
+  z.querySelectorAll("[data-jfait]").forEach(b=>b.onclick=async e=>{
+    e.stopPropagation();
+    const n=items[Number(b.dataset.jfait)]; if(!n) return;
+    b.disabled=true;
+    try{ await jnlAjouterReponse(n,"✓ Fait.",ag); }
+    catch(err){ b.disabled=false; toast("Échec de l'enregistrement : "+err.message,true); return; }
+    lu(n); await apres("Signalé comme fait à "+(n.auteur||"l'auteur"));
+  });
+  z.querySelectorAll("[data-jclo]").forEach(b=>b.onclick=async e=>{
+    e.stopPropagation();
+    const n=items[Number(b.dataset.jclo)]; if(!n) return;
+    b.disabled=true;
+    try{ await jnlCloturer(n.j); }
+    catch(err){ b.disabled=false; toast("Impossible de clôturer : "+err.message,true); return; }
+    /* les notifications de réponse de ce fil deviennent sans objet */
+    const reps=(S.notifs||[]).filter(x=>x.genre==="reponse" && x.j.id===n.j.id);
+    if(reps.length) marquerLues(reps);
+    await apres("Demande clôturée");
+  });
+  z.querySelectorAll(".jnl-it").forEach(x=>x.onclick=e=>{
+    if(e.target.closest("button,textarea,a")) return;
+    const n=items[Number(x.dataset.ji)]; if(!n) return;
+    lu(n);
+    ouvrirFiche(n.p,"journal");
+    setTimeout(()=>{ const el=document.getElementById("jc-"+n.j.id);
+      if(el){ el.scrollIntoView({behavior:"smooth",block:"center"}); el.classList.add("jnl-vise"); setTimeout(()=>el.classList.remove("jnl-vise"),1800); } },120);
+  });
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
