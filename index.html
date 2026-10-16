@@ -1966,6 +1966,9 @@ body.app-monpf .app-filtres{display:none;}
 .mt-sousprojet{padding-left:14px;}
 .mt-sousprojet .mt-it{border-left:2px solid #e3e8f3;}
 .jnl-carte .mt-sousprojet{padding:0 8px 0 18px;}
+.dem-objets{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;}
+#dem-cible-zone select,#dem-cible-zone input{width:100%;box-sizing:border-box;}
+.dem-charge{font-size:12px;color:var(--gris);padding:6px 0;}
 </style>
 </head>
 <body>
@@ -17039,7 +17042,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 14 h 40</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 14 h 55</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17982,27 +17985,79 @@ function demFenetre(html){
   v.onmousedown=e=>{ if(e.target===v) v.remove(); };
   return v;
 }
+/* « Concerne » : un projet, une action MEO, une tâche, une ligne MEC 2023 ou PAPRIPACT, ou autre chose */
+const DEM_OBJETS=[["projet","Projet"],["action","Action MEO"],["tache","Tâche"],["mec","MEC 2023"],["pap","PAPRIPACT"],["autre","Autre"]];
+function demObjet(r){ return demCol("Objet")!=="Objet"||(typeof infoCol==="function"&&infoCol(DEM.table,"Objet")) ? demTxt(r,"Objet") : ""; }
+async function demLignesAnnexe(fam){
+  try{
+    const T=await anxTable(anxNomTable(fam)), sec=anxSection(T), fs=anxChamps(T,sec), fId=fs.find(f=>f.role==="id");
+    return anxOrdre(T,sec,null).map(i=>fId?anxTexte(T,fId,i):"Ligne "+T.data.id[i]).filter(Boolean);
+  }catch(e){ return null; }
+}
 async function demOuvrirFormulaire(){
   await demCharger();
   if(!DEM.ok){ toast("La table « "+DEM.table+" » est introuvable dans le document : demandez à l'administrateur de la créer.",true); return; }
-  const c=S.cfg, ps=projets().slice().sort((a,b)=>lire(c.tblMain,a,c.colLibelle).localeCompare(lire(c.tblMain,b,c.colLibelle),"fr",{numeric:true}));
-  const sel=APP.vue==="fiche"&&S.projetSel?S.projetSel.id:null;
+  const c=S.cfg, lib=r=>lire(c.tblMain,r,c.colLibelle);
+  const ps=projets().slice().sort((a,b)=>lib(a).localeCompare(lib(b),"fr",{numeric:true}));
+  const pSel=APP.vue==="fiche"&&S.projetSel?S.projetSel:null;
+  const libA=a=>decouperLibelleAction(lib(a)).texte||lib(a);
+  const listes={
+    projet:()=>'<select id="dem-cible"><option value="">— choisir un projet —</option>'+ps.map(p=>'<option value="P:'+p.id+'"'+(pSel&&p.id===pSel.id?" selected":"")+'>'+esc(lib(p))+'</option>').join("")+'</select>',
+    action:()=>'<select id="dem-cible"><option value="">— choisir une action —</option>'+ps.filter(p=>actionsDe(p).length).map(p=>
+      '<optgroup label="'+esc(lib(p))+'">'+actionsDe(p).map(a=>'<option value="A:'+a.id+'">'+esc(libA(a))+'</option>').join("")+'</optgroup>').join("")+'</select>',
+    tache:()=>{
+      let h='<select id="dem-cible"><option value="">— choisir une tâche —</option>';
+      ps.forEach(p=>{
+        const lots=[[p,tachesDe(p)]].concat(actionsDe(p).map(a=>[a,tachesDe(a)])).filter(x=>x[1].length);
+        if(!lots.length) return;
+        h+='<optgroup label="'+esc(lib(p))+'">'+lots.map(([x,ts])=>ts.map(tk=>'<option value="T:'+tk.id+':'+p.id+'">'+
+          esc((x.id!==p.id?libA(x)+" › ":"")+(lire(c.tblTache,tk,c.colTacheLibelle)||"(sans libellé)"))+'</option>').join("")).join("")+'</optgroup>';
+      });
+      return h+'</select>';
+    }
+  };
   const v=demFenetre('<h3>✉ Contacter l\'administrateur</h3><p>Votre demande lui est transmise ; vous suivrez sa réponse dans « Mes notifications ».</p>'+
-    '<label class="dem-l">Type<select id="dem-type">'+DEM_TYPES.map(t=>'<option>'+esc(t)+'</option>').join("")+'</select></label>'+
-    '<label class="dem-l">Projet concerné (facultatif)<select id="dem-projet"><option value="">— aucun —</option>'+
-      ps.map(p=>'<option value="'+p.id+'"'+(p.id===sel?" selected":"")+'>'+esc(lire(c.tblMain,p,c.colLibelle))+'</option>').join("")+'</select></label>'+
+    '<label class="dem-l">Type<select id="dem-type">'+DEM_TYPES.map(x=>'<option>'+esc(x)+'</option>').join("")+'</select></label>'+
+    '<div class="dem-l">Concerne<div class="dem-objets">'+DEM_OBJETS.map(([k,l])=>'<button type="button" class="jf-chip'+((pSel?k==="projet":k==="autre")?" on":"")+'" data-demo="'+k+'">'+l+'</button>').join("")+'</div>'+
+      '<div id="dem-cible-zone"></div></div>'+
     '<label class="dem-l">Message<textarea id="dem-msg" rows="6" placeholder="Décrivez votre question, l\'anomalie constatée ou la modification souhaitée…"></textarea></label>'+
     '<div class="anx-btns"><button class="btn-2" id="dem-annuler">Annuler</button><button class="btn" id="dem-envoyer">Envoyer</button></div>');
+  let objet=pSel?"projet":"autre";
+  const zone=v.querySelector("#dem-cible-zone");
+  const afficher=async()=>{
+    v.querySelectorAll("[data-demo]").forEach(b=>b.classList.toggle("on",b.dataset.demo===objet));
+    if(listes[objet]){ zone.innerHTML=listes[objet](); return; }
+    if(objet==="autre"){ zone.innerHTML='<input type="text" id="dem-cible" placeholder="Sujet (facultatif) : réglages, accès, autre outil…">'; return; }
+    zone.innerHTML='<div class="dem-charge">Chargement des lignes '+(objet==="mec"?"MEC 2023":"PAPRIPACT")+'…</div>';
+    const fam=objet, l=await demLignesAnnexe(fam);
+    if(objet!==fam) return;
+    zone.innerHTML = l && l.length
+      ? '<select id="dem-cible"><option value="">— toute la '+(fam==="mec"?"MEC 2023":"PAPRIPACT")+' —</option>'+l.map(x=>'<option>'+esc(x)+'</option>').join("")+'</select>'
+      : '<input type="text" id="dem-cible" placeholder="Référence de la ligne (facultatif)">';
+  };
+  v.querySelectorAll("[data-demo]").forEach(b=>b.onclick=()=>{ objet=b.dataset.demo; afficher(); });
+  afficher();
   v.querySelector("#dem-annuler").onclick=()=>v.remove();
   setTimeout(()=>v.querySelector("#dem-msg").focus(),50);
   v.querySelector("#dem-envoyer").onclick=async()=>{
     const msg=v.querySelector("#dem-msg").value.trim();
     if(!msg){ toast("Écrivez votre message.",true); return; }
-    const pid=Number(v.querySelector("#dem-projet").value)||null;
+    const el=v.querySelector("#dem-cible"), val=el?String(el.value||"").trim():"";
+    if(["projet","action","tache"].includes(objet) && !val){ toast("Choisissez l'élément concerné, ou « Autre ».",true); return; }
+    /* projet rattaché (projet, action ou tâche) et libellé lisible de l'objet */
+    let pid=null, objetTxt="";
+    const nomObj=(DEM_OBJETS.find(x=>x[0]===objet)||["",""])[1];
+    if(val.startsWith("P:")){ pid=Number(val.slice(2)); objetTxt="Projet"; }
+    else if(val.startsWith("A:")){ const a=S.data.main.find(x=>x.id===Number(val.slice(2))); const o=a?projetDeLigne(a.id):{}; pid=o.p?o.p.id:null; objetTxt="Action MEO : "+(a?libA(a):""); }
+    else if(val.startsWith("T:")){ const [,tid,ppid]=val.split(":"); const tk=S.data.taches.find(x=>x.id===Number(tid)); pid=Number(ppid)||null;
+      objetTxt="Tâche : "+(tk?lire(c.tblTache,tk,c.colTacheLibelle):""); }
+    else objetTxt=nomObj+(val?" : "+val:"");
     const info=infoCol(DEM.table,demCol("Projet"));
-    const projetVal = !pid ? null : (info && /^Ref:/.test(info.type) ? pid : lire(c.tblMain,S.data.main.find(x=>x.id===pid),c.colLibelle));
+    const projetVal = !pid ? null : (info && /^Ref:/.test(info.type) ? pid : lib(S.data.main.find(x=>x.id===pid)));
+    const colObjet=infoCol(DEM.table,demCol("Objet"))?demCol("Objet"):null;
     const champs={[demCol("Date_Demande")]:Math.floor(Date.now()/1000),[demCol("Type")]:v.querySelector("#dem-type").value,
-      [demCol("Message")]:msg,[demCol("Statut")]:"Nouvelle"};
+      [demCol("Message")]:(colObjet||objet==="projet"?"":"["+objetTxt+"] ")+msg,[demCol("Statut")]:"Nouvelle"};
+    if(colObjet) champs[colObjet]=objetTxt;
     if(projetVal!=null) champs[demCol("Projet")]=projetVal;
     const nom=(S.notifAgent&&nomAgent(S.notifAgent))||"";
     if(nom && infoCol(DEM.table,demCol("Auteur")) && !infoCol(DEM.table,demCol("Auteur")).formule) champs[demCol("Auteur")]=nom;
@@ -18030,7 +18085,7 @@ function demCartesTravail(grille, z){
     if(l.length) cartes.push('<div class="mt-carte"><h3>Demandes reçues<span>'+l.length+' à traiter</span></h3>'+
       l.slice(0,8).map(r=>'<div class="mt-it" data-dem-admin="'+r.id+'"><div class="mt-x"><span class="mt-genre">'+esc(demTxt(r,"Type")||"Demande")+'</span><b class="mt-lib">'+
         esc(demTxt(r,"Message").slice(0,110))+'</b><small>'+esc(demTxt(r,"Auteur")||demTxt(r,"Auteur_Email"))+
-        (Number(demV(r,"Date_Demande"))?' · le '+dateVersFR(Number(demV(r,"Date_Demande"))):'')+(demProjetLib(r)?' · '+libelleProjetHtml(demProjetLib(r)):'')+'</small></div>'+statutHtml(demTxt(r,"Statut"))+'</div>').join("")+'</div>');
+        (Number(demV(r,"Date_Demande"))?' · le '+dateVersFR(Number(demV(r,"Date_Demande"))):'')+(demProjetLib(r)?' · '+libelleProjetHtml(demProjetLib(r)):'')+(demObjet(r)&&demObjet(r)!=="Projet"?' · '+esc(demObjet(r)):'')+'</small></div>'+statutHtml(demTxt(r,"Statut"))+'</div>').join("")+'</div>');
   }
   /* utilisateur : ses demandes en cours et les réponses non lues */
   const m=demMiennes().filter(r=>demTxt(r,"Statut")!=="Traitée" || (demTxt(r,"Reponse").trim() && !demV(r,"Lu_Par_Auteur")));
@@ -18038,7 +18093,7 @@ function demCartesTravail(grille, z){
     m.map(r=>{ const rep=demTxt(r,"Reponse").trim(), nonLu=rep && !demV(r,"Lu_Par_Auteur");
       return '<div class="mt-it dem-it'+(nonLu?" dem-rep":"")+'"><div class="mt-x"><span class="mt-genre">'+esc(demTxt(r,"Type")||"Demande")+'</span><b class="mt-lib">'+
         esc(demTxt(r,"Message").slice(0,110))+'</b>'+(rep?'<div class="dem-reponse">↳ '+esc(rep)+'</div>':'')+
-        '<small>'+(Number(demV(r,"Date_Demande"))?'Envoyée le '+dateVersFR(Number(demV(r,"Date_Demande"))):'')+(demProjetLib(r)?' · '+libelleProjetHtml(demProjetLib(r)):'')+'</small></div>'+
+        '<small>'+(Number(demV(r,"Date_Demande"))?'Envoyée le '+dateVersFR(Number(demV(r,"Date_Demande"))):'')+(demProjetLib(r)?' · '+libelleProjetHtml(demProjetLib(r)):'')+(demObjet(r)&&demObjet(r)!=="Projet"?' · '+esc(demObjet(r)):'')+'</small></div>'+
         statutHtml(demTxt(r,"Statut"))+(nonLu?'<button type="button" class="mt-lu" data-dem-lu="'+r.id+'" title="J\'ai lu la réponse">✓</button>':'')+'</div>'; }).join("")+'</div>');
   if(!cartes.length) return;
   if(!grille){
@@ -18074,7 +18129,7 @@ async function demOuvrirAdmin(focusId){
         const p=demProjet(r);
         return '<div class="dem-carte'+(r.id===focusId?" dem-focus":"")+'" data-id="'+r.id+'"><div class="dem-tete"><span class="mt-genre">'+esc(demTxt(r,"Type")||"Demande")+'</span><b>'+esc(demTxt(r,"Auteur")||demTxt(r,"Auteur_Email")||"?")+'</b>'+
           '<span class="app-mut">'+(Number(demV(r,"Date_Demande"))?' · '+dateVersFR(Number(demV(r,"Date_Demande"))):'')+'</span>'+
-          (p?' · <button type="button" class="fil-lien" data-demp="'+p.id+'">'+esc(lire(S.cfg.tblMain,p,S.cfg.colLibelle))+'</button>':(demProjetLib(r)?' · '+esc(demProjetLib(r)):''))+'</div>'+
+          (p?' · <button type="button" class="fil-lien" data-demp="'+p.id+'">'+esc(lire(S.cfg.tblMain,p,S.cfg.colLibelle))+'</button>':(demProjetLib(r)?' · '+esc(demProjetLib(r)):''))+(demObjet(r)&&demObjet(r)!=="Projet"?' · <b>'+esc(demObjet(r))+'</b>':'')+'</div>'+
           '<div class="dem-msg">'+esc(demTxt(r,"Message"))+'</div>'+
           '<textarea rows="3" data-rep placeholder="Votre réponse…">'+esc(demTxt(r,"Reponse"))+'</textarea>'+
           '<div class="dem-actions"><select data-st>'+DEM_STATUTS.map(s=>'<option'+(s===(demTxt(r,"Statut")||"Nouvelle")?" selected":"")+'>'+s+'</option>').join("")+'</select>'+
@@ -18139,10 +18194,13 @@ function jnlEcritPar(j,ag){
 }
 /* deux entrées du même auteur ? */
 function jnlMemeAuteur(a,b){
+  /* même auteur seulement si rien ne les distingue : deux adresses différentes,
+     ou deux noms saisis différents, suffisent à les séparer */
   const ea=jnlEmail(a), eb=jnlEmail(b);
-  if(ea && eb) return ea===eb;
+  if(ea && eb && ea!==eb) return false;
   const na=motsTries(jnlAuteurNom(a)), nb=motsTries(jnlAuteurNom(b));
-  return !!na && na===nb;
+  if(na && nb) return na===nb;
+  return !!(ea && eb);
 }
 function jnlClos(j){ const c=S.cfg; return !!(c.colJnlTraite && j[c.colJnlTraite]===true); }
 
