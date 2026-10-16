@@ -1969,6 +1969,7 @@ body.app-monpf .app-filtres{display:none;}
 .dem-objets{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;}
 #dem-cible-zone select,#dem-cible-zone input{width:100%;box-sizing:border-box;}
 .dem-charge{font-size:12px;color:var(--gris);padding:6px 0;}
+.dem-filtre{width:100%;box-sizing:border-box;margin-bottom:6px;border:1px solid var(--trait);border-radius:6px;padding:7px 10px;font:inherit;font-size:12.5px;}
 </style>
 </head>
 <body>
@@ -7385,8 +7386,6 @@ function vueJournal(p){
     }
     if(!S.reponseA && c.colJnlCollab && $("#j-collab") && !String($("#j-collab").value||"").trim()){
       toast("Indiquez le destinataire de la demande.",true); return; }
-    if(!S.reponseA && c.colJnlDelai && $("#j-delai") && !String($("#j-delai").value||"").trim()){
-      toast("Indiquez le délai d'exécution.",true); return; }
     if(c.colJnlCollab && $("#j-collab")){
       const vc=lireOuvert("j-collab",c.tblJournal,c.colJnlCollab,"Collaborateur concerné");
       if(vc===undefined) return;
@@ -16041,8 +16040,6 @@ function mbJournal(p){
     }
     if(!S.reponseA && c.colJnlCollab && $("#mbj-collab") && !String($("#mbj-collab").value||"").trim()){
       toast("Indiquez le destinataire de la demande.",true); return; }
-    if(!S.reponseA && c.colJnlDelai && $("#mbj-delai") && !String($("#mbj-delai").value||"").trim()){
-      toast("Indiquez le délai d'exécution.",true); return; }
     if(c.colJnlCollab && $("#mbj-collab")){
       const vc=lireOuvert("mbj-collab",c.tblJournal,c.colJnlCollab,"Collaborateur concerné");
       if(vc===undefined) return;
@@ -17042,7 +17039,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 15 h 05</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 15 h 15</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18024,9 +18021,36 @@ async function demOuvrirFormulaire(){
     '<div class="anx-btns"><button class="btn-2" id="dem-annuler">Annuler</button><button class="btn" id="dem-envoyer">Envoyer</button></div>');
   let objet=pSel?"projet":"autre";
   const zone=v.querySelector("#dem-cible-zone");
+  /* mot clé : filtre la liste (sans tenir compte des accents), libellés de groupe compris */
+  const pli=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  const brancherFiltre=()=>{
+    const sel=zone.querySelector("select#dem-cible");
+    if(!sel) return;
+    sel.insertAdjacentHTML("beforebegin",'<input type="search" id="dem-filtre" class="dem-filtre" placeholder="🔍 Mot clé pour filtrer la liste…" autocomplete="off">');
+    const f=zone.querySelector("#dem-filtre");
+    f.oninput=()=>{
+      const mots=pli(f.value).split(/\s+/).filter(Boolean);
+      let nb=0, dernier=null;
+      [...sel.options].forEach((o,k)=>{
+        if(k===0 && !o.value){ o.hidden=false; return; }
+        const g=o.parentElement.tagName==="OPTGROUP"?o.parentElement.label:"";
+        const ok=!mots.length || mots.every(m=>pli(o.textContent+" "+g).includes(m));
+        o.hidden=!ok; if(ok){ nb++; dernier=o; }
+      });
+      sel.querySelectorAll("optgroup").forEach(g=>{ g.hidden=![...g.children].some(o=>!o.hidden); });
+      /* résultats visibles d'emblée ; un seul résultat est sélectionné */
+      const nbG=[...sel.querySelectorAll("optgroup")].filter(g=>!g.hidden).length;
+      sel.size=mots.length?Math.max(2,Math.min(10,nb+nbG+1)):1;
+      if(mots.length && nb===1 && dernier) sel.value=dernier.value;
+      else if(sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value="";
+    };
+    f.onkeydown=e=>{ if(e.key==="ArrowDown"){ e.preventDefault(); sel.focus(); } };
+    sel.addEventListener("change",()=>{ if(sel.size>1 && sel.value){ sel.size=1; } });
+    setTimeout(()=>f.focus(),30);
+  };
   const afficher=async()=>{
     v.querySelectorAll("[data-demo]").forEach(b=>b.classList.toggle("on",b.dataset.demo===objet));
-    if(listes[objet]){ zone.innerHTML=listes[objet](); return; }
+    if(listes[objet]){ zone.innerHTML=listes[objet](); brancherFiltre(); return; }
     if(objet==="autre"){ zone.innerHTML='<input type="text" id="dem-cible" placeholder="Sujet (facultatif) : réglages, accès, autre outil…">'; return; }
     zone.innerHTML='<div class="dem-charge">Chargement des lignes '+(objet==="mec"?"MEC 2023":"PAPRIPACT")+'…</div>';
     const fam=objet, l=await demLignesAnnexe(fam);
@@ -18034,6 +18058,7 @@ async function demOuvrirFormulaire(){
     zone.innerHTML = l && l.length
       ? '<select id="dem-cible"><option value="">— toute la '+(fam==="mec"?"MEC 2023":"PAPRIPACT")+' —</option>'+l.map(x=>'<option>'+esc(x)+'</option>').join("")+'</select>'
       : '<input type="text" id="dem-cible" placeholder="Référence de la ligne (facultatif)">';
+    brancherFiltre();
   };
   v.querySelectorAll("[data-demo]").forEach(b=>b.onclick=()=>{ objet=b.dataset.demo; afficher(); });
   afficher();
@@ -18487,7 +18512,7 @@ function jnlFormulaireHtml(p,o){
           '<small> · '+esc(s.role)+'</small></button>').join(""):'')+
         '<span class="jf-champ">'+champOuvert(c.tblJournal,c.colJnlCollab,P+"collab")+'</span></span>') : '';
   const quandHtml=c.colJnlDelai
-    ? lig((rep?'':'<i>3</i>')+'Pour quand ?'+(rep?' <em>(facultatif)</em>':''),
+    ? lig((rep?'':'<i>3</i>')+'Pour quand ? <em>(facultatif)</em>',
         jnlEcheancesRapides().map(([l,ts])=>'<button type="button" class="jf-chip" data-jfdl="'+esc(dateVersFR(ts))+'">'+l+
           ' <small>· '+esc(dateVersFR(ts).slice(0,5))+'</small></button>').join("")+
         '<span class="jf-champ jf-date">'+champDateFR('id="'+P+'delai" placeholder="ou une date"','','')+'</span>') : '';
