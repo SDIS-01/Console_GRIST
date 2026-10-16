@@ -1856,6 +1856,25 @@ body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo)
   background:#fff;color:#1c2f6b;border-color:#c5cfe8;}
 body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo):not(.btn-pf):not(.btn-xlsx):hover{background:#dbe4f7;}
 .fil-impr{margin-left:auto;display:flex;gap:6px;}
+/* Contacter l'admin */
+.app-nav .nav-contact{color:#1e5fa5;font-weight:600;margin-left:6px;}
+body:not(.mob) .app-nav .nav-contact{color:#1e5fa5;}
+.app-nav .nav-contact:hover{color:#002395;text-decoration:underline;}
+.dem-fen{width:min(640px,94vw);max-height:90vh;overflow:auto;}
+.dem-l{display:block;font-size:12px;color:#6b7484;margin:10px 0 3px;}
+.dem-l select,.dem-l textarea{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:6px 8px;border:1px solid var(--trait);border-radius:6px;font:inherit;color:#1c2330;}
+.dem-reponse{margin:4px 0 2px;padding:5px 8px;background:#eef6ee;border-left:3px solid #9BBB59;border-radius:4px;color:#2f4a1a;font-size:12px;}
+.dem-rep{background:#fbfdf7;}
+.dem-dest{font-size:12px;color:#6b7484;margin-bottom:8px;}
+.dem-liste{display:flex;flex-direction:column;gap:10px;margin-top:8px;}
+.dem-carte{border:1px solid var(--trait);border-radius:8px;padding:10px;}
+.dem-carte.dem-focus{border-color:#1e5fa5;box-shadow:0 0 0 2px #c5cfe8;}
+.dem-tete{font-size:12.5px;margin-bottom:6px;}
+.dem-msg{white-space:pre-wrap;font-size:13px;margin-bottom:8px;}
+.dem-carte textarea{width:100%;box-sizing:border-box;border:1px solid var(--trait);border-radius:6px;padding:6px 8px;font:inherit;}
+.dem-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
+.dem-actions select{padding:4px 6px;border:1px solid var(--trait);border-radius:6px;}
+#btn-editions .nav-badge{background:#C0504D;color:#fff;}
 </style>
 </head>
 <body>
@@ -1869,6 +1888,7 @@ body:not(.mob) .topbar .btn-top:not(.btn-editions):not(.btn-pdf):not(.btn-diapo)
   <nav class="app-nav" aria-label="Navigation">
     <button type="button" data-vue="portefeuille">Portefeuille</button>
     <button type="button" data-vue="travail">Mon travail<span class="nav-badge" id="nav-badge-travail" hidden></span></button>
+    <button type="button" id="nav-contact" class="nav-contact" title="Envoyer une question ou une demande à l'administrateur">✉ Contacter l'admin</button>
   </nav>
   <button class="btn-top btn-notif" id="btn-notif" hidden aria-expanded="false" aria-controls="notif-pan"
     aria-label="Notifications" title="Notifications"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"
@@ -16631,6 +16651,8 @@ function rendreTravail(){
     (autre||!nl.length?"":carteNotifs(ag,autre,nl,tous))+
   '</div>';
   if(!z.querySelector(".mt-carte")) z.querySelector(".mt-grille").outerHTML='<div class="app-vide mt-rien">✓ Rien à traiter pour le moment.</div>';
+  /* demandes à l'administrateur (et, pour lui, demandes reçues) */
+  if(typeof demCartesTravail==="function"){ demCartesTravail(z.querySelector(".mt-grille"), z); demCharger().then(()=>{ /* rafraîchi au prochain rendu */ }); }
   const ntout=$("#mt-tout-lu");
   if(ntout) ntout.onclick=()=>{ const k=nl.length; marquerLues(nl); toast(k+" notification"+(k>1?"s":"")+" marquée"+(k>1?"s":"")+" comme lue"+(k>1?"s":"")); };
   z.querySelectorAll("[data-mtf]").forEach(b=>b.onclick=()=>{ APP.filtreNotifs=b.dataset.mtf; rendreTravail(); });
@@ -16878,7 +16900,9 @@ function menuEditionsHtml(){
     '<span>'+lib+'</span><small>'+detail+'</small></button>';
   const p=S.projetSel;
   const offProjet = APP.vue!=="fiche" || !p ? "Ouvrez d'abord la fiche d'un projet" : "";
+  const nDem=(typeof DEM!=="undefined"&&DEM.ok)?DEM.lignes.filter(r=>demTxt(r,"Statut")==="Nouvelle").length:0;
   let h='<div class="ed-t">Accès protégés</div>'+
+    it("","demandes","🔒 Demandes reçues"+(nDem?" ("+nDem+" nouvelle"+(nDem>1?"s":"")+")":""),"mot de passe")+
     it("revues","revues","🔒 Revues (annuelle, P2A…)","mot de passe")+
     it("","reglages-etat","🔒 Réglages de l'état","mot de passe");
   return h;
@@ -16889,6 +16913,7 @@ async function lancerEdition(id){
   if(id==="echeances"){ $("#btn-xlsx-ech").click(); return; }
   if(id==="analyse"){ $("#btn-ana-pf").click(); return; }
   if(id==="revues"){ ouvrirRevues(); return; }
+  if(id==="demandes"){ demOuvrirAdmin(); return; }
   if(id==="planning"){
     allerVue("portefeuille","planning");
     await chargerModule("planning");
@@ -16928,6 +16953,9 @@ function installerBarreFiltres(){
   fil.after(bar);
 }
 function brancherApp(){
+  const bc=$("#nav-contact"); if(bc) bc.onclick=()=>demOuvrirFormulaire();
+  setTimeout(()=>demCharger(true).then(()=>{ if(APP.vue==="travail") rendreTravail(); }),1500);
+  setInterval(()=>demCharger(true),300000);
   installerBarreFiltres();
   document.querySelectorAll(".app-nav [data-vue]").forEach(b=>b.onclick=()=>{ APP.retour=null; allerVue(b.dataset.vue); });
   const be=$("#btn-editions"), me=$("#menu-editions");
@@ -17734,6 +17762,190 @@ function brancherEditionsListe(){
       else lancerEdition(b.dataset.ed2); });
     setTimeout(()=>{ const fermer=ev=>{ if(!pop.contains(ev.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
   });
+}
+
+/* =======================================================================
+   « Contacter l'admin » : demandes des utilisateurs, enregistrées dans la
+   table Grist Demandes_Admin. L'utilisateur suit ses demandes et les
+   réponses dans Mon travail ; l'administrateur (un seul compte, enregistré
+   dans les réglages) les traite depuis le menu Admin (mot de passe).
+   ======================================================================= */
+const DEM={table:"Demandes_Admin", lignes:[], ok:false, erreur:"", t:0, enCours:null};
+const DEM_TYPES=["Question","Anomalie","Demande de modification","Suggestion"];
+const DEM_STATUTS=["Nouvelle","En cours","Traitée"];
+
+/* colonnes réelles (accents, casse et soulignés tolérés) */
+function demCol(nom){
+  const cols=(typeof colonnesDe==="function"?colonnesDe(DEM.table):[])||[];
+  const pli=x=>String(x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const c=cols.find(x=>x.colId===nom) || cols.find(x=>pli(x.colId)===pli(nom)) || cols.find(x=>pli(x.label)===pli(nom));
+  return c ? c.colId : nom;
+}
+const demV=(r,nom)=>r ? r[demCol(nom)] : null;
+function demTxt(r,nom){ const v=demV(r,nom); return v==null?"":String(v); }
+function demEstAdmin(){ return !!(S.moiEmail && S.cfg.adminEmail && S.moiEmail.toLowerCase()===String(S.cfg.adminEmail).toLowerCase()); }
+function demMiennes(){ return S.moiEmail ? DEM.lignes.filter(r=>demTxt(r,"Auteur_Email").toLowerCase()===S.moiEmail.toLowerCase()) : []; }
+function demATraiter(){ return DEM.lignes.filter(r=>demTxt(r,"Statut")!=="Traitée"); }
+function demProjetLib(r){
+  const v=demV(r,"Projet");
+  if(v==null||v==="") return "";
+  if(typeof v==="number"){ const p=S.data.main.find(x=>x.id===v); return p?lire(S.cfg.tblMain,p,S.cfg.colLibelle):""; }
+  return String(v);
+}
+function demProjet(r){
+  const v=demV(r,"Projet");
+  if(typeof v==="number") return S.data.main.find(x=>x.id===v)||null;
+  const t=String(v||"").trim(); if(!t) return null;
+  return projets().find(p=>lire(S.cfg.tblMain,p,S.cfg.colLibelle)===t)||null;
+}
+
+async function demCharger(force){
+  if(!force && Date.now()-DEM.t<60000) return;
+  if(DEM.enCours) return DEM.enCours;
+  DEM.enCours=(async()=>{
+    try{
+      const t=await grist.docApi.fetchTable(DEM.table);
+      DEM.lignes=enLignes(t); DEM.ok=true; DEM.erreur="";
+    }catch(e){ DEM.ok=false; DEM.erreur=e.message; DEM.lignes=[]; }
+    DEM.t=Date.now(); DEM.enCours=null;
+    majBadgeAdmin();
+  })();
+  return DEM.enCours;
+}
+function majBadgeAdmin(){
+  const b=$("#btn-editions"); if(!b) return;
+  let s=b.querySelector(".nav-badge");
+  const n=demEstAdmin()?DEM.lignes.filter(r=>demTxt(r,"Statut")==="Nouvelle").length:0;
+  if(!s){ s=document.createElement("span"); s.className="nav-badge"; b.appendChild(s); }
+  s.hidden=!n; s.textContent=n;
+  b.title=n?n+" demande"+(n>1?"s":"")+" nouvelle"+(n>1?"s":""):"";
+}
+
+/* ---------- formulaire « Contacter l'admin » ---------- */
+function demFenetre(html){
+  document.querySelectorAll(".anx-voile").forEach(x=>x.remove());
+  const v=document.createElement("div"); v.className="anx-voile";
+  v.innerHTML='<div class="anx-fen dem-fen">'+html+'</div>';
+  document.body.appendChild(v);
+  v.onmousedown=e=>{ if(e.target===v) v.remove(); };
+  return v;
+}
+async function demOuvrirFormulaire(){
+  await demCharger();
+  if(!DEM.ok){ toast("La table « "+DEM.table+" » est introuvable dans le document : demandez à l'administrateur de la créer.",true); return; }
+  const c=S.cfg, ps=projets().slice().sort((a,b)=>lire(c.tblMain,a,c.colLibelle).localeCompare(lire(c.tblMain,b,c.colLibelle),"fr",{numeric:true}));
+  const sel=APP.vue==="fiche"&&S.projetSel?S.projetSel.id:null;
+  const v=demFenetre('<h3>✉ Contacter l\'administrateur</h3><p>Votre demande lui est transmise ; vous suivrez sa réponse dans « Mon travail ».</p>'+
+    '<label class="dem-l">Type<select id="dem-type">'+DEM_TYPES.map(t=>'<option>'+esc(t)+'</option>').join("")+'</select></label>'+
+    '<label class="dem-l">Projet concerné (facultatif)<select id="dem-projet"><option value="">— aucun —</option>'+
+      ps.map(p=>'<option value="'+p.id+'"'+(p.id===sel?" selected":"")+'>'+esc(lire(c.tblMain,p,c.colLibelle))+'</option>').join("")+'</select></label>'+
+    '<label class="dem-l">Message<textarea id="dem-msg" rows="6" placeholder="Décrivez votre question, l\'anomalie constatée ou la modification souhaitée…"></textarea></label>'+
+    '<div class="anx-btns"><button class="btn-2" id="dem-annuler">Annuler</button><button class="btn" id="dem-envoyer">Envoyer</button></div>');
+  v.querySelector("#dem-annuler").onclick=()=>v.remove();
+  setTimeout(()=>v.querySelector("#dem-msg").focus(),50);
+  v.querySelector("#dem-envoyer").onclick=async()=>{
+    const msg=v.querySelector("#dem-msg").value.trim();
+    if(!msg){ toast("Écrivez votre message.",true); return; }
+    const pid=Number(v.querySelector("#dem-projet").value)||null;
+    const info=infoCol(DEM.table,demCol("Projet"));
+    const projetVal = !pid ? null : (info && /^Ref:/.test(info.type) ? pid : lire(c.tblMain,S.data.main.find(x=>x.id===pid),c.colLibelle));
+    const champs={[demCol("Date_Demande")]:Math.floor(Date.now()/1000),[demCol("Type")]:v.querySelector("#dem-type").value,
+      [demCol("Message")]:msg,[demCol("Statut")]:"Nouvelle"};
+    if(projetVal!=null) champs[demCol("Projet")]=projetVal;
+    const nom=(S.notifAgent&&nomAgent(S.notifAgent))||"";
+    if(nom && infoCol(DEM.table,demCol("Auteur")) && !infoCol(DEM.table,demCol("Auteur")).formule) champs[demCol("Auteur")]=nom;
+    try{
+      const res=await grist.docApi.applyUserActions([["AddRecord",DEM.table,null,champs]]);
+      v.remove(); toast("Demande envoyée à l'administrateur.");
+      await demCharger(true);
+      /* l'e-mail du compte, inscrit par Grist (formule user.Email), sert à retrouver ses demandes */
+      const id=res&&res.retValues?res.retValues[0]:null, r=DEM.lignes.find(x=>x.id===id);
+      const em=r?demTxt(r,"Auteur_Email").trim().toLowerCase():"";
+      if(em.includes("@") && !S.moiEmail){ S.moiEmail=em; try{ lsEcrire(NT_EMAIL,em); }catch(e){} }
+      if(APP.vue==="travail") rendreTravail();
+    }catch(e){ toast("Envoi impossible : "+e.message,true); }
+  };
+}
+
+/* ---------- Mon travail ---------- */
+function demCartesTravail(grille, z){
+  if(!DEM.ok || APP.agentVu) return;
+  const cartes=[];
+  const statutHtml=st=>'<span class="anx-st" style="color:'+(st==="Traitée"?"#4E7D2A":st==="En cours"?"#A2551A":"#3c4a6b")+'">'+esc(st||"Nouvelle")+'</span>';
+  /* administrateur : demandes à traiter */
+  if(demEstAdmin()){
+    const l=demATraiter().sort((a,b)=>(Number(demV(a,"Date_Demande"))||0)-(Number(demV(b,"Date_Demande"))||0));
+    if(l.length) cartes.push('<div class="mt-carte"><h3>Demandes reçues<span>'+l.length+' à traiter</span></h3>'+
+      l.slice(0,8).map(r=>'<div class="mt-it" data-dem-admin="'+r.id+'"><div class="mt-x"><span class="mt-genre">'+esc(demTxt(r,"Type")||"Demande")+'</span><b class="mt-lib">'+
+        esc(demTxt(r,"Message").slice(0,110))+'</b><small>'+esc(demTxt(r,"Auteur")||demTxt(r,"Auteur_Email"))+
+        (Number(demV(r,"Date_Demande"))?' · le '+dateVersFR(Number(demV(r,"Date_Demande"))):'')+(demProjetLib(r)?' · '+libelleProjetHtml(demProjetLib(r)):'')+'</small></div>'+statutHtml(demTxt(r,"Statut"))+'</div>').join("")+'</div>');
+  }
+  /* utilisateur : ses demandes en cours et les réponses non lues */
+  const m=demMiennes().filter(r=>demTxt(r,"Statut")!=="Traitée" || (demTxt(r,"Reponse").trim() && !demV(r,"Lu_Par_Auteur")));
+  if(m.length) cartes.push('<div class="mt-carte"><h3>Mes demandes à l\'admin<span>'+m.length+'</span></h3>'+
+    m.map(r=>{ const rep=demTxt(r,"Reponse").trim(), nonLu=rep && !demV(r,"Lu_Par_Auteur");
+      return '<div class="mt-it dem-it'+(nonLu?" dem-rep":"")+'"><div class="mt-x"><span class="mt-genre">'+esc(demTxt(r,"Type")||"Demande")+'</span><b class="mt-lib">'+
+        esc(demTxt(r,"Message").slice(0,110))+'</b>'+(rep?'<div class="dem-reponse">↳ '+esc(rep)+'</div>':'')+
+        '<small>'+(Number(demV(r,"Date_Demande"))?'Envoyée le '+dateVersFR(Number(demV(r,"Date_Demande"))):'')+(demProjetLib(r)?' · '+libelleProjetHtml(demProjetLib(r)):'')+'</small></div>'+
+        statutHtml(demTxt(r,"Statut"))+(nonLu?'<button type="button" class="mt-lu" data-dem-lu="'+r.id+'" title="J\'ai lu la réponse">✓</button>':'')+'</div>'; }).join("")+'</div>');
+  if(!cartes.length) return;
+  if(!grille){
+    const rien=z.querySelector(".mt-rien");
+    grille=document.createElement("div"); grille.className="mt-grille";
+    if(rien) rien.replaceWith(grille); else z.appendChild(grille);
+  }
+  grille.insertAdjacentHTML("afterbegin",cartes.join(""));
+  grille.querySelectorAll("[data-dem-admin]").forEach(e=>e.onclick=()=>demOuvrirAdmin(Number(e.dataset.demAdmin)));
+  grille.querySelectorAll("[data-dem-lu]").forEach(b=>b.onclick=async ev=>{
+    ev.stopPropagation();
+    try{ await grist.docApi.applyUserActions([["UpdateRecord",DEM.table,Number(b.dataset.demLu),{[demCol("Lu_Par_Auteur")]:true}]]);
+      await demCharger(true); rendreTravail(); }catch(e){ toast("Impossible : "+e.message,true); }
+  });
+}
+
+/* ---------- administration (mot de passe) ---------- */
+async function demOuvrirAdmin(focusId){
+  if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
+  if(!DEM.adminOuvert){ if(!await motDePasseValide("Mot de passe pour les demandes reçues :")) return; DEM.adminOuvert=true; }
+  await demCharger(true);
+  if(!DEM.ok){ toast("Table « "+DEM.table+" » introuvable : créez-la dans Grist.",true); return; }
+  DEM.filtre=DEM.filtre||"atraiter";
+  const rendre=()=>{
+    const l=DEM.lignes.filter(r=>DEM.filtre==="toutes"||(DEM.filtre==="traitees"?demTxt(r,"Statut")==="Traitée":demTxt(r,"Statut")!=="Traitée"))
+      .sort((a,b)=>(Number(demV(b,"Date_Demande"))||0)-(Number(demV(a,"Date_Demande"))||0));
+    const moi=S.moiEmail||"", dest=S.cfg.adminEmail||"";
+    const v=demFenetre('<h3>Demandes reçues</h3>'+
+      '<div class="dem-dest">Destinataire : <b>'+esc(dest||"non défini")+'</b>'+(moi&&moi!==dest?' <button type="button" class="fil-lien" id="dem-moi">Recevoir les demandes sur mon compte ('+esc(moi)+')</button>':'')+
+        (!moi?' <span class="app-mut">(votre compte n\'est pas encore identifié : envoyez-vous une demande de test)</span>':'')+'</div>'+
+      '<div class="mt-notif-outils">'+[["atraiter","À traiter"],["traitees","Traitées"],["toutes","Toutes"]].map(([k,t])=>'<button type="button" class="mt-chip'+(DEM.filtre===k?" on":"")+'" data-demf="'+k+'">'+t+'</button>').join("")+'</div>'+
+      '<div class="dem-liste">'+(l.length?l.map(r=>{
+        const p=demProjet(r);
+        return '<div class="dem-carte'+(r.id===focusId?" dem-focus":"")+'" data-id="'+r.id+'"><div class="dem-tete"><span class="mt-genre">'+esc(demTxt(r,"Type")||"Demande")+'</span><b>'+esc(demTxt(r,"Auteur")||demTxt(r,"Auteur_Email")||"?")+'</b>'+
+          '<span class="app-mut">'+(Number(demV(r,"Date_Demande"))?' · '+dateVersFR(Number(demV(r,"Date_Demande"))):'')+'</span>'+
+          (p?' · <button type="button" class="fil-lien" data-demp="'+p.id+'">'+esc(lire(S.cfg.tblMain,p,S.cfg.colLibelle))+'</button>':(demProjetLib(r)?' · '+esc(demProjetLib(r)):''))+'</div>'+
+          '<div class="dem-msg">'+esc(demTxt(r,"Message"))+'</div>'+
+          '<textarea rows="3" data-rep placeholder="Votre réponse…">'+esc(demTxt(r,"Reponse"))+'</textarea>'+
+          '<div class="dem-actions"><select data-st>'+DEM_STATUTS.map(s=>'<option'+(s===(demTxt(r,"Statut")||"Nouvelle")?" selected":"")+'>'+s+'</option>').join("")+'</select>'+
+          '<button type="button" class="btn" data-save>Enregistrer</button></div></div>'; }).join(""):'<div class="mt-vide">Aucune demande.</div>')+'</div>'+
+      '<div class="anx-btns"><button class="btn-2" id="dem-fermer">Fermer</button></div>');
+    v.querySelector("#dem-fermer").onclick=()=>v.remove();
+    const bm=v.querySelector("#dem-moi"); if(bm) bm.onclick=()=>{ S.cfg.adminEmail=moi; sauverAuto(); majBadgeAdmin(); rendre(); toast("Les demandes arrivent maintenant sur "+moi+"."); };
+    v.querySelectorAll("[data-demf]").forEach(b=>b.onclick=()=>{ DEM.filtre=b.dataset.demf; rendre(); });
+    v.querySelectorAll("[data-demp]").forEach(b=>b.onclick=()=>{ v.remove(); ouvrirFiche(S.data.main.find(x=>x.id===Number(b.dataset.demp))); });
+    v.querySelectorAll(".dem-carte").forEach(cd=>{
+      cd.querySelector("[data-save]").onclick=async()=>{
+        const rep=cd.querySelector("[data-rep]").value.trim(), st=cd.querySelector("[data-st]").value;
+        const r=DEM.lignes.find(x=>x.id===Number(cd.dataset.id));
+        const champs={[demCol("Statut")]:st,[demCol("Reponse")]:rep};
+        if(rep && rep!==demTxt(r,"Reponse").trim()){ champs[demCol("Date_Reponse")]=Math.floor(Date.now()/1000); champs[demCol("Lu_Par_Auteur")]=false; }
+        try{ await grist.docApi.applyUserActions([["UpdateRecord",DEM.table,Number(cd.dataset.id),champs]]);
+          toast("Demande enregistrée."); await demCharger(true); rendre(); if(APP.vue==="travail") rendreTravail(); }
+        catch(e){ toast("Enregistrement impossible : "+e.message,true); }
+      };
+    });
+    const f=v.querySelector(".dem-focus"); if(f) f.scrollIntoView({block:"center"});
+  };
+  rendre();
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
