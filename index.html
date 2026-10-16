@@ -1973,6 +1973,7 @@ body.app-monpf .app-filtres{display:none;}
 #dem-cible-zone select,#dem-cible-zone input{width:100%;box-sizing:border-box;}
 .dem-charge{font-size:12px;color:var(--gris);padding:6px 0;}
 .dem-filtre{width:100%;box-sizing:border-box;margin-bottom:6px;border:1px solid var(--trait);border-radius:6px;padding:7px 10px;font:inherit;font-size:12.5px;}
+.mt-carte-vide .mt-vide{color:var(--gris);font-style:italic;}
 </style>
 </head>
 <body>
@@ -16750,8 +16751,9 @@ function rendreTravail(){
       (sl?'<small>'+sl+'</small>':'')+'</div>'+(droite||"")+'</div>'; };
   const tous=[];
   /* seules les cartes qui ont quelque chose à traiter s'affichent */
+  /* toutes les cartes restent affichées, même vides */
   const bloc=(titre,compte,items,rendu,parProjet)=>{
-    if(!items.length) return "";
+    if(!items.length) return '<div class="mt-carte mt-carte-vide"><h3>'+titre+'<span>0</span></h3><div class="mt-vide">Rien à traiter.</div></div>';
     const un=n=>{ tous.push(n); return rendu(n,tous.length-1); };
     return '<div class="mt-carte"><h3>'+titre+'<span>'+compte+'</span></h3>'+
       (parProjet ? mtParProjet(items.slice(0,12)).map(g=>mtTeteProjet(g.p)+'<div class="mt-sousprojet">'+g.items.map(un).join("")+'</div>').join("")
@@ -16774,9 +16776,8 @@ function rendreTravail(){
     bloc(M+"actions de mise en œuvre",acts.length,acts,(n,i)=>it(n,i,delaiHtml(n.ech)),true)+
     bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,delaiHtml(n.ech)),true)+
     jnl.html+
-    (autre||!nl.length?"":carteNotifs(ag,autre,nl,tous))+
+    (autre?"":carteNotifs(ag,autre,nl,tous))+
   '</div>';
-  if(!z.querySelector(".mt-carte")) z.querySelector(".mt-grille").outerHTML='<div class="app-vide mt-rien">✓ Rien à traiter pour le moment.</div>';
   /* demandes à l'administrateur (et, pour lui, demandes reçues) */
   if(typeof demCartesTravail==="function"){ demCartesTravail(z.querySelector(".mt-grille"), z); demCharger().then(()=>{ /* rafraîchi au prochain rendu */ }); }
   jnlBrancherTravail(z,jnl.items,ag);
@@ -17042,7 +17043,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 15 h 30</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 15 h 40</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17629,7 +17630,8 @@ async function annexesSousListe(cont){
 }
 
 /* ---------- Mon travail : MEC 2023 et PAPRIPACT du groupement de l'agent ---------- */
-function anxAllerGroupement(grp){
+function anxAllerGroupement(grp,fam){
+  if(fam) ANX.onglet=fam;
   const m=MENUS["m-groupement"];
   const pli=anxPli(grp);
   const opt=m.opts.find(o=>anxPli(o[0])===pli) || m.opts.find(o=>anxPli(o[1])===pli) || m.opts.find(o=>anxPli(o[0]).indexOf(pli)>=0);
@@ -17682,8 +17684,8 @@ async function annexesMonTravail(ag, grille){
       d.innerHTML='<h3>'+ANX_FAMILLES[fam].titre+' — '+esc(grp)+'</h3>'+
         /* seulement le nombre en cours, et le lien vers l'onglet MEC · PAPRIPACT filtré sur le groupement */
         '<div class="mt-vide anx-compte"><b>'+ouverts.length+'</b> '+(ouverts.length>1?"lignes":"ligne")+' en cours</div>'+
-        '<button type="button" class="fil-lien mt-anx-tout" data-grp="1">Voir tout dans MEC · PAPRIPACT →</button>';
-      d.querySelectorAll("[data-grp]").forEach(x=>x.onclick=()=>anxAllerGroupement(grp));
+        '<button type="button" class="fil-lien mt-anx-tout" data-grp="1">Voir tout dans '+ANX_FAMILLES[fam].titre+' →</button>';
+      d.querySelectorAll("[data-grp]").forEach(x=>x.onclick=()=>anxAllerGroupement(grp,fam));
     });
   }catch(e){
     cartes.forEach(d=>{ if(d.isConnected) d.querySelector(".mt-vide") && (d.querySelector(".mt-vide").textContent="Lignes du groupement indisponibles : "+e.message); });
@@ -18388,6 +18390,8 @@ function jnlCartesTravail(ag,autre,M,lues){
     ? '<div class="jnl-boite" data-jbox="'+k+'"><textarea placeholder="'+ph+'"></textarea>'+
       '<div class="jnl-btns"><button type="button" class="btn-2" data-jann="'+k+'">Annuler</button>'+btns+'</div></div>' : '';
   let h="";
+  const vide=titre=>'<div class="mt-carte jnl-carte mt-carte-vide"><h3>'+titre+'<span>0</span></h3><div class="mt-vide">Rien à traiter.</div></div>';
+  if(c.colJnlCollab && !recues.length) h+=vide("Demandes qui "+(autre?"lui":"me")+" sont adressées");
   if(recues.length){
     const nb=recues.filter(n=>n.statut==="attente").length;
     h+='<div class="mt-carte jnl-carte"><h3>Demandes qui '+(autre?"lui":"me")+' sont adressées<span>'+
@@ -18408,6 +18412,7 @@ function jnlCartesTravail(ag,autre,M,lues){
     }); h+='</div>'; });
     h+='</div>';
   }
+  if(c.colJnlCollab && !suivies.length) h+=vide(M+"demandes à suivre");
   if(suivies.length){
     const nr=suivies.filter(n=>n.statut==="repondue").length, na=suivies.length-nr;
     h+='<div class="mt-carte jnl-carte"><h3>'+M+'demandes à suivre<span>'+
