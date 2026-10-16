@@ -16416,13 +16416,10 @@ function rendreFil(){
       : '<b>Mes notifications</b>'+(moi?'<span class="fil-chemin">— '+esc(nomAgent(moi))+'</span>'+
           (S.agentParCompte?'':'<button type="button" class="fil-lien" id="mt-changer">Ce n\'est pas vous ?</button>'):'');
     h+='<span class="fil-esp"></span>';
-    if(notifsPossibles()) h+='<button type="button" class="fil-lien" id="mt-recap" title="Notifications non lues de tous les agents, remise à zéro">🔒 Récapitulatif administrateur</button>';
     if(APP.choixAgent || vu){
       h+='<label class="mt-choix">Voir comme <select id="mt-agent"><option value="">— choisir un agent —</option>'+
         agents.map(a=>'<option value="'+a.id+'"'+(vu&&vu.id===a.id?' selected':'')+'>'+esc(nomAgent(a))+'</option>').join("")+'</select></label>';
       h+='<button type="button" class="fil-lien" id="mt-moi">Revenir à mes notifications</button>';
-    } else if(agents.length){
-      h+='<button type="button" class="fil-lien" id="mt-voir">🔒 Voir comme un autre agent</button>';
     }
     f.innerHTML=h;
     const ch=$("#mt-changer");
@@ -16992,7 +16989,10 @@ function menuEditionsHtml(){
   let h='<div class="ed-t">Accès protégés</div>'+
     it("","demandes","🔒 Demandes reçues"+(nDem?" ("+nDem+" nouvelle"+(nDem>1?"s":"")+")":""),"mot de passe")+
     it("revues","revues","🔒 Revues (annuelle, P2A…)","mot de passe")+
-    it("","reglages-etat","🔒 Réglages de l'état","mot de passe");
+    it("","reglages-etat","🔒 Réglages de l'état","mot de passe")+
+    (notifsPossibles()
+      ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
+        it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '');
   return h;
 }
 async function lancerEdition(id){
@@ -17002,6 +17002,17 @@ async function lancerEdition(id){
   if(id==="analyse"){ $("#btn-ana-pf").click(); return; }
   if(id==="revues"){ ouvrirRevues(); return; }
   if(id==="demandes"){ demOuvrirAdmin(); return; }
+  if(id==="recap-notifs"){
+    if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
+    ouvrirRecapNotifs(); return;
+  }
+  if(id==="voir-agent"){
+    if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
+    if(!await motDePasseValide("Mot de passe pour voir les notifications d'un autre agent :")) return;
+    APP.retour=null; allerVue("travail"); APP.choixAgent=true; rendreFil();
+    const s=$("#mt-agent"); if(s) s.focus();
+    return;
+  }
   if(id==="planning"){
     allerVue("portefeuille","planning");
     await chargerModule("planning");
