@@ -1875,6 +1875,11 @@ body:not(.mob) .app-nav .nav-contact{color:#1e5fa5;}
 .dem-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
 .dem-actions select{padding:4px 6px;border:1px solid var(--trait);border-radius:6px;}
 #btn-editions .nav-badge{background:#C0504D;color:#fff;}
+
+/* vue mobile : bouton d'ajout de commentaire */
+.mb-com-tete{display:flex;justify-content:flex-end;margin:2px 0 6px;}
+.mb-com-tete .btn-bulle{font-size:12px;padding:6px 10px;border:1px solid var(--trait);background:#fff;}
+.mb-com .com-lecture{font-size:13px;white-space:pre-wrap;}
 </style>
 </head>
 <body>
@@ -2186,7 +2191,7 @@ body:not(.mob) .app-nav .nav-contact{color:#1e5fa5;}
       </div>
       <div class="impr-choix" role="radiogroup" aria-label="Document à produire">
         <button type="button" class="impr-carte" data-doc="codir" role="radio">
-          <span class="ic-t">Note CODIR <em id="impr-nb-codir">2 pages</em></span>
+          <span class="ic-t">Synthèse rapide <em id="impr-nb-codir">2 pages</em></span>
           <span class="ic-s">Situation, planning et actions. Pour une réunion de direction.</span></button>
         <button type="button" class="impr-carte" data-doc="complet" role="radio">
           <span class="ic-t">Dossier complet <em id="impr-nb-complet"></em></span>
@@ -11679,7 +11684,7 @@ function odpsEcrire(B,nom){
 
 /* --- gabarit des pages (refonte d'octobre 2026) ---------------------------
    Deux documents :
-   - la note CODIR : situation du projet, puis planning et actions (2 pages) ;
+   - la synthèse rapide : situation du projet, puis planning et actions (2 pages) ;
    - le dossier complet : garde, sommaire et fiche d'identité, la note, les
      fiches des actions MEO, les options cochées (instances, journal, budget,
      pages additionnelles), puis la stratégie en fin de document.
@@ -11891,7 +11896,7 @@ function nFinaliser(ctx){
   const pdf=ctx.pdf, n=ctx.pages;
   ctx.yFin[n]=ctx.y;
   const hb=Math.round(PW*106/995);
-  const pied="SDIS de l'Ain · "+(ctx.mode==="codir"?"Note CODIR":"Dossier projet")+" édité le "+new Date().toLocaleDateString("fr-FR");
+  const pied="SDIS de l'Ain · "+(ctx.mode==="codir"?"Synthèse rapide":"Dossier projet")+" édité le "+new Date().toLocaleDateString("fr-FR");
   for(let i=1;i<=n;i++){
     if(ctx.secs[i]===null) continue;              // page de garde
     pdf.setPage(i);
@@ -13003,7 +13008,7 @@ function construireDocSuite(ctx,p,mode){
   }
   nFinaliser(ctx);
   const base=ctx.titre.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9_\-]+/gi,"_").replace(/_+/g,"_").replace(/^_|_$/g,"").slice(0,60);
-  return {pdf:ctx.pdf, nom:(mode==="codir"?"Note_CODIR_":"Dossier_")+base+".pdf", pages:ctx.pages, mode, cdo:ctx.cdo||null};
+  return {pdf:ctx.pdf, nom:(mode==="codir"?"Synthese_rapide_":"Dossier_")+base+".pdf", pages:ctx.pages, mode, cdo:ctx.cdo||null};
 }
 
 
@@ -15630,9 +15635,13 @@ function mbSynthese(p){
 /* Actions et tâches réunis : une action se déplie sur ses tâches. */
 /* Zone de commentaire, masquée jusqu'au clic sur la ligne. Éditable comme sur
    poste : la saisie passe par le brouillon et la barre « Enregistrer ». */
+function mbBoutonCom(tableId,ligne,colId){
+  return '<div class="mb-com-tete"><button type="button" class="btn-2 btn-bulle" data-bulle-t="'+esc(tableId)+
+    '" data-bulle-r="'+ligne.id+'" data-bulle-c="'+esc(colId)+'">💬 Ajouter un commentaire</button></div>';
+}
 function mbCommentaire(tableId,ligne,colId,cle,avant){
   return '<div class="mb-com" data-com="'+cle+'"'+(S.mob.coms[cle]?'':' hidden')+'>'+(avant||"")+
-    (colId?editeur(tableId,ligne,colId,{multi:true}):"")+'</div>';
+    (colId?mbBoutonCom(tableId,ligne,colId)+commentaireLecture(ligne[colId]):"")+'</div>';
 }
 
 /* colonne modifiable depuis le widget : présente et non calculée par formule */
@@ -15672,9 +15681,9 @@ function mbTravaux(p){
         /* Le commentaire ne s'ouvre qu'à la demande : sur un écran de téléphone,
            l'afficher d'office noierait les avancements, qui sont l'essentiel. */
         /* le commentaire de l'action est révélé par le dépliage de l'accordéon */
-        (niv>0 && c.colCommentaire && txt(porteur[c.colCommentaire]).trim()
-          ? '<div class="mb-com ouvert">'+
-            editeur(c.tblMain,porteur,c.colCommentaire,{multi:true})+'</div>'
+        (niv>0 && c.colCommentaire
+          ? '<div class="mb-com ouvert">'+mbBoutonCom(c.tblMain,porteur,c.colCommentaire)+
+            commentaireLecture(porteur[c.colCommentaire])+'</div>'
           : '')+
         (ts.length
           ? ts.map(t=>{
@@ -15736,6 +15745,10 @@ function mbTravaux(p){
   document.querySelectorAll("[data-acc]").forEach(d=>
     d.ontoggle=()=>{ S.mob.acc[d.dataset.acc]=d.open; });
   document.querySelectorAll(".mb-com:not([hidden])").forEach(z=>brancherAutoHauteur(z));
+  document.querySelectorAll(".mb-com [data-bulle-t]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    ouvrirBulle(b,b.dataset.bulleT,Number(b.dataset.bulleR),b.dataset.bulleC,()=>rendreMobile());
+  });
 
   /* un clic sur le libellé d'une tâche montre ou masque son commentaire */
   document.querySelectorAll("[data-comt]").forEach(el=>el.onclick=()=>{
@@ -16317,7 +16330,7 @@ function rendreFil(){
         '<button type="button" data-fsous="'+k+'" class="'+(APP.ficheSous===k?"actif":"")+'">'+l+'</button>').join("")+'</div>'+
         '<span class="fil-impr"><button type="button" class="anx-pdf" id="fil-etat-pdf" title="État du projet, avec ses actions et tâches">🖨 État PDF</button>'+
         '<button type="button" class="anx-xl" id="fil-etat-xl" title="État du projet au format Excel">⬇ État Excel</button>'+
-        '<button type="button" class="anx-pdf" id="fil-impr" title="Note CODIR ou dossier projet ('+(S.cfg.pdfVisible?"PDF · diaporama":"diaporama")+')">🖨 Note CODIR / dossier projet</button></span>':'');
+        '<button type="button" class="anx-pdf" id="fil-impr" title="Synthèse rapide ou dossier projet ('+(S.cfg.pdfVisible?"PDF · diaporama":"diaporama")+')">🖨 Synthèse rapide / dossier projet</button></span>':'');
     $("#fil-retour").onclick=retourDepuisFiche;
     const bi=$("#fil-impr"); if(bi) bi.onclick=()=>ouvrirImpression();
     const projetEtat=()=>({projet:{id:p.id, libelle:lire(S.cfg.tblMain,p,S.cfg.colLibelle)}, meo:true, taches:true,
