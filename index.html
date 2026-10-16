@@ -1905,6 +1905,50 @@ body:not(.mob) .app-nav .nav-contact{color:#1e5fa5;}
 .jc-notes-ant{margin-top:14px;border:1px dashed var(--trait);border-radius:9px;padding:8px 11px;background:#fafbfd;}
 .jc-notes-ant>summary{cursor:pointer;color:var(--gris);font-weight:600;font-size:12.5px;}
 .jc-notes-ant .jc{opacity:.8;}
+
+/* saisie d'une demande du journal */
+.jf{display:flex;flex-direction:column;gap:11px;}
+.jf-tete{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.jf-tete>b{color:#00239c;font-size:13.5px;}
+.jf-tete span{color:var(--gris);font-size:12px;}
+.jf-l{display:flex;gap:12px;align-items:flex-start;}
+.jf-lab{flex:none;width:118px;padding-top:6px;font-size:12px;font-weight:600;color:#3d4866;}
+.jf-lab i{display:inline-block;width:17px;height:17px;border-radius:50%;background:#00239c;color:#fff;font-style:normal;font-size:10.5px;text-align:center;line-height:17px;margin-right:6px;}
+.jf-lab em{font-weight:400;color:var(--gris);font-style:normal;}
+.jf-val{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0;}
+.jf-qui{display:contents;}
+.jf-chip{border:1px solid #c8cfdf;border-radius:16px;padding:5px 11px;font:inherit;font-size:12px;background:#fff;color:#1c2f6b;cursor:pointer;}
+.jf-chip small{color:#6b7591;font-size:11px;}
+.jf-chip.jf-sug{background:#eef2fb;border-color:#d5ddf0;}
+.jf-chip:hover{border-color:#00239c;}
+.jf-chip.on{background:#00239c;color:#fff;border-color:#00239c;}
+.jf-chip.on small{color:#dfe6ff;}
+.jf-champ input,.jf-val>input,.jf-val>select{border:1px solid var(--trait);border-radius:6px;padding:6px 9px;font:inherit;font-size:12.5px;min-width:180px;}
+.jf-date input{min-width:130px;width:130px;}
+.jf-quoi textarea{width:100%;min-height:68px;box-sizing:border-box;border:1px solid #9fb0d8;border-radius:8px;padding:9px 10px;font:inherit;font-size:13.5px;}
+.jf-plus>summary{cursor:pointer;color:#00239c;font-size:12px;margin-bottom:4px;}
+.jf-plus[open]{border-top:1px dashed #d5ddf0;padding-top:8px;}
+.jf-plus[open]>summary{margin-bottom:10px;}
+.jf-plus .jf-l{margin-bottom:8px;}
+.jf-pied{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
+.jf-aide{margin-right:auto;color:var(--gris);font-size:11.5px;}
+.jf .rep-cible{margin:0;}
+.jf-mob .jf-l{flex-direction:column;gap:5px;}
+.jf-mob .jf-lab{width:auto;padding-top:0;}
+.jf-mob .jf-aide{display:none;}
+.jf-mob .jf-pied .btn{width:100%;}
+
+/* Mon portefeuille */
+#zone-monpf{display:flex;flex-direction:column;gap:14px;padding:14px 16px;}
+#zone-monpf .mp-annexes{padding:0;}
+.mp-carte{background:#fff;border:1px solid var(--trait);border-radius:10px;padding:12px 14px;}
+.mp-carte>h3{display:flex;align-items:baseline;gap:10px;margin:0 0 10px;font-size:13.5px;color:#1c2f6b;}
+.mp-carte>h3 span{margin-left:auto;font-weight:400;font-size:12px;color:var(--gris);}
+.mp-table tr{cursor:pointer;}
+.mp-annexes:empty{display:none;}
+body.app-monpf .app-filtres{display:none;}
+.mp-outils{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--gris);}
+.mp-outils .mt-chip{margin-left:auto;}
 </style>
 </head>
 <body>
@@ -1916,8 +1960,9 @@ body:not(.mob) .app-nav .nav-contact{color:#1e5fa5;}
           title="Replier / déplier la liste des projets" aria-expanded="true">◀ Projets</button>
   <div class="marque">Suivi des projets et actions — SDIS de l'Ain</div>
   <nav class="app-nav" aria-label="Navigation">
-    <button type="button" data-vue="portefeuille">Portefeuille</button>
-    <button type="button" data-vue="travail">Mon travail<span class="nav-badge" id="nav-badge-travail" hidden></span></button>
+    <button type="button" data-vue="portefeuille">Portefeuille SDIS 01</button>
+    <button type="button" data-vue="monpf">Mon portefeuille</button>
+    <button type="button" data-vue="travail">Mes notifications<span class="nav-badge" id="nav-badge-travail" hidden></span></button>
     <button type="button" id="nav-contact" class="nav-contact" title="Envoyer une question ou une demande à l'administrateur">✉ Contacter l'admin</button>
   </nav>
   <button class="btn-top btn-notif" id="btn-notif" hidden aria-expanded="false" aria-controls="notif-pan"
@@ -2014,6 +2059,7 @@ body:not(.mob) .app-nav .nav-contact{color:#1e5fa5;}
       <div id="kpi-app" class="kpi-app" hidden></div>
       <div id="zone-liste" class="zone-app" hidden></div>
       <div id="zone-travail" class="zone-app" hidden></div>
+      <div id="zone-monpf" class="zone-app" hidden></div>
       <div id="zone-planning" class="zone-mod" hidden></div>
       <div id="zone-etats" class="zone-mod" hidden></div>
       <div id="zone-annexes" class="zone-app" hidden></div>
@@ -7198,31 +7244,7 @@ function vueJournal(p){
     ? '<div class="jc-legende">'+natures.map(n=>'<span><i style="background:'+couleurNature(n)+'"></i>'+
         esc(n)+'</span>').join("")+'</div>' : '';
 
-  const formulaire=
-    '<div class="jb-form"'+(S.jnlForm?'':' hidden')+' id="jb-form">'+
-      (S.reponseA
-        ? '<div class="rep-cible">En réponse à <b>'+esc(dateVersFR(S.reponseA[c.colJnlDate]))+'</b> — '+
-          esc((lire(c.tblJournal,S.reponseA,c.colJnlTexte)||"").slice(0,120))+
-          '<button type="button" class="btn-2" id="j-annuler-rep">Annuler</button></div>'
-        : '')+
-      '<div class="grille">'+
-      (c.colJnlNature?'<div class="champ"><label>Nature / origine</label>'+
-        champVierge(c.tblJournal,c.colJnlNature,"j-nature")+'</div>':'')+
-      '<div class="champ"><label id="j-date-lib" for="j-date">Date de l\'événement</label>'+
-        champDateFR('id="j-date"','',dateDuJourFR())+'</div>'+
-      (c.colJnlAction&&!S.reponseA?'<div class="champ"><label>Action concernée</label>'+
-        champAction(p,"j-action",null)+'</div>':'')+
-      (c.colJnlAuteur?'<div class="champ"><label>Auteur de la saisie</label>'+
-        champOuvert(c.tblJournal,c.colJnlAuteur,"j-auteur")+'</div>':'')+
-      (c.colJnlCollab&&!S.reponseA?'<div class="champ"><label>Destinataire (collaborateur concerné)</label>'+
-        champOuvert(c.tblJournal,c.colJnlCollab,"j-collab")+'</div>':'')+
-      (c.colJnlDelai?'<div class="champ"><label>Délai d\'exécution'+(S.reponseA?' <em>(facultatif)</em>':'')+'</label>'+
-        champDateFR('id="j-delai"','','')+'</div>':'')+
-      '<div class="champ pleine"><label>'+(S.reponseA?"Réponse":"Demande")+'</label><textarea id="j-texte" class="auto-h"></textarea></div>'+
-      '</div><div class="jb-form-pied">'+
-        '<button type="button" class="btn-2" id="j-fermer">Annuler</button>'+
-        '<button class="btn" id="j-ajouter">'+(S.reponseA?"Répondre":"Envoyer la demande")+'</button>'+
-      '</div></div>';
+  const formulaire='<div class="jb-form"'+(S.jnlForm?'':' hidden')+' id="jb-form">'+jnlFormulaireHtml(p)+'</div>';
 
   $("#corps").innerHTML=
     '<div class="carte jb-tete">'+
@@ -7262,6 +7284,7 @@ function vueJournal(p){
   brancherPJ();
   brancherEditeurs();
   brancherLibelleDate("j-nature","j-date-lib");
+  jnlBrancherFormulaire();
   const dna=$("#jc-notes-ant"); if(dna) dna.ontoggle=()=>{ S.jnlNotesOuv=dna.open; };
 
   /* --- filtres --- */
@@ -15949,23 +15972,7 @@ function mbJournal(p){
       : '')+
     '<details class="mb-carte mb-pj mb-jform" id="mbj-form"'+(S.reponseA||S.mob.jnlForm?' open':'')+'>'+
       '<summary><span>'+(S.reponseA?"Répondre":"✉ Nouvelle demande")+'</span></summary>'+
-      '<div class="dedans mb-form">'+
-      (S.reponseA
-        ? '<p class="sous">En réponse à '+esc(dateVersFR(S.reponseA[c.colJnlDate]))+' — '+
-          esc((lire(c.tblJournal,S.reponseA,c.colJnlTexte)||"").slice(0,90))+
-          ' <button type="button" class="mb-chip" id="mbj-annuler">Annuler</button></p>'
-        : '')+
-      '<label>Commentaire</label><textarea id="mbj-texte"></textarea>'+
-      (c.colJnlAuteur?'<label>Auteur de la saisie</label>'+
-        champOuvert(c.tblJournal,c.colJnlAuteur,"mbj-auteur"):'')+
-      (c.colJnlCollab&&!S.reponseA?'<label>Destinataire (collaborateur concerné)</label>'+
-        champOuvert(c.tblJournal,c.colJnlCollab,"mbj-collab"):'')+
-      (c.colJnlNature?'<label>Nature / origine</label>'+
-        champVierge(c.tblJournal,c.colJnlNature,"mbj-nature"):'')+
-      '<label id="mbj-date-lib" for="mbj-date">Date de l\'événement</label>'+
-        champDateFR('id="mbj-date"','',dateDuJourFR())+
-      (c.colJnlDelai?'<label>Délai d\'exécution</label>'+champDateFR('id="mbj-delai"','',''):'')+
-      '<button class="btn" id="mbj-ok">'+(S.reponseA?"Répondre":"Ajouter")+'</button></div></details>'+
+      '<div class="dedans mb-form">'+jnlFormulaireHtml(p,{mob:true})+'</div></details>'+
     '<div class="mb-carte"><h3>Historique</h3>'+
       (fils.length
         ? fils.map(f=>ligne(f.j,false)+f.reponses.map(r=>ligne(r,true)).join("")).join("")
@@ -15973,6 +15980,7 @@ function mbJournal(p){
     '</div>';
 
   brancherLibelleDate("mbj-nature","mbj-date-lib");
+  jnlBrancherFormulaire({mob:true});
   const fj=$("#mbj-form");
   if(fj) fj.ontoggle=()=>{ if(!S.reponseA) S.mob.jnlForm=fj.open; };
   const ann=$("#mbj-annuler");
@@ -16334,7 +16342,7 @@ function vueInitiale(){
 function rendreApp(){
   if(enMobile()) return;
   const b=document.body;
-  ["portefeuille","travail","fiche","revues"].forEach(v=>b.classList.toggle("app-"+v,APP.vue===v));
+  ["portefeuille","travail","fiche","revues","monpf"].forEach(v=>b.classList.toggle("app-"+v,APP.vue===v));
   const ficheModule = APP.vue==="fiche" && APP.ficheSous!=="fiche";
   b.classList.toggle("app-hors-fiche",APP.vue!=="fiche" || ficheModule);
   b.classList.toggle("app-ctx-projet",APP.vue==="fiche");
@@ -16352,7 +16360,7 @@ function rendreApp(){
     }
     /* planning ou état du seul projet ouvert */
     va.hidden=false;
-    ["liste","travail","planning","etats","etats-app","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
+    ["liste","travail","monpf","planning","etats","etats-app","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
     $("#kpi-app").hidden=true;
     if(APP.ficheSous==="planning"){ $("#zone-planning").hidden=false; chargerModule("planning"); }
     else { $("#zone-etats").hidden=false; chargerModule("etat"); }
@@ -16361,9 +16369,10 @@ function rendreApp(){
     return;
   }
   va.hidden=false;
-  ["liste","travail","planning","etats","etats-app","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
+  ["liste","travail","monpf","planning","etats","etats-app","annexes","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
   $("#kpi-app").hidden=true;
   if(APP.vue==="travail") $("#zone-travail").hidden=false;
+  else if(APP.vue==="monpf") $("#zone-monpf").hidden=false;
   else if(APP.vue==="revues") $("#zone-revues").hidden=false;
   else if(APP.sous==="liste"){ $("#kpi-app").hidden=false; $("#zone-liste").hidden=false; }
   else if(APP.sous==="planning"){ $("#kpi-app").hidden=false; $("#zone-planning").hidden=false; chargerModule("planning"); }
@@ -16379,8 +16388,8 @@ function rendreFil(){
   if(sp.length===1) ctx.push(sp[0]);
   if(APP.vue==="fiche"){
     const r=APP.retour||{vue:"portefeuille",sous:"liste"};
-    const nom = r.vue==="travail" ? "Mon travail" : r.vue==="revues" ? "Revues"
-      : "Portefeuille › "+({liste:"Liste",planning:"Planning",etats:"États",annexes:"MEC · PAPRIPACT"}[r.sous]);
+    const nom = r.vue==="travail" ? "Mes notifications" : r.vue==="revues" ? "Revues" : r.vue==="monpf" ? "Mon portefeuille"
+      : "Portefeuille SDIS 01 › "+({liste:"Liste",planning:"Planning",etats:"États",annexes:"MEC · PAPRIPACT"}[r.sous]);
     const p=S.projetSel;
     f.innerHTML='<button type="button" class="fil-retour" id="fil-retour">← Retour</button>'+
       '<span class="fil-chemin">'+esc(nom)+(p?' › <b>'+esc(lire(S.cfg.tblMain,p,S.cfg.colLibelle)||"(sans libellé)")+'</b>':'')+'</span>'+
@@ -16403,15 +16412,15 @@ function rendreFil(){
     const moi=S.notifAgent||agentCourant(), vu=APP.agentVu;
     const agents=(S.data.agents||[]).filter(a=>nomAgent(a)).sort((a,b)=>nomAgent(a).localeCompare(nomAgent(b),"fr"));
     let h = vu
-      ? '<b>Travail de '+esc(nomAgent(vu))+'</b><span class="fil-chemin mt-vu">👁 vue d\'un autre agent</span>'
-      : '<b>Mon travail</b>'+(moi?'<span class="fil-chemin">— '+esc(nomAgent(moi))+'</span>'+
+      ? '<b>Notifications de '+esc(nomAgent(vu))+'</b><span class="fil-chemin mt-vu">👁 vue d\'un autre agent</span>'
+      : '<b>Mes notifications</b>'+(moi?'<span class="fil-chemin">— '+esc(nomAgent(moi))+'</span>'+
           (S.agentParCompte?'':'<button type="button" class="fil-lien" id="mt-changer">Ce n\'est pas vous ?</button>'):'');
     h+='<span class="fil-esp"></span>';
     if(notifsPossibles()) h+='<button type="button" class="fil-lien" id="mt-recap" title="Notifications non lues de tous les agents, remise à zéro">🔒 Récapitulatif administrateur</button>';
     if(APP.choixAgent || vu){
       h+='<label class="mt-choix">Voir comme <select id="mt-agent"><option value="">— choisir un agent —</option>'+
         agents.map(a=>'<option value="'+a.id+'"'+(vu&&vu.id===a.id?' selected':'')+'>'+esc(nomAgent(a))+'</option>').join("")+'</select></label>';
-      h+='<button type="button" class="fil-lien" id="mt-moi">Revenir à mon travail</button>';
+      h+='<button type="button" class="fil-lien" id="mt-moi">Revenir à mes notifications</button>';
     } else if(agents.length){
       h+='<button type="button" class="fil-lien" id="mt-voir">🔒 Voir comme un autre agent</button>';
     }
@@ -16435,13 +16444,23 @@ function rendreFil(){
     if(bm) bm.onclick=()=>{ APP.agentVu=null; APP.choixAgent=false; rendreFil(); rendreTravail(); };
     return;
   }
+  if(APP.vue==="monpf"){
+    const moi=S.notifAgent||agentCourant();
+    const M=APP.monpf;
+    f.innerHTML='<b>Mon portefeuille</b>'+(moi?'<span class="fil-chemin">— '+esc(M.vue==="grp"&&M.grp?M.grp:nomAgent(moi))+'</span>':'')+
+      '<span class="fil-esp"></span><div class="fil-sous">'+
+      [["moi","Moi"],["grp","Mon groupement"+(M.grp?" ("+M.grp+")":"")]].map(([k,l])=>
+        '<button type="button" data-mpv="'+k+'" class="'+(M.vue===k?"actif":"")+'">'+esc(l)+'</button>').join("")+'</div>';
+    f.querySelectorAll("[data-mpv]").forEach(x=>x.onclick=()=>{ M.vue=x.dataset.mpv; rendreFil(); rendreMonPf(); });
+    return;
+  }
   if(APP.vue==="revues"){
     f.innerHTML='<b>Revues</b><span class="fil-chemin">🔓 espace déverrouillé — il se reverrouille dès que vous le quittez</span>'+
       '<span class="fil-esp"></span><button type="button" class="fil-lien" id="fil-quitter-revues">Quitter les revues</button>';
     $("#fil-quitter-revues").onclick=()=>allerVue("portefeuille");
     return;
   }
-  f.innerHTML='<b>Portefeuille</b>'+(ctx.length?'<span class="fil-chemin">› '+esc(ctx.join(" › "))+'</span>':'')+
+  f.innerHTML='<b>Portefeuille SDIS 01</b>'+(ctx.length?'<span class="fil-chemin">› '+esc(ctx.join(" › "))+'</span>':'')+
     '<span class="fil-esp"></span><div class="fil-sous">'+
     [["liste","Liste"],["planning","Planning"],["annexes","MEC · PAPRIPACT"]].map(([k,l])=>
       '<button type="button" data-sous="'+k+'" class="'+(APP.sous===k?"actif":"")+'">'+l+'</button>').join("")+'</div>';
@@ -16612,6 +16631,8 @@ function demandesDe(ag){
     const collab=c.colJnlCollab?txt(lire(c.tblJournal,m,c.colJnlCollab)).trim():"";
     const ech=c.colJnlDelai?(Number(m[c.colJnlDelai])||null):null;
     if((!collab && !ech) || !jnlEcritPar(m,ag)) return;
+    /* adressée à soi-même : elle figure déjà dans « Demandes qui me sont adressées » */
+    if(c.colJnlCollab && designe(c.tblJournal,m,c.colJnlCollab,ag)) return;
     out.push(Object.assign(jnlElement(m,p,a),{cle:"demande:"+m.id,genre:"demande"}));
   });
   const rang=n=>n.statut==="repondue"?0:1;
@@ -16642,7 +16663,7 @@ const MT_GENRE={action:"Action",tache:"Tâche",journal:"Journal",rappel:"Rappel"
 function rendreTravail(){
   const z=$("#zone-travail"), c=S.cfg;
   if(!notifsPossibles()){
-    z.innerHTML='<div class="app-vide">« Mon travail » s\'appuie sur la table des agents : renseignez-la dans les réglages de la console (bloc Notifications).</div>';
+    z.innerHTML='<div class="app-vide">« Mes notifications » s\'appuie sur la table des agents : renseignez-la dans les réglages de la console (bloc Notifications).</div>';
     return;
   }
   const autre=!!APP.agentVu;
@@ -16938,6 +16959,7 @@ function rafraichirVueApp(){
 
     else if(APP.sous==="planning") rendreKpi(projetsFiltres());
   } else if(APP.vue==="travail") rendreTravail();
+  else if(APP.vue==="monpf") rendreMonPf();
   notifierModules();   // planning et état déjà chargés suivent les filtres, même masqués
 }
 
@@ -17901,7 +17923,7 @@ async function demOuvrirFormulaire(){
   if(!DEM.ok){ toast("La table « "+DEM.table+" » est introuvable dans le document : demandez à l'administrateur de la créer.",true); return; }
   const c=S.cfg, ps=projets().slice().sort((a,b)=>lire(c.tblMain,a,c.colLibelle).localeCompare(lire(c.tblMain,b,c.colLibelle),"fr",{numeric:true}));
   const sel=APP.vue==="fiche"&&S.projetSel?S.projetSel.id:null;
-  const v=demFenetre('<h3>✉ Contacter l\'administrateur</h3><p>Votre demande lui est transmise ; vous suivrez sa réponse dans « Mon travail ».</p>'+
+  const v=demFenetre('<h3>✉ Contacter l\'administrateur</h3><p>Votre demande lui est transmise ; vous suivrez sa réponse dans « Mes notifications ».</p>'+
     '<label class="dem-l">Type<select id="dem-type">'+DEM_TYPES.map(t=>'<option>'+esc(t)+'</option>').join("")+'</select></label>'+
     '<label class="dem-l">Projet concerné (facultatif)<select id="dem-projet"><option value="">— aucun —</option>'+
       ps.map(p=>'<option value="'+p.id+'"'+(p.id===sel?" selected":"")+'>'+esc(lire(c.tblMain,p,c.colLibelle))+'</option>').join("")+'</select></label>'+
@@ -18040,7 +18062,9 @@ function jnlEmailAgent(ag){
   if(!ag) return "";
   const m=(c.colAgentCompte && infoCol(c.tblAgent,c.colAgentCompte)) ? txt(lire(c.tblAgent,ag,c.colAgentCompte)).trim().toLowerCase() : "";
   if(m) return m;
-  return (S.notifAgent && ag.id===S.notifAgent.id && S.moiEmail) ? String(S.moiEmail).toLowerCase() : "";
+  /* le compte connecté ne vaut pour l'agent que s'il a été reconnu par son adresse,
+     pas choisi à la main dans « Je suis… » ou « Voir comme un autre agent » */
+  return (S.agentParCompte && S.notifAgent && ag.id===S.notifAgent.id && S.moiEmail) ? String(S.moiEmail).toLowerCase() : "";
 }
 function jnlAuteurNom(j){ const c=S.cfg; return c.colJnlAuteur ? txt(lire(c.tblJournal,j,c.colJnlAuteur)).trim() : ""; }
 /* l'entrée a-t-elle été écrite par l'agent ? */
@@ -18286,6 +18310,207 @@ function jnlBrancherTravail(z,items,ag){
     setTimeout(()=>{ const el=document.getElementById("jc-"+n.j.id);
       if(el){ el.scrollIntoView({behavior:"smooth",block:"center"}); el.classList.add("jnl-vise"); setTimeout(()=>el.classList.remove("jnl-vise"),1800); } },120);
   });
+}
+
+/* ---------- saisie d'une demande : À qui ? Quoi ? Pour quand ? ----------
+   Mêmes identifiants de champs que l'ancien formulaire (préfixe j- sur poste,
+   mbj- sur mobile) : l'enregistrement existant reste inchangé. */
+function jnlMoiNom(){ const ag=S.notifAgent||(typeof agentCourant==="function"?agentCourant():null); return nomAgent(ag)||S.moi||""; }
+function jnlSuggestions(p){
+  const c=S.cfg, moi=pliColonne(jnlMoiNom()), vus=new Set(), out=[];
+  const ajoute=(nom,role)=>{ nom=txt(nom).trim(); const k=pliColonne(nom);
+    if(!nom || vus.has(k) || (moi && k===moi)) return; vus.add(k); out.push({nom,role}); };
+  ajoute(lire(c.tblMain,p,c.colPorteur),"porteur du projet");
+  actionsDe(p).forEach(a=>{
+    const code=(/MEO\s*\d+/i.exec(txt(a[c.colActKey])+" "+lire(c.tblMain,a,c.colLibelle))||[""])[0].replace(/\s+/g,"").toUpperCase();
+    ajoute(lire(c.tblMain,a,c.colPorteur),code||"action");
+  });
+  return out.slice(0,6);
+}
+function jnlEcheancesRapides(){
+  const auj=aujourdHuiUTC(), d=new Date(auj*1000);
+  const finTrim=Date.UTC(d.getUTCFullYear(),Math.floor(d.getUTCMonth()/3)*3+3,0)/1000;
+  return [["Dans 1 semaine",auj+7*86400],["Dans 15 jours",auj+15*86400],["Dans 1 mois",auj+30*86400],["Fin du trimestre",finTrim]]
+    .filter(x=>x[1]>auj);
+}
+function jnlFormulaireHtml(p,o){
+  o=o||{}; const c=S.cfg, P=o.mob?"mbj-":"j-", rep=!!S.reponseA, moi=jnlMoiNom();
+  const lig=(lab,html,cls)=>'<div class="jf-l'+(cls?" "+cls:"")+'"><span class="jf-lab">'+lab+'</span><div class="jf-val">'+html+'</div></div>';
+  /* type : boutons tirés des valeurs de la colonne Nature, liste cachée conservée */
+  let typeHtml="";
+  if(!rep && c.colJnlNature){
+    const info=infoCol(c.tblJournal,c.colJnlNature);
+    let vals=[];
+    if(info && info.type==="Choice") vals=info.choices.map(v=>[v,v]);
+    else if(info && info.type.startsWith("Ref:")){ const map=S.refLabels[info.refTable+"."+info.refDisplay]||{};
+      vals=Object.keys(map).map(i=>[i,String(map[i])]).sort((a,b)=>a[1].localeCompare(b[1],"fr")); }
+    typeHtml = vals.length && vals.length<=10
+      ? lig("Type",vals.map(([v,l])=>'<button type="button" class="jf-chip" data-jfnat="'+esc(v)+'">'+esc(l)+'</button>').join("")+
+          '<span hidden>'+champVierge(c.tblJournal,c.colJnlNature,P+"nature")+'</span>')
+      : lig("Type",champVierge(c.tblJournal,c.colJnlNature,P+"nature"));
+  }
+  const sugg=rep?[]:jnlSuggestions(p);
+  const quiHtml=(!rep && c.colJnlCollab)
+    ? lig('<i>1</i>À qui ?','<span class="jf-qui">'+
+        (sugg.length?sugg.map(s=>'<button type="button" class="jf-chip jf-sug" data-jfqui="'+esc(s.nom)+'">'+esc(s.nom)+
+          '<small> · '+esc(s.role)+'</small></button>').join(""):'')+
+        '<span class="jf-champ">'+champOuvert(c.tblJournal,c.colJnlCollab,P+"collab")+'</span></span>') : '';
+  const quandHtml=c.colJnlDelai
+    ? lig((rep?'':'<i>3</i>')+'Pour quand ?'+(rep?' <em>(facultatif)</em>':''),
+        jnlEcheancesRapides().map(([l,ts])=>'<button type="button" class="jf-chip" data-jfdl="'+esc(dateVersFR(ts))+'">'+l+
+          ' <small>· '+esc(dateVersFR(ts).slice(0,5))+'</small></button>').join("")+
+        '<span class="jf-champ jf-date">'+champDateFR('id="'+P+'delai" placeholder="ou une date"','','')+'</span>') : '';
+  const opts=
+    (c.colJnlAction && !rep && !o.mob ? lig("Concerne",champAction(p,P+"action",null)) : '')+
+    lig('<span id="'+P+'date-lib">Date de l\'événement</span>',champDateFR('id="'+P+'date"','',dateDuJourFR()))+
+    (c.colJnlAuteur ? lig("Saisi par",champOuvert(c.tblJournal,c.colJnlAuteur,P+"auteur")) : '');
+  return '<div class="jf'+(o.mob?" jf-mob":"")+'">'+
+    '<div class="jf-tete"><b>'+(rep?"↩ Répondre":"✉ Nouvelle demande")+'</b><span>'+
+      (moi?'De : <b>'+esc(moi)+'</b> · ':'')+'aujourd\'hui '+esc(dateDuJourFR())+'</span></div>'+
+    (rep ? '<div class="rep-cible">En réponse à <b>'+esc(dateVersFR(S.reponseA[c.colJnlDate]))+'</b> — '+
+        esc((lire(c.tblJournal,S.reponseA,c.colJnlTexte)||"").slice(0,120))+
+        '<button type="button" class="btn-2" id="'+(o.mob?"mbj-annuler":"j-annuler-rep")+'">Annuler</button></div>' : '')+
+    quiHtml+
+    lig((rep?'':'<i>2</i>')+(rep?'Réponse':'Quoi ?'),'<textarea id="'+P+'texte" class="auto-h" placeholder="'+
+      (rep?"Votre réponse…":"Que demandez-vous ?")+'"></textarea>','jf-quoi')+
+    quandHtml+typeHtml+
+    '<details class="jf-plus"'+((c.colJnlAuteur && !moi)?" open":"")+'><summary>Plus d\'options'+
+      (rep?' (date, auteur)':' (action concernée, date de l\'événement, auteur)')+'</summary>'+opts+'</details>'+
+    '<div class="jf-pied"><span class="jf-aide">Ctrl + Entrée pour envoyer'+(rep?'':' · le destinataire est notifié dans Mes notifications')+'</span>'+
+      (o.mob?'':'<button type="button" class="btn-2" id="j-fermer">Annuler</button>')+
+      '<button class="btn" id="'+(o.mob?"mbj-ok":"j-ajouter")+'">'+(rep?"Répondre":"Envoyer la demande")+'</button></div>'+
+  '</div>';
+}
+function jnlBrancherFormulaire(o){
+  o=o||{}; const P=o.mob?"mbj-":"j-", racine=document.querySelector(o.mob?"#mbj-form":"#jb-form");
+  if(!racine) return;
+  const btn=$("#"+(o.mob?"mbj-ok":"j-ajouter")), collab=$("#"+P+"collab"), aut=$("#"+P+"auteur"), dl=$("#"+P+"delai");
+  if(aut && !aut.value) aut.value=jnlMoiNom();
+  const majBtn=()=>{ if(!btn || S.reponseA) return; const n=collab?collab.value.trim():"";
+    btn.textContent=n?"Envoyer à "+n:"Envoyer la demande";
+    racine.querySelectorAll("[data-jfqui]").forEach(b=>b.classList.toggle("on",pliColonne(b.dataset.jfqui)===pliColonne(n))); };
+  const majDl=()=>{ const v=dl?dl.value.trim():""; racine.querySelectorAll("[data-jfdl]").forEach(b=>b.classList.toggle("on",b.dataset.jfdl===v)); };
+  racine.querySelectorAll("[data-jfqui]").forEach(b=>b.onclick=()=>{ if(collab){ collab.value=b.dataset.jfqui; majBtn(); const t=$("#"+P+"texte"); if(t) t.focus(); } });
+  racine.querySelectorAll("[data-jfdl]").forEach(b=>b.onclick=()=>{ if(dl){ dl.value=b.dataset.jfdl; majDl(); } });
+  racine.querySelectorAll("[data-jfnat]").forEach(b=>b.onclick=()=>{
+    const sel=$("#"+P+"nature"); if(!sel) return;
+    const on=!b.classList.contains("on");
+    racine.querySelectorAll("[data-jfnat]").forEach(x=>x.classList.remove("on"));
+    if(on) b.classList.add("on");
+    sel.value=on?b.dataset.jfnat:(sel.options[0]?sel.options[0].value:"");
+    sel.dispatchEvent(new Event("change"));
+  });
+  if(collab) collab.addEventListener("input",majBtn);
+  if(dl) dl.addEventListener("input",majDl);
+  const t=$("#"+P+"texte");
+  if(t) t.addEventListener("keydown",e=>{ if(e.key==="Enter" && (e.ctrlKey||e.metaKey) && btn){ e.preventDefault(); btn.click(); } });
+  majBtn(); majDl();
+}
+
+/* =======================================================================
+   Mon portefeuille
+   - Moi : les projets dont je suis porteur (avec leurs actions), puis mes
+     actions de mise en œuvre dans les projets d'autres porteurs ;
+   - Mon groupement : la même chose pour tous les collaborateurs rattachés à
+     mon groupement (table des collaborateurs), regroupable par collaborateur.
+   Puis le MEC 2023 / PAPRIPACT du groupement.
+   ======================================================================= */
+APP.monpf=APP.monpf||{vue:"moi",parCollab:false,grp:"",noms:null,jeton:0};
+const mpMots=x=>String(x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort().join(" ");
+
+/* groupement de l'agent et noms de ses collaborateurs, lus par le moteur d'état */
+async function mpChargerGroupement(ag){
+  const M=APP.monpf, j=++M.jeton;
+  try{
+    const w=await anxEtatPret();
+    if(j!==M.jeton) return;
+    M.grp=w.groupementCollaborateur?w.groupementCollaborateur(nomAgent(ag)):"";
+    M.noms=(M.grp && w.collaborateursGroupement)?w.collaborateursGroupement(M.grp):[];
+  }catch(e){ if(j!==M.jeton) return; M.grp=""; M.noms=[]; M.erreur=e.message; }
+  M.agentId=ag.id;
+  if(APP.vue==="monpf"){ rendreFil(); rendreMonPf(); }
+}
+
+function rendreMonPf(){
+  const z=$("#zone-monpf"), c=S.cfg, M=APP.monpf;
+  if(!z) return;
+  const ag=S.notifAgent||agentCourant();
+  if(!ag){
+    z.innerHTML='<div class="app-vide">La console doit d\'abord savoir qui vous êtes : identifiez-vous dans « Mes notifications ».</div>';
+    return;
+  }
+  if(M.agentId!==ag.id && M.noms!==null){ M.noms=null; M.grp=""; }
+  if(M.noms===null && !M.enCours){ M.enCours=true; mpChargerGroupement(ag).finally(()=>{ M.enCours=false; }); }
+  const enGrp=M.vue==="grp";
+  if(enGrp && M.noms===null){ z.innerHTML='<div class="app-vide">Recherche des collaborateurs de votre groupement…</div>'; return; }
+  if(enGrp && !M.noms.length){
+    z.innerHTML='<div class="app-vide">'+(M.grp?'Aucun collaborateur trouvé pour le groupement '+esc(M.grp)+'.'
+      :'Votre groupement n\'a pas été trouvé dans la table des collaborateurs'+(M.erreur?' ('+esc(M.erreur)+')':'')+'.')+'</div>';
+    return;
+  }
+  const noms=new Set(enGrp?M.noms.map(mpMots):[]);
+  const est=r=>enGrp ? noms.has(mpMots(lire(c.tblMain,r,c.colPorteur))) : designe(c.tblMain,r,c.colPorteur,ag);
+  const auj=aujourdHuiUTC();
+  const tous=projets();
+  const mesProjets=tous.filter(est);
+  const idsMes=new Set(mesProjets.map(p=>p.id));
+  const autres=[];
+  tous.filter(p=>!idsMes.has(p.id)).forEach(p=>actionsDe(p).forEach(a=>{ if(est(a)) autres.push({a,p}); }));
+
+  const ech=(e,fini)=>'<td class="'+(e&&e<auj&&!fini?"app-ret":"")+'">'+(e?dateVersFR(e):"—")+'</td>';
+  const libAction=a=>{
+    const d=decouperLibelleAction(lire(c.tblMain,a,c.colActKey)||""), d2=d.num?d:decouperLibelleAction(lire(c.tblMain,a,c.colLibelle));
+    let tx=d2.num?d2.texte:"";
+    if(!tx || plierTexte(tx)===plierTexte(d2.num) || /^MEO\s*\d+$/i.test(tx.trim())) tx=decouperLibelleAction(lire(c.tblMain,a,c.colLibelle)).texte||lire(c.tblMain,a,c.colLibelle);
+    return '<span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(tx);
+  };
+  const ligneA=(a,p,avecProjet)=>{
+    const av=pct(a[c.colAvancement]), inter=interrompu(a), e=Number(a[c.colEch])||null;
+    return '<tr class="et-action" data-a="'+a.id+'"><td class="et-lib">'+libAction(a)+
+      (avecProjet?'<div class="app-sous">'+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+'</div>':'')+'</td>'+
+      '<td>'+esc(lire(c.tblMain,a,c.colPorteur))+'</td>'+
+      (avecProjet?'<td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>':'')+
+      '<td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td><td>'+etBarre(av)+'</td>'+ech(e,av>=100||inter)+'</tr>';
+  };
+  const ligneP=p=>{
+    const e=echeanceProjet(p), ret=projetEnRetard(p);
+    return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+
+      (ret?' <span class="app-alerte">en retard</span>':'')+'<div class="app-sous">'+esc(lire(c.tblMain,p,c.colGroupement))+'</div></td>'+
+      '<td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
+      ech(e,etatDe(p)==="termine")+'</tr>';
+  };
+  const tete=(cols)=>'<thead><tr>'+cols.map(x=>'<th>'+x+'</th>').join("")+'</tr></thead>';
+  const colsP=["Projet / action","Porteur","Statut","Avancement","Échéance"];
+  const colsA=["Action","Porteur","Porteur du projet","Statut","Avancement","Échéance"];
+  /* regroupement par collaborateur (vue groupement) */
+  const grouper=(items,cle,rendu,nbCol)=>{
+    if(!(enGrp && M.parCollab)) return items.map(rendu).join("");
+    const g=new Map(); items.forEach(x=>{ const k=cle(x)||"Sans porteur"; if(!g.has(k)) g.set(k,[]); g.get(k).push(x); });
+    return [...g.keys()].sort((a,b)=>a.localeCompare(b,"fr")).map(k=>
+      '<tr class="et-grp"><td colspan="'+nbCol+'">'+esc(k)+'<small>'+g.get(k).length+'</small></td></tr>'+g.get(k).map(rendu).join("")).join("");
+  };
+  const nbA=mesProjets.reduce((s,p)=>s+actionsDe(p).length,0);
+  const qui=enGrp?"du groupement":"";
+  z.innerHTML=
+    (enGrp?'<div class="mp-outils"><span>'+M.noms.length+' collaborateur'+(M.noms.length>1?"s":"")+' rattaché'+(M.noms.length>1?"s":"")+' à '+esc(M.grp)+'</span>'+
+      '<button type="button" class="mt-chip'+(M.parCollab?" on":"")+'" id="mp-collab">'+(M.parCollab?"☑":"☐")+' Regrouper par collaborateur</button></div>':'')+
+    '<div class="mp-carte"><h3>'+(enGrp?"Projets & actions du groupement":"Mes projets & actions")+'<span>'+mesProjets.length+' projet'+(mesProjets.length>1?"s":"")+
+      (nbA?' · '+nbA+' action'+(nbA>1?"s":""):'')+'</span></h3>'+
+      (mesProjets.length
+        ? '<table class="app-table mp-table">'+tete(colsP)+'<tbody>'+
+          grouper(mesProjets,p=>lire(c.tblMain,p,c.colPorteur),p=>ligneP(p)+actionsDe(p).map(a=>ligneA(a,p,false)).join(""),5)+'</tbody></table>'
+        : '<div class="mt-vide">'+(enGrp?"Aucun projet porté par un collaborateur du groupement.":"Vous n'êtes porteur d'aucun projet.")+'</div>')+'</div>'+
+    '<div class="mp-carte"><h3>'+(enGrp?"Actions de mise en œuvre du groupement":"Mes actions de mise en œuvre")+'<span>'+autres.length+' action'+(autres.length>1?"s":"")+
+      ' dans des projets portés '+(enGrp?"hors du groupement":"par d'autres")+'</span></h3>'+
+      (autres.length
+        ? '<table class="app-table mp-table">'+tete(colsA)+'<tbody>'+
+          grouper(autres,x=>lire(c.tblMain,x.a,c.colPorteur),x=>ligneA(x.a,x.p,true),6)+'</tbody></table>'
+        : '<div class="mt-vide">Aucune action dans des projets portés '+(enGrp?"hors du groupement":"par d'autres")+'.</div>')+'</div>'+
+    '<div class="mt-grille mp-annexes"></div>';
+  z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>ouvrirFiche(S.data.main.find(r=>r.id===Number(tr.dataset.p))));
+  z.querySelectorAll("tr[data-a]").forEach(tr=>tr.onclick=()=>ouvrirFicheDepuisLigne(Number(tr.dataset.a)));
+  const bc=$("#mp-collab"); if(bc) bc.onclick=()=>{ M.parCollab=!M.parCollab; rendreMonPf(); };
+  if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mp-annexes"));
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
@@ -26479,6 +26704,13 @@ window.groupementCollaborateur = nom => {
   const l = ligneCollaborateurDe(nom)
     || ctxDe(TC).lignes.find(x => mots(texte(TC, x, "Nom_Prénom", "Nom_Prenom", "Nom")) === cible);
   return l ? texte(TC, l, "Groupement") : "";
+};
+/* Pour la console (Mon portefeuille) : noms des collaborateurs rattachés à un groupement. */
+window.collaborateursGroupement = grp => {
+  if (!D.pretes || !grp) return [];
+  const TC = reglages.tCollaborateur, g = norm(grp);
+  return ctxDe(TC).lignes.filter(x => norm(texte(TC, x, "Groupement")) === g)
+    .map(x => texte(TC, x, "Nom_Prénom", "Nom_Prenom", "Nom")).filter(Boolean);
 };
 /* Pour la console : état PDF des seules lignes MEC 2023 ou PAPRIPACT, avec les filtres,
    les tris et la présentation de l'état (document complet, prêt à imprimer). */
