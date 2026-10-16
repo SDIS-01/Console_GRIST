@@ -17014,7 +17014,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 11 h 25</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 11 h 45</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18448,7 +18448,7 @@ function jnlBrancherFormulaire(o){
      mon groupement (table des collaborateurs), regroupable par collaborateur.
    Puis le MEC 2023 / PAPRIPACT du groupement.
    ======================================================================= */
-APP.monpf=APP.monpf||{vue:"moi",parCollab:false,grp:"",noms:null,jeton:0};
+APP.monpf=APP.monpf||{vue:"moi",parCollab:true,grp:"",noms:null,jeton:0};
 const mpMots=x=>String(x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort().join(" ");
 
 /* groupement de l'agent et noms de ses collaborateurs, lus par le moteur d'état */
@@ -18523,6 +18523,7 @@ function rendreMonPf(){
     return [...g.keys()].sort((a,b)=>a.localeCompare(b,"fr")).map(k=>
       '<tr class="et-grp"><td colspan="'+nbCol+'">'+esc(k)+'<small>'+g.get(k).length+'</small></td></tr>'+g.get(k).map(rendu).join("")).join("");
   };
+  if(enGrp){ mpRendreGroupe(z,ag,est,{ech,libAction,ligneP}); return; }
   const nbA=mesProjets.reduce((s,p)=>s+actionsDe(p).length,0);
   const qui=enGrp?"du groupement":"";
   z.innerHTML=
@@ -18544,6 +18545,79 @@ function rendreMonPf(){
   z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>ouvrirFiche(S.data.main.find(r=>r.id===Number(tr.dataset.p))));
   z.querySelectorAll("tr[data-a]").forEach(tr=>tr.onclick=()=>ouvrirFicheDepuisLigne(Number(tr.dataset.a)));
   const bc=$("#mp-collab"); if(bc) bc.onclick=()=>{ M.parCollab=!M.parCollab; rendreMonPf(); };
+  if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mp-annexes"));
+}
+
+/* Vue groupement : par collaborateur, ses projets, ses actions et ses tâches.
+   Sans redondance : une action ou une tâche dont le porteur porte déjà le projet
+   (ou l'action) au-dessus n'est pas reprise, seul le projet (ou l'action) l'est. */
+function mpRendreGroupe(z,ag,est,u){
+  const c=S.cfg, M=APP.monpf;
+  const nomsG=new Set(M.noms.map(mpMots));
+  const por=r=>lire(c.tblMain,r,c.colPorteur);
+  const porT=x=>c.colTachePorteur?lire(c.tblTache,x,c.colTachePorteur):"";
+  const estN=n=>!!n && nomsG.has(mpMots(n));
+  const meme=(a,b)=>!!a && mpMots(a)===mpMots(b);
+  const items=[];
+  projets().forEach(p=>{
+    const pp=por(p);
+    if(estN(pp)) items.push({k:"P",p,porteur:pp,ech:echeanceProjet(p)});
+    tachesDe(p).forEach(x=>{ const pt=porT(x); if(estN(pt) && !meme(pt,pp)) items.push({k:"T",t:x,p,a:null,porteur:pt,ech:Number(x[c.colTacheFin])||null}); });
+    actionsDe(p).forEach(a=>{
+      const pa=por(a);
+      if(estN(pa) && !meme(pa,pp)) items.push({k:"A",a,p,porteur:pa,ech:Number(a[c.colEch])||null});
+      tachesDe(a).forEach(x=>{ const pt=porT(x); if(estN(pt) && !meme(pt,pa) && !meme(pt,pp)) items.push({k:"T",t:x,p,a,porteur:pt,ech:Number(x[c.colTacheFin])||null}); });
+    });
+  });
+  const ordre={P:0,A:1,T:2};
+  items.sort((x,y)=>ordre[x.k]-ordre[y.k]||((x.ech||9e12)-(y.ech||9e12)));
+  const auj=aujourdHuiUTC();
+  const sousP=p=>libelleProjetHtml(lire(c.tblMain,p,c.colLibelle));
+  const ligne=it=>{
+    if(it.k==="P") return u.ligneP(it.p);
+    if(it.k==="A"){
+      const a=it.a, av=pct(a[c.colAvancement]), inter=interrompu(a);
+      return '<tr class="et-action" data-a="'+a.id+'"><td class="et-lib">'+u.libAction(a)+'<div class="app-sous">'+sousP(it.p)+'</div></td>'+
+        '<td>'+esc(it.porteur)+'</td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td><td>'+etBarre(av)+'</td>'+u.ech(it.ech,av>=100||inter)+'</tr>';
+    }
+    const x=it.t, av=pct(x[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,x,c.colTacheStatut);
+    return '<tr class="et-tache" '+(it.a?'data-a="'+it.a.id+'"':'data-p="'+it.p.id+'"')+'><td class="et-lib"><span class="et-t">Tâche</span>'+
+      esc(lire(c.tblTache,x,c.colTacheLibelle)||"(sans libellé)")+'<div class="app-sous">'+sousP(it.p)+
+      (it.a?' › '+esc(decouperLibelleAction(lire(c.tblMain,it.a,c.colLibelle)).texte||lire(c.tblMain,it.a,c.colLibelle)):'')+'</div></td>'+
+      '<td>'+esc(it.porteur)+'</td><td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,x,c.colTacheStatut):"",av||0,inter)+'</td>'+
+      '<td>'+(av==null?"":etBarre(av))+'</td>'+u.ech(it.ech,av>=100||inter)+'</tr>';
+  };
+  let corps="";
+  if(M.parCollab){
+    const g=new Map(); items.forEach(it=>{ const k=it.porteur||"Sans porteur"; if(!g.has(k)) g.set(k,[]); g.get(k).push(it); });
+    [...g.keys()].sort((a,b)=>a.localeCompare(b,"fr")).forEach(k=>{
+      const l=g.get(k), n=kk=>l.filter(i=>i.k===kk).length;
+      const det=[[n("P"),"projet"],[n("A"),"action"],[n("T"),"tâche"]].filter(x=>x[0]).map(([v,lb])=>v+" "+lb+(v>1?"s":"")).join(" · ");
+      corps+='<tr class="et-grp"><td colspan="5">'+esc(k)+'<small>'+det+'</small></td></tr>'+l.map(ligne).join("");
+    });
+  } else corps=items.map(ligne).join("");
+  const n=kk=>items.filter(i=>i.k===kk).length;
+  z.innerHTML=
+    '<div class="mp-outils"><span>'+M.noms.length+' collaborateur'+(M.noms.length>1?"s":"")+' rattaché'+(M.noms.length>1?"s":"")+' à '+esc(M.grp)+'</span>'+
+      '<button type="button" class="mt-chip'+(M.parCollab?" on":"")+'" id="mp-collab">'+(M.parCollab?"☑":"☐")+' Regrouper par collaborateur</button>'+
+      '<button type="button" class="anx-pdf" id="mp-pdf" title="État du groupement : projets, actions et tâches, tout ce qui implique le groupement">🖨 État PDF du groupement</button></div>'+
+    '<div class="mp-carte"><h3>Projets, actions et tâches du groupement<span>'+
+      [[n("P"),"projet"],[n("A"),"action"],[n("T"),"tâche"]].map(([v,lb])=>v+" "+lb+(v>1?"s":"")).join(" · ")+'</span></h3>'+
+      (items.length
+        ? '<table class="app-table mp-table"><thead><tr><th>Projet / action / tâche</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Échéance</th></tr></thead><tbody>'+corps+'</tbody></table>'
+        : '<div class="mt-vide">Rien n\'est porté par les collaborateurs du groupement.</div>')+'</div>'+
+    '<div class="mt-grille mp-annexes"></div>';
+  z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>ouvrirFiche(S.data.main.find(r=>r.id===Number(tr.dataset.p))));
+  z.querySelectorAll("tr[data-a]").forEach(tr=>tr.onclick=()=>ouvrirFicheDepuisLigne(Number(tr.dataset.a)));
+  $("#mp-collab").onclick=()=>{ M.parCollab=!M.parCollab; rendreMonPf(); };
+  $("#mp-pdf").onclick=async()=>{
+    const b=$("#mp-pdf"); b.disabled=true; const lib=b.textContent; b.textContent="Préparation…";
+    try{
+      await etImprimer(false,{g:[M.grp],sp:[],porteur:"",origine:"",service:"",recherche:"",
+        meo:true,taches:true,rappel:false,termine:false,interrompu:false,perimetre:"implication"});
+    }catch(e){ toast("État indisponible : "+e.message,true); }
+    finally{ b.disabled=false; b.textContent=lib; }
+  };
   if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mp-annexes"));
 }
 
