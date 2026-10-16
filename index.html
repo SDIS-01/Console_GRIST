@@ -16656,14 +16656,14 @@ function auteurEst(j,ag){
   return !!a && a===n;
 }
 function demandesDe(ag){
-  /* demandes de premier niveau écrites par l'agent, adressées à quelqu'un ou assorties d'un délai, non clôturées */
+  /* demandes de premier niveau écrites par l'agent et adressées à quelqu'un, non clôturées */
   const c=S.cfg, out=[];
   if(!ag || !c.tblJournal || !c.colJnlLien) return out;
   jnlDemandes((m,p,a)=>{
     if(jnlClos(m)) return;
     const collab=c.colJnlCollab?txt(lire(c.tblJournal,m,c.colJnlCollab)).trim():"";
     const ech=c.colJnlDelai?(Number(m[c.colJnlDelai])||null):null;
-    if((!collab && !ech) || !jnlEcritPar(m,ag)) return;
+    if(!collab || !jnlEcritPar(m,ag)) return;          // seulement les demandes adressées à quelqu'un
     /* adressée à soi-même : elle figure déjà dans « Demandes qui me sont adressées » */
     if(c.colJnlCollab && designe(c.tblJournal,m,c.colJnlCollab,ag)) return;
     out.push(Object.assign(jnlElement(m,p,a),{cle:"demande:"+m.id,genre:"demande"}));
@@ -17042,7 +17042,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 14 h 55</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 15 h 05</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18222,9 +18222,16 @@ function jnlIndex(){
 }
 function jnlReponses(m){ return jnlIndex().get(m.id)||[]; }
 /* « clos », « repondue » (dernier mot à quelqu'un d'autre que l'auteur) ou « attente » */
+/* demande adressée à son propre auteur */
+function jnlAutoAdressee(m){
+  const c=S.cfg; if(!c.colJnlCollab) return false;
+  const a=motsTries(jnlAuteurNom(m)), d=motsTries(lire(c.tblJournal,m,c.colJnlCollab));
+  return !!a && a===d;
+}
 function jnlStatut(m){
   if(jnlClos(m)) return "clos";
   const reps=jnlReponses(m), der=reps[reps.length-1];
+  if(der && jnlAutoAdressee(m)) return "repondue";
   if(!der || jnlMemeAuteur(der,m)) return "attente";
   return "repondue";
 }
@@ -18409,9 +18416,11 @@ function jnlBrancherTravail(z,items,ag){
     e.stopPropagation();
     const n=items[Number(b.dataset.jfait)]; if(!n) return;
     b.disabled=true;
-    try{ await jnlAjouterReponse(n,"✓ Fait.",ag); }
+    /* demande qu'on s'est adressée à soi-même : « Fait » la clôture directement */
+    const soi=jnlAutoAdressee(n.j) || jnlEcritPar(n.j,ag);
+    try{ if(soi) await jnlCloturer(n.j); else await jnlAjouterReponse(n,"✓ Fait.",ag); }
     catch(err){ b.disabled=false; toast("Échec de l'enregistrement : "+err.message,true); return; }
-    lu(n); await apres("Signalé comme fait à "+(n.auteur||"l'auteur"));
+    lu(n); await apres(soi?"Demande clôturée":"Signalé comme fait à "+(n.auteur||"l'auteur"));
   });
   z.querySelectorAll("[data-jclo]").forEach(b=>b.onclick=async e=>{
     e.stopPropagation();
@@ -18857,7 +18866,7 @@ async function demarrer(){
   /* posé avant le premier chargement : même si celui-ci échoue, la console
      continue de se rafraîchir toute seule */
   try{ grist.onRecords(()=>{ if(S.pret && !nbModifs()) rechargerBientot(); }); }catch(e){}
-  try{ grist.onRecord(rec=>{ if(rec) suivreCurseur(rec.id); }); }catch(e){}
+  /* curseur Grist ignoré : la navigation se fait dans la console */
   /* la table d'historique n'est pas la table liée au widget : Grist ne signale
      pas ses changements. On la relit quand on revient dans le widget, et l'on
      ne redessine que si elle a changé, pour ne pas voler le focus d'un champ. */
