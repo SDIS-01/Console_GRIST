@@ -1954,6 +1954,9 @@ body.app-monpf .app-filtres{display:none;}
 .nav-vu{display:inline-flex;align-items:center;gap:8px;margin-left:10px;padding:3px 6px 3px 11px;border-radius:14px;background:#fff1d6;color:#7a4b00;font-size:12px;border:1px solid #f0c36a;}
 .nav-vu b{color:#5a3700;}
 .nav-vu button{border:0;background:#7a4b00;color:#fff;border-radius:10px;padding:2px 9px;font:inherit;font-size:11.5px;cursor:pointer;}
+.mp-table tr.mp-sousp td{padding:7px 10px 3px 24px;background:#fafbfd;border-bottom:0;font-weight:600;color:#1c2f6b;font-size:12.5px;}
+.mp-table tr.mp-sousp .mp-pp{margin-left:10px;font-weight:400;color:var(--gris);font-size:11.5px;}
+.mp-table tr.mp-sous-it td.et-lib{padding-left:44px;}
 </style>
 </head>
 <body>
@@ -17014,7 +17017,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 16/10/2026 · 11 h 55</div>';
+    '<div class="ed-version">Version du 16/10/2026 · 12 h 05</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18448,7 +18451,7 @@ function jnlBrancherFormulaire(o){
      mon groupement (table des collaborateurs), regroupable par collaborateur.
    Puis le MEC 2023 / PAPRIPACT du groupement.
    ======================================================================= */
-APP.monpf=APP.monpf||{vue:"moi",parCollab:true,grp:"",noms:null,jeton:0};
+APP.monpf=APP.monpf||{vue:"moi",parCollab:true,voir100:false,grp:"",noms:null,jeton:0};
 const mpMots=x=>String(x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort().join(" ");
 
 /* groupement de l'agent et noms de ses collaborateurs, lus par le moteur d'état */
@@ -18486,10 +18489,16 @@ function rendreMonPf(){
   const est=r=>enGrp ? noms.has(mpMots(lire(c.tblMain,r,c.colPorteur))) : designe(c.tblMain,r,c.colPorteur,ag);
   const auj=aujourdHuiUTC();
   const tous=projets();
-  const mesProjets=tous.filter(est);
-  const idsMes=new Set(mesProjets.map(p=>p.id));
-  const autres=[];
-  tous.filter(p=>!idsMes.has(p.id)).forEach(p=>actionsDe(p).forEach(a=>{ if(est(a)) autres.push({a,p}); }));
+  const fini=r=>{ const v=pct(r[c.colAvancement]); return v!=null && v>=100; };
+  const garde=r=>M.voir100 || !fini(r);
+  const mesTous=tous.filter(est);
+  const idsMes=new Set(mesTous.map(p=>p.id));
+  const mesProjets=mesTous.filter(garde);
+  const actsDe=p=>actionsDe(p).filter(garde);
+  const autresTous=[];
+  tous.filter(p=>!idsMes.has(p.id)).forEach(p=>actionsDe(p).forEach(a=>{ if(est(a)) autresTous.push({a,p}); }));
+  const autres=autresTous.filter(x=>garde(x.a));
+  const nb100Moi=mesTous.filter(fini).length+mesTous.reduce((s,p)=>s+actionsDe(p).filter(fini).length,0)+autresTous.filter(x=>fini(x.a)).length;
 
   const ech=(e,fini)=>'<td class="'+(e&&e<auj&&!fini?"app-ret":"")+'">'+(e?dateVersFR(e):"—")+'</td>';
   const libAction=a=>{
@@ -18524,16 +18533,17 @@ function rendreMonPf(){
       '<tr class="et-grp"><td colspan="'+nbCol+'">'+esc(k)+'<small>'+g.get(k).length+'</small></td></tr>'+g.get(k).map(rendu).join("")).join("");
   };
   if(enGrp){ mpRendreGroupe(z,ag,est,{ech,libAction,ligneP}); return; }
-  const nbA=mesProjets.reduce((s,p)=>s+actionsDe(p).length,0);
+  const nbA=mesProjets.reduce((s,p)=>s+actsDe(p).length,0);
   const qui=enGrp?"du groupement":"";
-  z.innerHTML=
+  z.innerHTML='<div class="mp-outils"><span></span><button type="button" class="mt-chip'+(M.voir100?" on":"")+'" id="mp-100">'+
+      (M.voir100?"☑":"☐")+' Afficher les 100 %'+(nb100Moi?' ('+nb100Moi+')':'')+'</button></div>'+
     (enGrp?'<div class="mp-outils"><span>'+M.noms.length+' collaborateur'+(M.noms.length>1?"s":"")+' rattaché'+(M.noms.length>1?"s":"")+' à '+esc(M.grp)+'</span>'+
       '<button type="button" class="mt-chip'+(M.parCollab?" on":"")+'" id="mp-collab">'+(M.parCollab?"☑":"☐")+' Regrouper par collaborateur</button></div>':'')+
     '<div class="mp-carte"><h3>'+(enGrp?"Projets & actions du groupement":Mes+" projets & actions")+'<span>'+mesProjets.length+' projet'+(mesProjets.length>1?"s":"")+
       (nbA?' · '+nbA+' action'+(nbA>1?"s":""):'')+'</span></h3>'+
       (mesProjets.length
         ? '<table class="app-table mp-table">'+tete(colsP)+'<tbody>'+
-          grouper(mesProjets,p=>lire(c.tblMain,p,c.colPorteur),p=>ligneP(p)+actionsDe(p).map(a=>ligneA(a,p,false)).join(""),5)+'</tbody></table>'
+          grouper(mesProjets,p=>lire(c.tblMain,p,c.colPorteur),p=>ligneP(p)+actsDe(p).map(a=>ligneA(a,p,false)).join(""),5)+'</tbody></table>'
         : '<div class="mt-vide">'+(enGrp?"Aucun projet porté par un collaborateur du groupement.":(autre?nomAgent(ag)+" n'est porteur d'aucun projet.":"Vous n'êtes porteur d'aucun projet."))+'</div>')+'</div>'+
     '<div class="mp-carte"><h3>'+(enGrp?"Actions de mise en œuvre du groupement":Mes+" actions de mise en œuvre")+'<span>'+autres.length+' action'+(autres.length>1?"s":"")+
       ' dans des projets portés '+(enGrp?"hors du groupement":"par d'autres")+'</span></h3>'+
@@ -18545,6 +18555,7 @@ function rendreMonPf(){
   z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>ouvrirFiche(S.data.main.find(r=>r.id===Number(tr.dataset.p))));
   z.querySelectorAll("tr[data-a]").forEach(tr=>tr.onclick=()=>ouvrirFicheDepuisLigne(Number(tr.dataset.a)));
   const bc=$("#mp-collab"); if(bc) bc.onclick=()=>{ M.parCollab=!M.parCollab; rendreMonPf(); };
+  const b100=$("#mp-100"); if(b100) b100.onclick=()=>{ M.voir100=!M.voir100; rendreMonPf(); };
   if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mp-annexes"));
 }
 
@@ -18569,6 +18580,10 @@ function mpRendreGroupe(z,ag,est,u){
       tachesDe(a).forEach(x=>{ const pt=porT(x); if(estN(pt) && !meme(pt,pa) && !meme(pt,pp)) items.push({k:"T",t:x,p,a,porteur:pt,ech:Number(x[c.colTacheFin])||null}); });
     });
   });
+  /* par défaut, ce qui est à 100 % n'est pas repris */
+  const avIt=i=>i.k==="T"?pct(i.t[c.colTacheAvancement]):pct((i.k==="P"?i.p:i.a)[c.colAvancement]);
+  const nb100=items.filter(i=>{ const v=avIt(i); return v!=null && v>=100; }).length;
+  if(!M.voir100) for(let i=items.length-1;i>=0;i--){ const v=avIt(items[i]); if(v!=null && v>=100) items.splice(i,1); }
   const ordre={P:0,A:1,T:2};
   items.sort((x,y)=>ordre[x.k]-ordre[y.k]||((x.ech||9e12)-(y.ech||9e12)));
   const auj=aujourdHuiUTC();
@@ -18577,15 +18592,28 @@ function mpRendreGroupe(z,ag,est,u){
     if(it.k==="P") return u.ligneP(it.p);
     if(it.k==="A"){
       const a=it.a, av=pct(a[c.colAvancement]), inter=interrompu(a);
-      return '<tr class="et-action" data-a="'+a.id+'"><td class="et-lib">'+u.libAction(a)+'<div class="app-sous">'+sousP(it.p)+'</div></td>'+
+      return '<tr class="et-action mp-sous-it" data-a="'+a.id+'"><td class="et-lib">'+u.libAction(a)+'</td>'+
         '<td>'+esc(it.porteur)+'</td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td><td>'+etBarre(av)+'</td>'+u.ech(it.ech,av>=100||inter)+'</tr>';
     }
     const x=it.t, av=pct(x[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,x,c.colTacheStatut);
-    return '<tr class="et-tache" '+(it.a?'data-a="'+it.a.id+'"':'data-p="'+it.p.id+'"')+'><td class="et-lib"><span class="et-t">Tâche</span>'+
-      esc(lire(c.tblTache,x,c.colTacheLibelle)||"(sans libellé)")+'<div class="app-sous">'+sousP(it.p)+
-      (it.a?' › '+esc(decouperLibelleAction(lire(c.tblMain,it.a,c.colLibelle)).texte||lire(c.tblMain,it.a,c.colLibelle)):'')+'</div></td>'+
+    return '<tr class="et-tache mp-sous-it" '+(it.a?'data-a="'+it.a.id+'"':'data-p="'+it.p.id+'"')+'><td class="et-lib"><span class="et-t">Tâche</span>'+
+      esc(lire(c.tblTache,x,c.colTacheLibelle)||"(sans libellé)")+
+      (it.a?'<div class="app-sous">'+esc(decouperLibelleAction(lire(c.tblMain,it.a,c.colLibelle)).texte||lire(c.tblMain,it.a,c.colLibelle))+'</div>':'')+'</td>'+
       '<td>'+esc(it.porteur)+'</td><td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,x,c.colTacheStatut):"",av||0,inter)+'</td>'+
       '<td>'+(av==null?"":etBarre(av))+'</td>'+u.ech(it.ech,av>=100||inter)+'</tr>';
+  };
+  /* un lot de lignes : projets portés d'abord, puis chaque autre projet en entête
+     avec, dessous, les actions et tâches qui s'y rattachent */
+  const lot=l=>{
+    let h=l.filter(i=>i.k==="P").map(ligne).join("");
+    const parP=new Map();
+    l.filter(i=>i.k!=="P").forEach(i=>{ if(!parP.has(i.p.id)) parP.set(i.p.id,[]); parP.get(i.p.id).push(i); });
+    [...parP.values()].sort((x,y)=>lire(c.tblMain,x[0].p,c.colLibelle).localeCompare(lire(c.tblMain,y[0].p,c.colLibelle),"fr")).forEach(xs=>{
+      const p=xs[0].p, pp=por(p);
+      h+='<tr class="mp-sousp" data-p="'+p.id+'"><td colspan="5">'+sousP(p)+(pp?'<span class="mp-pp">projet porté par '+esc(pp)+'</span>':'')+'</td></tr>'+
+        xs.map(ligne).join("");
+    });
+    return h;
   };
   let corps="";
   if(M.parCollab){
@@ -18593,13 +18621,14 @@ function mpRendreGroupe(z,ag,est,u){
     [...g.keys()].sort((a,b)=>a.localeCompare(b,"fr")).forEach(k=>{
       const l=g.get(k), n=kk=>l.filter(i=>i.k===kk).length;
       const det=[[n("P"),"projet"],[n("A"),"action"],[n("T"),"tâche"]].filter(x=>x[0]).map(([v,lb])=>v+" "+lb+(v>1?"s":"")).join(" · ");
-      corps+='<tr class="et-grp"><td colspan="5">'+esc(k)+'<small>'+det+'</small></td></tr>'+l.map(ligne).join("");
+      corps+='<tr class="et-grp"><td colspan="5">'+esc(k)+'<small>'+det+'</small></td></tr>'+lot(l);
     });
-  } else corps=items.map(ligne).join("");
+  } else corps=lot(items);
   const n=kk=>items.filter(i=>i.k===kk).length;
   z.innerHTML=
     '<div class="mp-outils"><span>'+M.noms.length+' collaborateur'+(M.noms.length>1?"s":"")+' rattaché'+(M.noms.length>1?"s":"")+' à '+esc(M.grp)+'</span>'+
       '<button type="button" class="mt-chip'+(M.parCollab?" on":"")+'" id="mp-collab">'+(M.parCollab?"☑":"☐")+' Regrouper par collaborateur</button>'+
+      '<button type="button" class="mt-chip'+(M.voir100?" on":"")+'" id="mp-100">'+(M.voir100?"☑":"☐")+' Afficher les 100 %'+(nb100?' ('+nb100+')':'')+'</button>'+
       '<button type="button" class="anx-pdf" id="mp-pdf" title="État du groupement : projets, actions et tâches, tout ce qui implique le groupement">🖨 État PDF du groupement</button></div>'+
     '<div class="mp-carte"><h3>Projets, actions et tâches du groupement<span>'+
       [[n("P"),"projet"],[n("A"),"action"],[n("T"),"tâche"]].map(([v,lb])=>v+" "+lb+(v>1?"s":"")).join(" · ")+'</span></h3>'+
@@ -18610,6 +18639,7 @@ function mpRendreGroupe(z,ag,est,u){
   z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>ouvrirFiche(S.data.main.find(r=>r.id===Number(tr.dataset.p))));
   z.querySelectorAll("tr[data-a]").forEach(tr=>tr.onclick=()=>ouvrirFicheDepuisLigne(Number(tr.dataset.a)));
   $("#mp-collab").onclick=()=>{ M.parCollab=!M.parCollab; rendreMonPf(); };
+  $("#mp-100").onclick=()=>{ M.voir100=!M.voir100; rendreMonPf(); };
   $("#mp-pdf").onclick=async()=>{
     const b=$("#mp-pdf"); b.disabled=true; const lib=b.textContent; b.textContent="Préparation…";
     try{
