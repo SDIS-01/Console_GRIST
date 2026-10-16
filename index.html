@@ -1950,6 +1950,10 @@ body.app-monpf .app-filtres{display:none;}
 .mp-outils{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--gris);}
 .mp-outils .mt-chip{margin-left:auto;}
 .ed-version{padding:6px 12px 2px;font-size:10.5px;color:var(--gris);border-top:1px solid var(--trait);margin-top:4px;}
+/* navigation comme un autre agent */
+.nav-vu{display:inline-flex;align-items:center;gap:8px;margin-left:10px;padding:3px 6px 3px 11px;border-radius:14px;background:#fff1d6;color:#7a4b00;font-size:12px;border:1px solid #f0c36a;}
+.nav-vu b{color:#5a3700;}
+.nav-vu button{border:0;background:#7a4b00;color:#fff;border-radius:10px;padding:2px 9px;font:inherit;font-size:11.5px;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -16320,7 +16324,8 @@ function allerVue(vue,sous){
   if(vue==="revues"){ ouvrirRevues(); return; }
   if(APP.vue==="revues") fermerRevues();
   /* quitter « Mon travail » (autrement que pour une fiche) referme la vue d'un autre agent */
-  if(vue!=="travail"){ APP.agentVu=null; APP.choixAgent=false; }
+  /* la vue d'un autre agent reste active d'un onglet à l'autre, jusqu'à « Revenir à moi » */
+  if(vue!=="travail") APP.choixAgent=!!APP.agentVu && APP.choixAgent;
   if(vue!=="fiche") APP.ficheSous="fiche";
   if(sous && sous!=="etats" && APP.etat) APP.etat.avance=false;
   if(sous==="etats" && APP.etat && !APP.etat.avance) sous="liste";
@@ -16350,6 +16355,7 @@ function rendreApp(){
   document.querySelectorAll(".app-nav [data-vue]").forEach(x=>
     x.classList.toggle("actif", x.dataset.vue===(APP.vue==="fiche"&&APP.retour?APP.retour.vue:APP.vue)));
   rendreFil();
+  bandeauAgentVu();
   const va=$("#vue-app");
   if(APP.vue==="fiche"){
     if(!S.projetSel){ APP.vue=(APP.retour&&APP.retour.vue)||"portefeuille"; APP.retour=null; return rendreApp(); }
@@ -16380,6 +16386,20 @@ function rendreApp(){
   else if(APP.sous==="annexes"){ $("#zone-annexes").hidden=false; }
   else { $("#zone-etats").hidden=false; chargerModule("etat"); }
   rendreListe();          // compteur, cloche ; puis rafraichirVueApp() dessine la vue active
+}
+/* agent dont on regarde le portefeuille et les notifications : soi, ou l'agent choisi par l'admin */
+function agentActif(){ return APP.agentVu||S.notifAgent||agentCourant(); }
+function quitterAgentVu(){ APP.agentVu=null; APP.choixAgent=false; rendreApp(); }
+/* rappel permanent, dans la barre du haut, qu'on navigue comme un autre agent */
+function bandeauAgentVu(){
+  const nav=document.querySelector(".app-nav");
+  if(!nav) return;
+  let b=$("#nav-vu");
+  if(!APP.agentVu){ if(b) b.remove(); document.body.classList.remove("app-agent-vu"); return; }
+  if(!b){ b=document.createElement("span"); b.id="nav-vu"; b.className="nav-vu"; nav.appendChild(b); }
+  document.body.classList.add("app-agent-vu");
+  b.innerHTML='👁 Vue de <b>'+esc(nomAgent(APP.agentVu))+'</b><button type="button" id="nav-vu-quitter" title="Revenir à votre propre vue">Revenir à moi ✕</button>';
+  $("#nav-vu-quitter").onclick=e=>{ e.stopPropagation(); quitterAgentVu(); };
 }
 function rendreFil(){
   const f=$("#fil-app");
@@ -16437,17 +16457,17 @@ function rendreFil(){
       APP.choixAgent=true; rendreFil();
     };
     const sa=$("#mt-agent");
-    if(sa) sa.onchange=()=>{ APP.agentVu=(S.data.agents||[]).find(a=>a.id===Number(sa.value))||null; rendreFil(); rendreTravail(); };
+    if(sa) sa.onchange=()=>{ APP.agentVu=(S.data.agents||[]).find(a=>a.id===Number(sa.value))||null; rendreFil(); bandeauAgentVu(); rendreTravail(); };
     const bm=$("#mt-moi");
-    if(bm) bm.onclick=()=>{ APP.agentVu=null; APP.choixAgent=false; rendreFil(); rendreTravail(); };
+    if(bm) bm.onclick=()=>quitterAgentVu();
     return;
   }
   if(APP.vue==="monpf"){
-    const moi=S.notifAgent||agentCourant();
+    const moi=agentActif();
     const M=APP.monpf;
-    f.innerHTML='<b>Mon portefeuille</b>'+(moi?'<span class="fil-chemin">— '+esc(M.vue==="grp"&&M.grp?M.grp:nomAgent(moi))+'</span>':'')+
+    f.innerHTML='<b>'+(APP.agentVu?'Portefeuille de '+esc(nomAgent(APP.agentVu)):'Mon portefeuille')+'</b>'+(moi&&!APP.agentVu?'<span class="fil-chemin">— '+esc(M.vue==="grp"&&M.grp?M.grp:nomAgent(moi))+'</span>':'')+
       '<span class="fil-esp"></span><div class="fil-sous">'+
-      [["moi","Moi"],["grp","Mon groupement"+(M.grp?" ("+M.grp+")":"")]].map(([k,l])=>
+      [["moi",APP.agentVu?nomAgent(APP.agentVu):"Moi"],["grp",(APP.agentVu?"Son":"Mon")+" groupement"+(M.grp?" ("+M.grp+")":"")]].map(([k,l])=>
         '<button type="button" data-mpv="'+k+'" class="'+(M.vue===k?"actif":"")+'">'+esc(l)+'</button>').join("")+'</div>';
     f.querySelectorAll("[data-mpv]").forEach(x=>x.onclick=()=>{ M.vue=x.dataset.mpv; rendreFil(); rendreMonPf(); });
     return;
@@ -18447,7 +18467,7 @@ async function mpChargerGroupement(ag){
 function rendreMonPf(){
   const z=$("#zone-monpf"), c=S.cfg, M=APP.monpf;
   if(!z) return;
-  const ag=S.notifAgent||agentCourant();
+  const ag=agentActif();
   if(!ag){
     z.innerHTML='<div class="app-vide">La console doit d\'abord savoir qui vous êtes : identifiez-vous dans « Mes notifications ».</div>';
     return;
@@ -18455,6 +18475,7 @@ function rendreMonPf(){
   if(M.agentId!==ag.id && M.noms!==null){ M.noms=null; M.grp=""; }
   if(M.noms===null && !M.enCours){ M.enCours=true; mpChargerGroupement(ag).finally(()=>{ M.enCours=false; }); }
   const enGrp=M.vue==="grp";
+  const autre=!!APP.agentVu, Mes=autre?"Ses":"Mes";
   if(enGrp && M.noms===null){ z.innerHTML='<div class="app-vide">Recherche des collaborateurs de votre groupement…</div>'; return; }
   if(enGrp && !M.noms.length){
     z.innerHTML='<div class="app-vide">'+(M.grp?'Aucun collaborateur trouvé pour le groupement '+esc(M.grp)+'.'
@@ -18507,13 +18528,13 @@ function rendreMonPf(){
   z.innerHTML=
     (enGrp?'<div class="mp-outils"><span>'+M.noms.length+' collaborateur'+(M.noms.length>1?"s":"")+' rattaché'+(M.noms.length>1?"s":"")+' à '+esc(M.grp)+'</span>'+
       '<button type="button" class="mt-chip'+(M.parCollab?" on":"")+'" id="mp-collab">'+(M.parCollab?"☑":"☐")+' Regrouper par collaborateur</button></div>':'')+
-    '<div class="mp-carte"><h3>'+(enGrp?"Projets & actions du groupement":"Mes projets & actions")+'<span>'+mesProjets.length+' projet'+(mesProjets.length>1?"s":"")+
+    '<div class="mp-carte"><h3>'+(enGrp?"Projets & actions du groupement":Mes+" projets & actions")+'<span>'+mesProjets.length+' projet'+(mesProjets.length>1?"s":"")+
       (nbA?' · '+nbA+' action'+(nbA>1?"s":""):'')+'</span></h3>'+
       (mesProjets.length
         ? '<table class="app-table mp-table">'+tete(colsP)+'<tbody>'+
           grouper(mesProjets,p=>lire(c.tblMain,p,c.colPorteur),p=>ligneP(p)+actionsDe(p).map(a=>ligneA(a,p,false)).join(""),5)+'</tbody></table>'
-        : '<div class="mt-vide">'+(enGrp?"Aucun projet porté par un collaborateur du groupement.":"Vous n'êtes porteur d'aucun projet.")+'</div>')+'</div>'+
-    '<div class="mp-carte"><h3>'+(enGrp?"Actions de mise en œuvre du groupement":"Mes actions de mise en œuvre")+'<span>'+autres.length+' action'+(autres.length>1?"s":"")+
+        : '<div class="mt-vide">'+(enGrp?"Aucun projet porté par un collaborateur du groupement.":(autre?nomAgent(ag)+" n'est porteur d'aucun projet.":"Vous n'êtes porteur d'aucun projet."))+'</div>')+'</div>'+
+    '<div class="mp-carte"><h3>'+(enGrp?"Actions de mise en œuvre du groupement":Mes+" actions de mise en œuvre")+'<span>'+autres.length+' action'+(autres.length>1?"s":"")+
       ' dans des projets portés '+(enGrp?"hors du groupement":"par d'autres")+'</span></h3>'+
       (autres.length
         ? '<table class="app-table mp-table">'+tete(colsA)+'<tbody>'+
