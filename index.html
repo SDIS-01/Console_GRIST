@@ -2135,6 +2135,9 @@ tr:hover .bdg-pastille-vide,details:hover>summary .bdg-pastille-vide,.bdg-pastil
 .bdg-detail-cel small{display:block;font-size:10px;text-transform:uppercase;color:#6b7591;letter-spacing:.03em;margin-bottom:1px;}
 .bdg-bulle .bdg-detail{overflow:auto;}
 .date-fin-lect{display:inline-block;padding:4px 2px;color:#3c4a6b;font-variant-numeric:tabular-nums;white-space:nowrap;cursor:help;}
+.impr-com{display:flex;flex-direction:column;gap:3px;padding:6px 10px 8px;border-bottom:1px solid var(--trait);margin-bottom:4px;font-size:12px;}
+.impr-com>span{font-size:10.5px;text-transform:uppercase;color:var(--gris);letter-spacing:.03em;}
+.impr-com label{display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -17237,7 +17240,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 16 h 05</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 16 h 20</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17321,7 +17324,11 @@ vueInitiale();
 function imprimerOngletMenu(btn){
   document.querySelectorAll(".impr-menu").forEach(x=>x.remove());
   const m=document.createElement("div"); m.className="impr-menu";
-  m.innerHTML='<button type="button" data-or="portrait">🖨 Portrait</button><button type="button" data-or="landscape">🖨 Paysage</button>';
+  const avecCom=S.onglet==="actions"||S.onglet==="taches", mc=imprComMode();
+  m.innerHTML=(avecCom?'<div class="impr-com"><span>Commentaires</span>'+[["complet","Complets"],["dernier","Dernier seulement"],["aucun","Sans"]].map(([k,l])=>
+      '<label><input type="radio" name="impr-com" value="'+k+'"'+(mc===k?' checked':'')+'> '+l+'</label>').join("")+'</div>':'')+
+    '<button type="button" data-or="portrait">🖨 Portrait</button><button type="button" data-or="landscape">🖨 Paysage</button>';
+  m.querySelectorAll('input[name="impr-com"]').forEach(x=>x.onchange=()=>imprComModeEnr(x.value));
   document.body.appendChild(m);
   const r=btn.getBoundingClientRect();
   m.style.top=(r.bottom+4)+"px"; m.style.left=Math.max(8,r.right-m.offsetWidth)+"px";
@@ -17401,6 +17408,9 @@ const IMPR_CSS=
   '.ip-g td small{font-weight:400;color:#5b6684;margin-left:8px;font-size:9px}'+
   '.ip-lib b{font-size:10.5px;color:#1c2333}.ip-code{display:inline-block;font-size:8.5px;font-weight:700;color:#3d4866;background:#e8ecf5;border-radius:4px;padding:0 5px;margin-right:5px}'+
   '.ip-com{display:block;margin-top:3px;font-size:9px;color:#6b7591;white-space:pre-wrap;line-height:1.35}'+
+  '.ip-t tr.ip-comrow td{padding-top:0;border-top:0}.ip-t tr:has(+tr.ip-comrow)>td{border-bottom:0}'+
+  '.ip-combloc{display:flex;flex-wrap:wrap;gap:2px 14px;align-items:baseline;border-left:2px solid #c5cbd8;padding:1px 0 2px 8px;margin:0 0 2px 2px;font-size:8.5px;color:#4a5571;line-height:1.35}'+
+  '.ip-com-i{font-size:8px;margin-right:-6px}.ip-ent{white-space:pre-line}.ip-ent b{color:#2c3a5c;font-weight:600}'+
   '.ip-ret{color:#c0392b;font-weight:700}.ip-av{display:flex;align-items:center;gap:5px}.ip-av i{flex:1;height:6px;border-radius:3px;background:#e8ecf3;overflow:hidden;display:block}'+
   '.ip-av i b{display:block;height:100%}.ip-vide{color:#8a93a8;font-style:italic;padding:8px 0}'+
   '.ip-t td>span:not(.ip-code):not(.ip-com),.ip-t td>span *{font-size:9.5px!important}.ip-num{text-align:right;white-space:nowrap;font-weight:600}.ip-bdg{text-align:right;font-weight:600}.ip-bdg small{display:block;text-align:left;font-weight:normal;font-size:8.5px!important;white-space:pre-line;color:#333;margin-top:2px}.ip-bdg small+small{margin-top:5px}.ip-bdg-m{display:inline-block;white-space:nowrap;background:#eaf6ee;border:1px solid #b9dcc4;color:#1f6b38;border-radius:9px;padding:0 6px}.ip-bdg-i{display:inline-block;font-size:8.5px;background:#eaf6ee;border:1px solid #b9dcc4;border-radius:9px;padding:0 5px;margin-bottom:1px}';
@@ -17412,6 +17422,22 @@ function imprAv(a,inter){
 function imprDate(ts,fini){
   if(!ts) return '—';
   return '<span class="'+(!fini&&ts<aujourdHuiUTC()?"ip-ret":"")+'">'+dateVersFR(ts)+'</span>';
+}
+/* commentaires à l'impression : complets, dernier seulement ou aucun (choix mémorisé) */
+function imprComMode(){ try{ const m=localStorage.getItem("cp-impr-com"); return ["complet","dernier","aucun"].includes(m)?m:"complet"; }catch(e){ return "complet"; } }
+function imprComModeEnr(m){ try{ localStorage.setItem("cp-impr-com",m); }catch(e){} }
+/* ligne sur toute la largeur, sous la ligne de l'action ou de la tâche */
+function imprComLigne(v,nbc){
+  const mode=imprComMode();
+  if(mode==="aucun") return "";
+  let blocs=espacerCommentaire(v).split(/\n\s*\n/).map(b=>b.split("\n").map(l=>l.trim()).filter(Boolean).join("\n")).filter(Boolean);
+  if(!blocs.length) return "";
+  if(mode==="dernier") blocs=blocs.slice(0,1);
+  return '<tr class="ip-comrow"><td colspan="'+nbc+'"><div class="ip-combloc"><span class="ip-com-i">💬</span>'+
+    blocs.map(b=>{
+      const m=b.match(/^(\d{2}\/\d{2}\/\d{4} — [^:\n]{1,60} :)\s*([\s\S]*)$/);
+      return '<span class="ip-ent">'+(m?'<b>'+esc(m[1])+'</b> '+esc(m[2]):esc(b))+'</span>';
+    }).join("")+'</div></td></tr>';
 }
 function imprCom(v){ const s=espacerCommentaire(v).trim(); return s?'<span class="ip-com">'+esc(s)+'</span>':''; }
 function imprCodeAction(a){
@@ -17429,7 +17455,7 @@ function imprActions(p){
   const ligne=a=>{
     const av=pct(a[c.colAvancement]), inter=interrompu(a), ca=imprCodeAction(a);
     return '<tr><td class="ip-lib">'+(ca.code?'<span class="ip-code">'+esc(ca.code)+'</span>':'')+'<b>'+esc(ca.lib)+'</b>'+
-      (c.colCommentaire?imprCom(a[c.colCommentaire]):'')+'</td>'+
+'</td>'+
       '<td>'+esc(lire(c.tblMain,a,c.colPorteur))+'</td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td>'+
       '<td>'+imprAv(av,inter)+'</td><td>'+imprDate(Number(a[c.colDebut])||null,true)+'</td>'+
       '<td>'+imprDate(Number(a[c.colEch])||null,(av!=null&&av>=100)||inter)+'</td>'+
@@ -17446,7 +17472,7 @@ function imprActions(p){
       const moy=avs.length?Math.round(avs.reduce((s,x)=>s+x,0)/avs.length):null;
       h+='<tr class="ip-g"><td colspan="'+nbc+'">'+esc(k||"Sans axe")+'<small>'+l.length+' action'+(l.length>1?"s":"")+(moy!=null?' · '+moy+' %':'')+'</small></td></tr>';
     }
-    h+=l.map(ligne).join("");
+    h+=l.map(a=>ligne(a)+imprComLigne(c.colCommentaire?a[c.colCommentaire]:"",nbc)).join("");
   });
   return h+'</tbody></table>';
 }
@@ -17469,7 +17495,7 @@ function imprTaches(p){
   const ligne=t=>{
     const av=pct(t[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,t,c.colTacheStatut);
     return '<tr><td class="ip-lib"><b>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+'</b>'+
-      (c.colTacheCommentaire?imprCom(t[c.colTacheCommentaire]):'')+'</td>'+
+'</td>'+
       '<td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td>'+
       '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",av||0,inter)+'</td>'+
       '<td>'+imprAv(av,inter)+'</td><td>'+imprDate(Number(t[c.colTacheDebut])||null,true)+'</td>'+
@@ -17487,7 +17513,7 @@ function imprTaches(p){
     if(x.id===p.id) titre='Tâches rattachées au projet';
     else { const ca=imprCodeAction(x); titre=(ca.code?'<span class="ip-code">'+esc(ca.code)+'</span>':'')+esc(ca.lib); }
     h+='<tr class="ip-g"><td colspan="'+nbc+'">'+titre+'<small>'+(x.id!==p.id&&lire(c.tblMain,x,c.colPorteur)?esc(lire(c.tblMain,x,c.colPorteur))+' · ':'')+
-      ts.length+' tâche'+(ts.length>1?"s":"")+(x.id!==p.id&&av!=null?' · '+av+' %':'')+'</small></td></tr>'+ts.map(ligne).join("");
+      ts.length+' tâche'+(ts.length>1?"s":"")+(x.id!==p.id&&av!=null?' · '+av+' %':'')+'</small></td></tr>'+ts.map(t=>ligne(t)+imprComLigne(c.colTacheCommentaire?t[c.colTacheCommentaire]:"",nbc)).join("");
   });
   return h+'</tbody></table>';
 }
