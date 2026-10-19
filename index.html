@@ -2130,6 +2130,10 @@ tr:hover .bdg-pastille-vide,details:hover>summary .bdg-pastille-vide,.bdg-pastil
 .anx-mod-pied{display:flex;gap:8px;justify-content:flex-end;}
 .mb-anx-act{display:flex;gap:8px;margin:4px 0 10px;}
 .mb-anx-act .mb-chip{flex:1;}
+.bdg-detail-sub{font-size:11.5px;color:#4a5571;margin-top:3px;line-height:1.45;}
+.bdg-detail-cel+.bdg-detail-cel{margin-top:6px;padding-top:6px;border-top:1px dashed #d5dcef;}
+.bdg-detail-cel small{display:block;font-size:10px;text-transform:uppercase;color:#6b7591;letter-spacing:.03em;margin-bottom:1px;}
+.bdg-bulle .bdg-detail{overflow:auto;}
 </style>
 </head>
 <body>
@@ -17226,7 +17230,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 15 h 10</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 15 h 25</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -19763,20 +19767,38 @@ function bdgMigrerHtml(h){
   return nettoyerBudget(d.innerHTML);
 }
 
+/* texte d'une cellule, retours à la ligne conservés (br, paragraphes, puces) */
+function bdgTexteCellule(td){
+  if(!td) return "";
+  const c=td.cloneNode(true);
+  c.querySelectorAll(".bdg-rat-lu,.bdg-poignee").forEach(x=>x.remove());
+  c.querySelectorAll("br").forEach(b=>b.replaceWith("\n"));
+  c.querySelectorAll("p,li,div").forEach(b=>b.append("\n"));
+  return c.textContent.split("\n").map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean).join("\n");
+}
+/* lignes de données d'un tableau (de budget ou non) */
+function bdgRangs(t){
+  if(bdgEstBudget(t)) return bdgLignesDonnees(t);
+  const rs=[...t.rows];
+  return rs[0] && rs[0].querySelector("th") ? rs.slice(1) : rs;
+}
 /* éléments rattachables d'un contenu de budget, dans l'ordre */
 function bdgElements(racine){
   const out=[];
   [...racine.children].forEach(el=>{
     if(el.classList.contains("bdg-rat-lu")) return;
     if(el.tagName==="TABLE"){
-      if(!bdgEstBudget(el)) return;
-      const ty=bdgTypes(el), iE=ty.indexOf("eur"), iS=ty.indexOf("sec"), iP=ty.indexOf("txt"), iL=ty.indexOf("lien");
-      bdgLignesDonnees(el).forEach(r=>{
-        const cel=i=>i>=0&&r.cells[i]?r.cells[i].textContent.trim():"";
+      const budget=bdgEstBudget(el);
+      const ty=budget?bdgTypes(el):[], iE=ty.indexOf("eur"), iS=ty.indexOf("sec"), iL=ty.indexOf("lien");
+      const tete=el.rows[0]&&el.rows[0].querySelector("th")?[...el.rows[0].cells].map(c=>bdgTexteCellule(c)):[];
+      bdgRangs(el).forEach(r=>{
         const n=iE>=0&&r.cells[iE]?bdgLireMontant(r.cells[iE].textContent):null;
         const l=r.getAttribute("data-lien")||(iL>=0&&r.cells[iL]&&r.cells[iL].getAttribute("data-lien"))||"";
-        out.push({el:r, genre:"ligne", lien:BDG_RE_LIEN.test(l)?l:"", poste:cel(iP),
-          montant:(n===null||Number.isNaN(n))?null:n, section:cel(iS), vide:![...r.cells].some(c=>c.textContent.trim())});
+        const cellules=[...r.cells].map((c,i)=>({entete:tete[i]||"", type:ty[i]||"txt", texte:bdgTexteCellule(c)}))
+          .filter((x,i)=>x.type!=="lien" && i!==iE && i!==iS && x.texte);
+        out.push({el:r, genre:"ligne", lien:BDG_RE_LIEN.test(l)?l:"", poste:cellules[0]?cellules[0].texte.split("\n")[0]:"",
+          montant:(n===null||Number.isNaN(n))?null:n, section:iS>=0&&r.cells[iS]?r.cells[iS].textContent.trim():"",
+          cellules, vide:![...r.cells].some(c=>c.textContent.trim())});
       });
       return;
     }
@@ -19811,9 +19833,12 @@ function bdgLiens(p){
     bdgElements(d).forEach(o=>{
       if(!o.lien) return;
       if(!map.has(o.lien)) map.set(o.lien,[]);
-      map.get(o.lien).push(o.genre==="ligne"
-        ? {poste:o.poste, montant:o.montant, section:o.section}
-        : {texte:o.lignes.join("\n"), lignes:o.lignes});
+      /* une ligne de tableau sans montant se lit comme du texte, colonne par colonne */
+      map.get(o.lien).push(o.genre==="ligne" && o.montant!=null
+        ? {poste:o.poste, montant:o.montant, section:o.section, autres:o.cellules.slice(1)}
+        : o.genre==="ligne"
+          ? {cellules:o.cellules, lignes:o.cellules.flatMap(x=>x.texte.split("\n")), texte:o.cellules.map(x=>(x.entete?x.entete+" : ":"")+x.texte).join("\n")}
+          : {texte:o.lignes.join("\n"), lignes:o.lignes});
     });
   }
   BDG_CACHE.src=p.id+"|"+h; BDG_CACHE.map=map;
@@ -19833,7 +19858,8 @@ function bdgResume(b){
   const cut=s=>s.length>22?s.slice(0,21)+"…":s;
   if(b.lignes.length && b.textes.length) return bdgFormat(b.total)+" + "+b.textes.length+" texte"+(b.textes.length>1?"s":"");
   if(b.lignes.length) return bdgFormat(b.total);
-  const t=b.textes[0].lignes[0]||"";
+  /* de préférence une ligne chiffrée (« 159K TTC »), sinon la première */
+  const ls=b.textes[0].lignes, t=ls.find(x=>/\d/.test(x))||ls[0]||"";
   return cut(t)+(b.textes.length>1?" (+"+(b.textes.length-1)+")":(b.textes[0].lignes.length>1&&t.length<=22?"…":""));
 }
 function bdgDetailTexte(b){
@@ -19855,10 +19881,13 @@ function bdgTexte(cle,p){ const b=bdgTotalDe(cle,p||S.projetSel); return b?bdgRe
 function bdgDetailHtml(cle,p){
   const b=bdgTotalDe(cle,p||S.projetSel); if(!b) return "";
   return '<div class="bdg-detail">'+
-    (b.lignes.length?'<table>'+b.lignes.map(x=>'<tr><td>'+esc(x.poste||"Ligne")+(x.section?' <small>'+esc(x.section)+'</small>':'')+'</td>'+
+    (b.lignes.length?'<table>'+b.lignes.map(x=>'<tr><td><b>'+esc(x.poste||"Ligne")+'</b>'+(x.section?' <small>'+esc(x.section)+'</small>':'')+
+      (x.autres||[]).map(c=>'<div class="bdg-detail-sub">'+esc(c.texte).replace(/\n/g,"<br>")+'</div>').join("")+'</td>'+
       '<td class="n">'+(x.montant!=null?esc(bdgFormat(x.montant)):"—")+'</td></tr>').join("")+
       (b.lignes.length>1?'<tr class="t"><td>Total</td><td class="n">'+esc(bdgFormat(b.total))+'</td></tr>':'')+'</table>':'')+
-    b.textes.map(x=>'<div class="bdg-detail-txt">'+x.lignes.map(esc).join("<br>")+'</div>').join("")+'</div>';
+    b.textes.map(x=>'<div class="bdg-detail-txt">'+(x.cellules
+      ? x.cellules.map(c=>'<div class="bdg-detail-cel">'+(c.entete?'<small>'+esc(c.entete)+'</small>':'')+esc(c.texte).replace(/\n/g,"<br>")+'</div>').join("")
+      : x.lignes.map(esc).join("<br>"))+'</div>').join("")+'</div>';
 }
 /* impression : montant en gras, texte complet en petit dessous */
 function bdgImpr(cle,p){
@@ -19933,8 +19962,7 @@ function bdgRattacherSelection(ed,ancre){
   const table=n.closest&&n.closest("table");
   let cible;
   if(table && ed.contains(table)){
-    if(!bdgEstBudget(table)){ toast("Seuls les tableaux de budget se rattachent ligne par ligne.",true); return; }
-    const rows=bdgLignesDonnees(table).filter(r=>rg.intersectsNode(r));
+    const rows=bdgRangs(table).filter(r=>rg.intersectsNode(r));
     if(!rows.length){ toast("Placez le curseur sur une ligne du tableau.",true); return; }
     const cur=rows[0].getAttribute("data-lien")||"";
     cible={cur, appliquer:cle=>rows.forEach(r=>cle?r.setAttribute("data-lien",cle):r.removeAttribute("data-lien"))};
@@ -20026,12 +20054,12 @@ function bdgAppliquerFiltre(racine,p){
   els.forEach(o=>{
     const vis=ok(o)&&!(f&&o.vide);
     o.el.classList.toggle("bdg-cache",!vis);
-    if(vis && f){ if(o.genre==="ligne"){ nL++; tot+=o.montant||0; } else nT++; }
+    if(vis && f){ if(o.genre==="ligne"&&o.montant!=null){ nL++; tot+=o.montant; } else nT++; }
   });
   cont.querySelectorAll("table").forEach(t=>{
-    if(!bdgEstBudget(t)) return;
-    const tr=bdgLigneTotal(t); if(tr) tr.classList.toggle("bdg-cache",!!f);
-    t.classList.toggle("bdg-cache",!!f && bdgLignesDonnees(t).every(r=>r.classList.contains("bdg-cache")));
+    const tr=bdgEstBudget(t)?bdgLigneTotal(t):null; if(tr) tr.classList.toggle("bdg-cache",!!f);
+    const rs=bdgRangs(t);
+    t.classList.toggle("bdg-cache",!!f && rs.length>0 && rs.every(r=>r.classList.contains("bdg-cache")));
   });
   let info=racine.querySelector(".bdg-filtre-info");
   if(!info){ info=document.createElement("div"); info.className="bdg-filtre-info"; cont.before(info); }
@@ -20071,7 +20099,7 @@ function bdgBulle(ancre,cle,p){
       '<input type="search" class="bdg-b-q" placeholder="🔍 Tapez un mot-clé…">'+
       '<div class="bdg-b-liste">'+els.map((o,i)=>{
         const autre=o.lien&&o.lien!==cle?bdgLibelleCible(p,o.lien):"";
-        const txt=o.genre==="ligne"?(o.poste||"(ligne)")+(o.montant!=null?" — "+bdgFormat(o.montant):""):o.lignes.join(" · ");
+        const txt=o.genre==="ligne"?(o.montant!=null?(o.poste||"(ligne)")+" — "+bdgFormat(o.montant):o.cellules.map(c=>c.texte.replace(/\n/g," · ")).join(" | ")||"(ligne)"):o.lignes.join(" · ");
         return '<label class="bdg-b-el'+(o.genre==="ligne"?" lg":"")+'" data-i="'+i+'"><input type="checkbox" data-i="'+i+'"'+(o.lien===cle?' checked':'')+'>'+
           '<span><small>'+(o.genre==="ligne"?"Ligne":"Texte")+'</small> '+esc(txt.length>140?txt.slice(0,139)+"…":txt)+
           (autre?'<em>déjà rattaché à : '+esc(autre)+'</em>':'')+'</span></label>';
