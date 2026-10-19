@@ -15864,7 +15864,7 @@ function mbTravaux(p){
     const cle=String(porteur.id);
     const ouvert=(cle in S.mob.acc)?S.mob.acc[cle]:niv===0;
     return '<details class="mb-acc" data-acc="'+cle+'"'+(ouvert?' open':'')+'>'+
-      '<summary>'+donut(a,30,i)+'<span class="t">'+esc(titre)+'</span>'+
+      '<summary>'+donut(a,30,i)+'<span class="t">'+esc(titre)+(niv>0&&typeof bdgPastille==="function"?bdgPastille("A:"+porteur.id,p):'')+'</span>'+
         '<span class="n">'+ts.length+' tâche'+(ts.length>1?'s':'')+'</span></summary>'+
       '<div class="dedans">'+
         (niv>0 ? mbEtatAction(porteur) : '')+
@@ -15887,6 +15887,7 @@ function mbTravaux(p){
                   (S.mob.coms[t.id]?" ouvert":"")+'"'+
                   (depliable?' data-comt="'+t.id+'"':'')+'>'+
                   esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+
+                  (typeof bdgPastille==="function"?bdgPastille("T:"+t.id,p):'')+
                   (aCom?'<span class="pt-com" title="Contient un commentaire"></span>':'')+
                 '</span>'+
                 '<span class="mb-av">'+champAvct(c.tblTache,t,c.colTacheAvancement,av,it)+'</span>'+
@@ -17138,7 +17139,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 12 h 00</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 12 h 10</div>';
   return h;
 }
 async function lancerEdition(id){
