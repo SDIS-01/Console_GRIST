@@ -2141,6 +2141,18 @@ tr:hover .bdg-pastille-vide,details:hover>summary .bdg-pastille-vide,.bdg-pastil
 /* commentaires : affichés en entier, sans barre de défilement interne */
 .com-lecture{max-height:none!important;overflow:visible!important;overflow-wrap:anywhere;word-break:normal;}
 .ligne-com td{white-space:normal;}
+.bdg-b-pied{flex-wrap:wrap;}
+.bdg-b-form{display:flex;flex-direction:column;gap:7px;}
+.bdg-b-form label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:#4a5571;font-weight:600;}
+.bdg-b-form label small{font-weight:normal;color:#8a93a8;}
+.bdg-b-form input[type=text],.bdg-b-form textarea{border:1px solid var(--trait);border-radius:6px;padding:6px 8px;font:inherit;font-size:12.5px;font-weight:normal;color:#1c2333;}
+.bdg-b-sec{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:11.5px;color:#4a5571;}
+.bdg-b-sec>span{font-weight:600;width:100%;}
+.bdg-b-sec label{flex-direction:row!important;align-items:center;gap:5px!important;font-weight:normal!important;}
+body.mob .bdg-pastille-vide{opacity:1;}
+body.mob .bdg-bulle{font-size:14px;max-height:85vh;}
+body.mob .bdg-b-form input[type=text],body.mob .bdg-b-form textarea{font-size:15px;padding:9px 10px;}
+body.mob .bdg-b-pied .btn,body.mob .bdg-b-pied .btn-2{flex:1;padding:10px;}
 </style>
 </head>
 <body>
@@ -15968,7 +15980,7 @@ function mbTravaux(p){
     const cle=String(porteur.id);
     const ouvert=(cle in S.mob.acc)?S.mob.acc[cle]:niv===0;
     return '<details class="mb-acc" data-acc="'+cle+'"'+(ouvert?' open':'')+'>'+
-      '<summary>'+donut(a,30,i)+'<span class="t">'+esc(titre)+(niv>0&&typeof bdgPastille==="function"?bdgPastille("A:"+porteur.id,p):'')+'</span>'+
+      '<summary>'+donut(a,30,i)+'<span class="t">'+esc(titre)+(niv>0&&typeof bdgPastille==="function"?bdgPastille("A:"+porteur.id,p,{ajout:true}):'')+'</span>'+
         '<span class="n">'+ts.length+' tâche'+(ts.length>1?'s':'')+'</span></summary>'+
       '<div class="dedans">'+
         (niv>0 ? mbEtatAction(porteur) : '')+
@@ -15991,7 +16003,7 @@ function mbTravaux(p){
                   (S.mob.coms[t.id]?" ouvert":"")+'"'+
                   (depliable?' data-comt="'+t.id+'"':'')+'>'+
                   esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+
-                  (typeof bdgPastille==="function"?bdgPastille("T:"+t.id,p):'')+
+                  (typeof bdgPastille==="function"?bdgPastille("T:"+t.id,p,{ajout:true}):'')+
                   (aCom?'<span class="pt-com" title="Contient un commentaire"></span>':'')+
                 '</span>'+
                 '<span class="mb-av">'+champAvct(c.tblTache,t,c.colTacheAvancement,av,it)+'</span>'+
@@ -17243,7 +17255,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 15 h 44</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 15 h 54</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17329,9 +17341,12 @@ function imprimerOngletMenu(btn){
   const m=document.createElement("div"); m.className="impr-menu";
   const avecCom=S.onglet==="actions"||S.onglet==="taches", mc=imprComMode();
   m.innerHTML=(avecCom?'<div class="impr-com"><span>Commentaires</span>'+[["complet","Complets"],["dernier","Dernier seulement"],["aucun","Sans"]].map(([k,l])=>
-      '<label><input type="radio" name="impr-com" value="'+k+'"'+(mc===k?' checked':'')+'> '+l+'</label>').join("")+'</div>':'')+
+      '<label><input type="radio" name="impr-com" value="'+k+'"'+(mc===k?' checked':'')+'> '+l+'</label>').join("")+'</div>'+
+      '<div class="impr-com"><span>Budget</span>'+[["detail","Détaillé"],["pastille","Pastille seule"]].map(([k,l])=>
+      '<label><input type="radio" name="impr-bdg" value="'+k+'"'+(imprBdgMode()===k?' checked':'')+'> '+l+'</label>').join("")+'</div>':'')+
     '<button type="button" data-or="portrait">🖨 Portrait</button><button type="button" data-or="landscape">🖨 Paysage</button>';
   m.querySelectorAll('input[name="impr-com"]').forEach(x=>x.onchange=()=>imprComModeEnr(x.value));
+  m.querySelectorAll('input[name="impr-bdg"]').forEach(x=>x.onchange=()=>imprBdgModeEnr(x.value));
   document.body.appendChild(m);
   const r=btn.getBoundingClientRect();
   m.style.top=(r.bottom+4)+"px"; m.style.left=Math.max(8,r.right-m.offsetWidth)+"px";
@@ -17412,8 +17427,11 @@ const IMPR_CSS=
   '.ip-lib b{font-size:10.5px;color:#1c2333}.ip-code{display:inline-block;font-size:8.5px;font-weight:700;color:#3d4866;background:#e8ecf5;border-radius:4px;padding:0 5px;margin-right:5px}'+
   '.ip-com{display:block;margin-top:3px;font-size:9px;color:#6b7591;white-space:pre-wrap;line-height:1.35}'+
   '.ip-t tr.ip-comrow td{padding-top:0;border-top:0}.ip-t tr:has(+tr.ip-comrow)>td{border-bottom:0}'+
-  '.ip-combloc{display:flex;flex-wrap:wrap;gap:2px 14px;align-items:baseline;border-left:2px solid #c5cbd8;padding:1px 0 2px 8px;margin:0 0 2px 2px;font-size:8.5px;color:#4a5571;line-height:1.35}'+
-  '.ip-com-i{font-size:8px;margin-right:-6px}.ip-ent{white-space:pre-line}.ip-ent b{color:#2c3a5c;font-weight:600}'+
+  '.ip-bloc{display:flex;gap:10px;font-size:8.5px;color:#4a5571;line-height:1.4;margin:0 0 2px 2px}.ip-z{padding:1px 10px 3px 8px;min-width:0}'+
+  '.ip-zc{flex:2;border-left:2px solid #c5cbd8}.ip-zb{flex:1;border-left:2px solid #b9dcc4}.ip-bloc.seul-bdg{justify-content:flex-end}.ip-bloc.seul-bdg .ip-zb{flex:0 0 34%}'+
+  '.ip-zt{font-size:7.5px;font-weight:bold;text-transform:uppercase;color:#6b7591;margin-bottom:1px;letter-spacing:.03em}'+
+  '.ip-ent{white-space:pre-line;margin-bottom:3px}.ip-ent b{color:#2c3a5c;font-weight:600}'+
+  '.ip-bl{display:flex;justify-content:space-between;gap:8px}.ip-bl b{white-space:nowrap}.ip-btot{border-top:1px solid #1f6b38;font-weight:bold;color:#1f6b38;margin-top:2px}.ip-btxt{white-space:pre-line;margin-top:2px}.ip-bl+.ip-btxt{margin-top:4px}'+
   '.ip-ret{color:#c0392b;font-weight:700}.ip-av{display:flex;align-items:center;gap:5px}.ip-av i{flex:1;height:6px;border-radius:3px;background:#e8ecf3;overflow:hidden;display:block}'+
   '.ip-av i b{display:block;height:100%}.ip-vide{color:#8a93a8;font-style:italic;padding:8px 0}'+
   '.ip-t td>span:not(.ip-code):not(.ip-com),.ip-t td>span *{font-size:9.5px!important}.ip-num{text-align:right;white-space:nowrap;font-weight:600}.ip-bdg{text-align:right;font-weight:600}.ip-bdg small{display:block;text-align:left;font-weight:normal;font-size:8.5px!important;white-space:pre-line;color:#333;margin-top:2px}.ip-bdg small+small{margin-top:5px}.ip-bdg-m{display:inline-block;white-space:nowrap;background:#eaf6ee;border:1px solid #b9dcc4;color:#1f6b38;border-radius:9px;padding:0 6px}.ip-bdg-i{display:inline-block;font-size:8.5px;background:#eaf6ee;border:1px solid #b9dcc4;border-radius:9px;padding:0 5px;margin-bottom:1px}';
@@ -17429,18 +17447,27 @@ function imprDate(ts,fini){
 /* commentaires à l'impression : complets, dernier seulement ou aucun (choix mémorisé) */
 function imprComMode(){ try{ const m=localStorage.getItem("cp-impr-com"); return ["complet","dernier","aucun"].includes(m)?m:"complet"; }catch(e){ return "complet"; } }
 function imprComModeEnr(m){ try{ localStorage.setItem("cp-impr-com",m); }catch(e){} }
-/* ligne sur toute la largeur, sous la ligne de l'action ou de la tâche */
-function imprComLigne(v,nbc){
+function imprBdgMode(){ try{ return localStorage.getItem("cp-impr-bdg")==="pastille"?"pastille":"detail"; }catch(e){ return "detail"; } }
+function imprBdgModeEnr(m){ try{ localStorage.setItem("cp-impr-bdg",m); }catch(e){} }
+/* bloc sur toute la largeur, sous la ligne de l'action ou de la tâche :
+   💬 commentaires (2/3) et 💶 budget détaillé (1/3) */
+function imprBlocLigne(v,cle,p,nbc){
+  let com="", bdg="";
   const mode=imprComMode();
-  if(mode==="aucun") return "";
-  let blocs=espacerCommentaire(v).split(/\n\s*\n/).map(b=>b.split("\n").map(l=>l.trim()).filter(Boolean).join("\n")).filter(Boolean);
-  if(!blocs.length) return "";
-  if(mode==="dernier") blocs=blocs.slice(0,1);
-  return '<tr class="ip-comrow"><td colspan="'+nbc+'"><div class="ip-combloc"><span class="ip-com-i">💬</span>'+
-    blocs.map(b=>{
+  if(mode!=="aucun"){
+    let blocs=espacerCommentaire(v).split(/\n\s*\n/).map(b=>b.split("\n").map(l=>l.trim()).filter(Boolean).join("\n")).filter(Boolean);
+    if(mode==="dernier") blocs=blocs.slice(0,1);
+    if(blocs.length) com='<div class="ip-z ip-zc"><div class="ip-zt">💬 Commentaires</div>'+blocs.map(b=>{
       const m=b.match(/^(\d{2}\/\d{2}\/\d{4} — [^:\n]{1,60} :)\s*([\s\S]*)$/);
-      return '<span class="ip-ent">'+(m?'<b>'+esc(m[1])+'</b> '+esc(m[2]):esc(b))+'</span>';
-    }).join("")+'</div></td></tr>';
+      return '<div class="ip-ent">'+(m?'<b>'+esc(m[1])+'</b> '+esc(m[2]):esc(b))+'</div>';
+    }).join("")+'</div>';
+  }
+  if(imprBdgMode()==="detail" && typeof bdgImprDetail==="function"){
+    const d=bdgImprDetail(cle,p);
+    if(d) bdg='<div class="ip-z ip-zb">'+d+'</div>';
+  }
+  if(!com && !bdg) return "";
+  return '<tr class="ip-comrow"><td colspan="'+nbc+'"><div class="ip-bloc'+(com?'':' seul-bdg')+'">'+com+bdg+'</div></td></tr>';
 }
 function imprCom(v){ const s=espacerCommentaire(v).trim(); return s?'<span class="ip-com">'+esc(s)+'</span>':''; }
 function imprCodeAction(a){
@@ -17463,7 +17490,7 @@ function imprActions(p){
       '<td>'+imprAv(av,inter)+'</td><td>'+imprDate(Number(a[c.colDebut])||null,true)+'</td>'+
       '<td>'+imprDate(Number(a[c.colEch])||null,(av!=null&&av>=100)||inter)+'</td>'+
       (c.colFin?'<td>'+imprDate(Number(a[c.colFin])||null,true)+'</td>':'')+
-      (typeof bdgTotalDe==="function" && acts.some(x=>bdgTotalDe("A:"+x.id,p))?'<td class="ip-bdg">'+bdgImpr("A:"+a.id,p)+'</td>':'')+'</tr>';
+      (typeof bdgTotalDe==="function" && acts.some(x=>bdgTotalDe("A:"+x.id,p))?'<td class="ip-bdg">'+bdgImprPastille("A:"+a.id,p)+'</td>':'')+'</tr>';
   };
   const avecB=typeof bdgTotalDe==="function" && acts.some(a=>bdgTotalDe("A:"+a.id,p));
   const avecF=!!c.colFin, nbc=(avecB?7:6)+(avecF?1:0);
@@ -17475,7 +17502,7 @@ function imprActions(p){
       const moy=avs.length?Math.round(avs.reduce((s,x)=>s+x,0)/avs.length):null;
       h+='<tr class="ip-g"><td colspan="'+nbc+'">'+esc(k||"Sans axe")+'<small>'+l.length+' action'+(l.length>1?"s":"")+(moy!=null?' · '+moy+' %':'')+'</small></td></tr>';
     }
-    h+=l.map(a=>ligne(a)+imprComLigne(c.colCommentaire?a[c.colCommentaire]:"",nbc)).join("");
+    h+=l.map(a=>ligne(a)+imprBlocLigne(c.colCommentaire?a[c.colCommentaire]:"","A:"+a.id,p,nbc)).join("");
   });
   return h+'</tbody></table>';
 }
@@ -17504,7 +17531,7 @@ function imprTaches(p){
       '<td>'+imprAv(av,inter)+'</td><td>'+imprDate(Number(t[c.colTacheDebut])||null,true)+'</td>'+
       '<td>'+imprDate(Number(t[c.colTacheFin])||null,(av!=null&&av>=100)||inter)+'</td>'+
       (c.colTacheFinReelle?'<td>'+imprDate(Number(t[c.colTacheFinReelle])||null,true)+'</td>':'')+
-      (avecBT?'<td class="ip-bdg">'+bdgImpr("T:"+t.id,p)+'</td>':'')+'</tr>';
+      (avecBT?'<td class="ip-bdg">'+bdgImprPastille("T:"+t.id,p)+'</td>':'')+'</tr>';
   };
   const avecB=typeof bdgTotalDe==="function" && lots.some(([,ts])=>ts.some(x=>bdgTotalDe("T:"+x.id,p)));
   const avecF=!!c.colTacheFinReelle, nbc=(avecB?7:6)+(avecF?1:0);
@@ -17516,7 +17543,7 @@ function imprTaches(p){
     if(x.id===p.id) titre='Tâches rattachées au projet';
     else { const ca=imprCodeAction(x); titre=(ca.code?'<span class="ip-code">'+esc(ca.code)+'</span>':'')+esc(ca.lib); }
     h+='<tr class="ip-g"><td colspan="'+nbc+'">'+titre+'<small>'+(x.id!==p.id&&lire(c.tblMain,x,c.colPorteur)?esc(lire(c.tblMain,x,c.colPorteur))+' · ':'')+
-      ts.length+' tâche'+(ts.length>1?"s":"")+(x.id!==p.id&&av!=null?' · '+av+' %':'')+'</small></td></tr>'+ts.map(t=>ligne(t)+imprComLigne(c.colTacheCommentaire?t[c.colTacheCommentaire]:"",nbc)).join("");
+      ts.length+' tâche'+(ts.length>1?"s":"")+(x.id!==p.id&&av!=null?' · '+av+' %':'')+'</small></td></tr>'+ts.map(t=>ligne(t)+imprBlocLigne(c.colTacheCommentaire?t[c.colTacheCommentaire]:"","T:"+t.id,p,nbc)).join("");
   });
   return h+'</tbody></table>';
 }
@@ -19922,7 +19949,7 @@ function bdgPastille(cle,p,o){
   p=p||S.projetSel;
   const b=bdgTotalDe(cle,p);
   if(!b){
-    if(!(o&&o.ajout) || !p || !budgetPret() || budgetVide(budgetDe(p))) return "";
+    if(!(o&&o.ajout) || !p || !budgetPret() || APP.agentVu) return "";
     return ' <span class="bdg-pastille bdg-pastille-vide" data-bdg-cle="'+cle+'" data-bdg-pid="'+p.id+'" title="Rattacher du budget">💶 +</span>';
   }
   return ' <span class="bdg-pastille" data-bdg-cle="'+cle+'" data-bdg-pid="'+p.id+'" title="Budget rattaché :\n'+esc(bdgDetailTexte(b))+'">💶 '+esc(bdgResume(b))+'</span>';
@@ -19939,6 +19966,19 @@ function bdgDetailHtml(cle,p){
     b.textes.map(x=>'<div class="bdg-detail-txt">'+(x.cellules
       ? x.cellules.map(c=>'<div class="bdg-detail-cel">'+(c.entete?'<small>'+esc(c.entete)+'</small>':'')+esc(c.texte).replace(/\n/g,"<br>")+'</div>').join("")
       : x.lignes.map(esc).join("<br>"))+'</div>').join("")+'</div>';
+}
+/* impression : pastille seule dans la colonne Budget */
+function bdgImprPastille(cle,p){
+  const b=bdgTotalDe(cle,p||S.projetSel); if(!b) return "";
+  return '<span class="ip-bdg-m">💶 '+esc(bdgResume(b))+'</span>';
+}
+/* impression : détail dans le bloc sous la ligne */
+function bdgImprDetail(cle,p){
+  const b=bdgTotalDe(cle,p||S.projetSel); if(!b) return "";
+  return '<div class="ip-zt">💶 Budget</div>'+
+    b.lignes.map(x=>'<div class="ip-bl"><span>'+esc(x.poste||"Ligne")+(x.section?' <i>('+esc(x.section)+')</i>':'')+'</span><b>'+(x.montant!=null?esc(bdgFormat(x.montant)):"—")+'</b></div>').join("")+
+    (b.lignes.length>1?'<div class="ip-bl ip-btot"><span>Total</span><span>'+esc(bdgFormat(b.total))+'</span></div>':'')+
+    b.textes.map(x=>'<div class="ip-btxt">'+esc(x.cellules?x.cellules.map(c=>c.texte).join("\n"):x.texte)+'</div>').join("");
 }
 /* impression : montant en gras, texte complet en petit dessous */
 function bdgImpr(cle,p){
@@ -20127,6 +20167,42 @@ function bdgBrancherLecture(racine,p){
   bdgAppliquerFiltre(racine,p);
 }
 
+/* ajoute une ligne au premier tableau de budget du projet (créé au besoin) */
+async function bdgAjouterLigne(p,cle,o){
+  const c=S.cfg;
+  const d=document.createElement("div"); d.innerHTML=bdgMigrerHtml(budgetDe(p))||"";
+  let t=[...d.querySelectorAll("table")].find(bdgEstBudget);
+  if(!t){
+    if(budgetVide(d.innerHTML)) d.innerHTML="";
+    d.insertAdjacentHTML("beforeend",bdgTableauHtml());
+    t=[...d.querySelectorAll("table")].find(bdgEstBudget);
+  }
+  const ty=bdgTypes(t);
+  const tr=document.createElement("tr");
+  tr.setAttribute("data-lien",cle);
+  let posteMis=false, comMis=false;
+  ty.forEach(k=>{
+    const td=document.createElement("td");
+    if(k==="eur") td.textContent=o.montant!=null?bdgFormat(o.montant):"";
+    else if(k==="sec") td.textContent=o.section||"";
+    else if(k==="txt" && !posteMis){ td.textContent=o.poste||""; posteMis=true; }
+    else if(k==="txt" && !comMis && o.com){ td.innerHTML=o.com.split("\n").map(esc).join("<br>"); comMis=true; }
+    if(!td.innerHTML) td.innerHTML="<br>";
+    tr.appendChild(td);
+  });
+  /* commentaire sans colonne prévue : ajouté au poste */
+  if(o.com && !comMis){ const td=tr.cells[ty.indexOf("txt")]; if(td) td.innerHTML=esc(o.poste||"")+(o.poste?"<br>":"")+o.com.split("\n").map(esc).join("<br>"); }
+  /* la ligne vide du modèle est remplacée */
+  const vides=bdgLignesDonnees(t).filter(r=>![...r.cells].some(x=>x.textContent.trim()) && !r.getAttribute("data-lien"));
+  const tot=bdgLigneTotal(t);
+  if(tot) tot.before(tr); else t.rows[t.rows.length-1].after(tr);
+  vides.forEach(r=>r.remove());
+  bdgTotaliser(t);
+  let v=nettoyerBudget(d.innerHTML); if(budgetVide(v)) v="";
+  await grist.docApi.applyUserActions([["UpdateRecord",c.tblMain,p.id,{[c.colBudget]:v}]]);
+  p[c.colBudget]=v;
+}
+
 /* --- depuis les onglets Actions / Tâches : bulle 💶 -------------------- */
 function bdgFermerBulle(){ const b=document.querySelector(".bdg-bulle"); if(b) b.remove(); }
 function bdgBulle(ancre,cle,p){
@@ -20136,14 +20212,49 @@ function bdgBulle(ancre,cle,p){
   m.className="bdg-bulle";
   const lib=bdgLibelleCible(p,cle);
   const peutModifier=!mob && S.bdgEdition!==p.id && !APP.agentVu;
+  const peutCreer=S.bdgEdition!==p.id && !APP.agentVu && budgetPret();
   const vue=()=>{
     const d=bdgDetailHtml(cle,p);
     m.innerHTML='<div class="bdg-b-tete"><b>💶 Budget rattaché</b><button type="button" class="bdg-b-x" title="Fermer">✕</button></div>'+
       '<div class="bdg-b-sous">'+esc(lib)+'</div>'+
       (d||'<div class="bdg-b-vide">Aucun élément du budget n\'est rattaché.</div>')+
-      (peutModifier?'<div class="bdg-b-pied"><button type="button" class="btn-2" data-b="mod">🔗 '+(d?'Modifier les rattachements':'Rattacher du budget')+'</button></div>':'');
+      (peutModifier||peutCreer?'<div class="bdg-b-pied">'+
+        (peutModifier?'<button type="button" class="btn-2" data-b="mod">🔗 '+(d?'Modifier les rattachements':'Rattacher du budget')+'</button>':'')+
+        (peutCreer?'<button type="button" class="btn-2" data-b="new">＋ Nouvelle ligne de budget</button>':'')+'</div>':'');
     m.querySelector(".bdg-b-x").onclick=bdgFermerBulle;
     const b=m.querySelector('[data-b="mod"]'); if(b) b.onclick=coches;
+    const bn=m.querySelector('[data-b="new"]'); if(bn) bn.onclick=nouvelle;
+  };
+  /* nouvelle ligne de budget, déjà rattachée à l'action ou à la tâche */
+  const nouvelle=()=>{
+    m.innerHTML='<div class="bdg-b-tete"><b>＋ Nouvelle ligne de budget</b><button type="button" class="bdg-b-x" title="Fermer">✕</button></div>'+
+      '<div class="bdg-b-sous">Rattachée à : '+esc(lib)+'</div>'+
+      '<div class="bdg-b-form">'+
+        '<label>Poste<input type="text" data-f="poste" placeholder="Ex. : Bornes de recharge VALS"></label>'+
+        '<label>Montant (€) <small>facultatif</small><input type="text" inputmode="decimal" data-f="montant" placeholder="Ex. : 20000"></label>'+
+        '<div class="bdg-b-sec"><span>Section</span>'+BDG_SECTIONS.map(x=>'<label><input type="radio" name="bdg-b-sec" value="'+esc(x)+'"> '+esc(x)+'</label>').join("")+'</div>'+
+        '<label>Commentaire <small>facultatif</small><textarea data-f="com" rows="3" placeholder="Ex. : 159K TTC, à budgéter pour les 2 GPTS…"></textarea></label>'+
+      '</div>'+
+      '<div class="bdg-b-pied"><button type="button" class="btn-2" data-b="ann">Annuler</button><button type="button" class="btn" data-b="ok">Ajouter</button></div>';
+    m.querySelector(".bdg-b-x").onclick=bdgFermerBulle;
+    m.querySelector('[data-b="ann"]').onclick=()=>{ vue(); placer(); };
+    const v=k=>m.querySelector('[data-f="'+k+'"]').value.trim();
+    if(!mob) setTimeout(()=>m.querySelector('[data-f="poste"]').focus(),20);
+    m.querySelector('[data-b="ok"]').onclick=async e=>{
+      const poste=v("poste"), mt=v("montant"), com=v("com");
+      const sec=(m.querySelector('input[name="bdg-b-sec"]:checked')||{}).value||"";
+      if(!poste && !com){ toast("Saisissez au moins un poste ou un commentaire.",true); return; }
+      const n=bdgLireMontant(mt);
+      if(Number.isNaN(n)){ toast("Montant non reconnu : saisissez un nombre (ex. 20000 ou 1500,50).",true); return; }
+      e.target.disabled=true;
+      try{
+        await bdgAjouterLigne(p,cle,{poste,montant:n,section:sec,com});
+        toast("Ligne de budget ajoutée");
+        bdgFermerBulle();
+        if(mob && typeof mbFiche==="function") mbFiche(); else if(typeof rendreProjet==="function") rendreProjet();
+      }catch(err){ e.target.disabled=false; toast("Échec de l'enregistrement : "+err.message,true); }
+    };
+    placer();
   };
   const coches=()=>{
     const d=document.createElement("div"); d.innerHTML=bdgMigrerHtml(budgetDe(p));
