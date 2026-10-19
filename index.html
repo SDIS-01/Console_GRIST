@@ -2106,6 +2106,30 @@ tr:hover .bdg-pastille-vide,details:hover>summary .bdg-pastille-vide,.bdg-pastil
 .bdg-detail tr.t td{font-weight:bold;color:var(--bleu);border-top:2px solid var(--bleu);}
 .bdg-detail-txt{background:#f8faff;border-left:3px solid #6d83c7;border-radius:4px;padding:5px 9px;margin:4px 0;font-size:12px;line-height:1.5;}
 .fige .bdg-detail{max-width:520px;}
+/* MEC / PAPRIPACT : avancement et commentaire modifiables */
+.anx-table td.anx-ed{cursor:pointer;position:relative;}
+.anx-table td.anx-ed:hover{background:#eef2fb!important;box-shadow:inset 0 0 0 1px #9fb0dd;}
+.anx-table td.anx-ed:hover::after{content:"✏️";position:absolute;top:3px;right:4px;font-size:10px;opacity:.7;}
+.anx-ed-vide{color:#9aa3b8;font-size:11.5px;font-style:italic;}
+.anx-mod{position:fixed;z-index:10000;width:360px;max-width:calc(100vw - 12px);max-height:75vh;display:flex;flex-direction:column;gap:8px;
+  background:#fff;border:1px solid var(--trait);border-radius:8px;box-shadow:0 8px 24px rgba(12,18,32,.2);padding:10px 12px;font-size:12.5px;}
+.anx-mod.mob{left:8px;right:8px;bottom:8px;width:auto;max-width:none;font-size:14px;z-index:100001;}
+.anx-mod-tete{display:flex;align-items:center;}
+.anx-mod-tete b{flex:1;color:var(--bleu);}
+.anx-mod-x{border:0;background:none;cursor:pointer;font-size:14px;color:var(--gris);}
+.anx-mod-sous{color:var(--gris);font-size:11.5px;margin-top:-6px;}
+.anx-mod-pas{display:flex;gap:4px;}
+.anx-mod-pas button{flex:1;border:1px solid var(--trait);background:#fff;border-radius:5px;padding:5px 0;cursor:pointer;font:inherit;}
+.anx-mod-pas button.on{border-color:var(--bleu);background:#eef2fb;color:var(--bleu);font-weight:600;}
+.anx-mod-l{display:flex;align-items:center;gap:8px;}
+.anx-mod-l input[type=range]{flex:1;}
+.anx-mod-l input[type=number]{width:64px;border:1px solid var(--trait);border-radius:5px;padding:4px 6px;font:inherit;}
+.anx-mod-hist{max-height:180px;overflow:auto;background:#f8faff;border:1px solid #e3e8f4;border-radius:6px;padding:6px 9px;font-size:12px;line-height:1.5;}
+.anx-mod-vide{color:var(--gris);font-style:italic;}
+.anx-mod textarea{border:1px solid var(--trait);border-radius:6px;padding:6px 8px;font:inherit;resize:vertical;}
+.anx-mod-pied{display:flex;gap:8px;justify-content:flex-end;}
+.mb-anx-act{display:flex;gap:8px;margin:4px 0 10px;}
+.mb-anx-act .mb-chip{flex:1;}
 </style>
 </head>
 <body>
@@ -17202,7 +17226,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 14 h 15</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 15 h 00</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17453,7 +17477,8 @@ function imprTaches(p){
    épurée à l'écran, filtres et tri par colonne ; l'export Excel reprend
    les styles des colonnes Grist (moteur du widget « Export Excel fidèle »). Les lignes affichées suivent les filtres Groupement / Sponsor
    de la console, avec le rattachement calculé par l'état.
-   Rien n'est jamais écrit dans les tables.
+   Seuls l'avancement et le commentaire (MEC : Commentaires ; PAPRIPACT :
+   Observation porteur) se modifient, depuis l'onglet et la vue mobile.
    ======================================================================= */
 const ANX={meta:null, metaT:0, tables:{}, onglet:"mec", jeton:0};
 const ANX_TTL=60000;   // données relues au plus toutes les minutes
@@ -17649,7 +17674,12 @@ function anxTableHtml(T,sec,idx,fam){
     return h+'</th>';
   };
   return '<div class="anx-defil"><table class="app-table anx-table"><thead><tr>'+fs.map(th).join("")+
-    '</tr></thead><tbody>'+idx.map(i=>'<tr>'+fs.map(f=>'<td class="anx-td-'+(f.role||"txt")+'">'+anxCellule(T,f,i,ctx)+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>';
+    '</tr></thead><tbody>'+idx.map(i=>'<tr>'+fs.map(f=>{
+      const ed=fam && anxEditable(T,f);
+      const c=anxCellule(T,f,i,ctx);
+      return '<td class="anx-td-'+(f.role||"txt")+(ed?' anx-ed':'')+'"'+
+        (ed?' data-anx-ed="'+f.role+'" data-anx-col="'+esc(f.colId)+'" data-anx-i="'+i+'" title="'+(f.role==="avct"?"Modifier l\'avancement":"Ajouter un commentaire")+'"':'')+'>'+
+        (ed&&!c?'<span class="anx-ed-vide">'+(f.role==="avct"?"＋ Avancement":"＋ Commenter")+'</span>':c)+'</td>'; }).join("")+'</tr>').join("")+'</tbody></table></div>';
 }
 /* ---------- filtres et tri par colonne (comme dans Excel) ---------- */
 /* filtre par défaut : les lignes à 100 % d'avancement sont masquées (pastille retirable) */
@@ -17896,13 +17926,14 @@ async function rendreAnnexes(){
     if(cur && F.tri){ const fc=cur.fs.find(x=>x.colId===F.tri.col); if(fc) pastilles.push('<span class="anx-fc">Tri : '+esc(fc.label)+(F.tri.dir>0?" ↑":" ↓")+'<button type="button" data-ftri="1">✕</button></span>'); }
     z.innerHTML='<div class="anx-outils"><div class="anx-onglets">'+["mec","pap"].map(k=>
         '<button type="button" class="anx-og'+(f===k?" actif":"")+'" data-anx="'+k+'">'+ANX_FAMILLES[k].titre+'<b>'+(L[k]?L[k].idx.length:"—")+'</b></button>').join("")+'</div>'+
-      '<span class="anx-lect">👁 Consultation seule · '+info+'</span><span class="fil-esp"></span>'+
+      '<span class="anx-lect">✏️ Cliquez sur un avancement ou un commentaire pour le modifier · '+info+'</span><span class="fil-esp"></span>'+
       (cur?'<button type="button" class="anx-pdf" id="anx-pdf">🖨 État PDF</button><button type="button" class="anx-xl" id="anx-xl">⬇ Exporter en .xlsx</button>':'')+'</div>'+
       (cur ? '<div class="anx-actifs">'+(pastilles.length?'Filtres du tableau : '+pastilles.join("")+'<button type="button" class="fil-lien" id="anx-fz">Tout effacer</button>':'<span>Filtrez ou triez avec ▾ dans l\'en-tête des colonnes.</span>')+
           (!F.sans100?'<button type="button" class="fil-lien" id="anx-r100">Masquer les lignes à 100 %</button>':'')+
           '<span class="fil-esp"></span><span>'+cur.idx.length+' ligne'+(cur.idx.length>1?"s":"")+' sur '+cur.base.length+(pastilles.length?" · l'export Excel reprend ces filtres":"")+'</span></div>'+anxTableHtml(cur.T,cur.sec,cur.idx,f)
            : '<div class="app-vide">'+esc(T.erreur||("Table « "+anxNomTable(f)+" » introuvable."))+'</div>');
     const redessiner=()=>rendreAnnexes();
+    if(cur) anxBrancherEdition(z,cur.T,cur.fs,redessiner);
     z.querySelectorAll("[data-anx]").forEach(b=>b.onclick=()=>{ ANX.onglet=b.dataset.anx; rendreAnnexes(); });
     z.querySelectorAll("[data-fcol]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); anxPopupFiltre(b,cur.T,cur.fs,cur.base,f,redessiner); });
     z.querySelectorAll("[data-fx]").forEach(b=>b.onclick=()=>{ delete F.val[b.dataset.fx]; redessiner(); });
@@ -18039,6 +18070,121 @@ async function exporterPepsAv(){
     return g || (fI?anxTexte(T,fI,a):"").localeCompare(fI?anxTexte(T,fI,b):"","fr",{numeric:true});
   });
   await anxExporter(T,sec,idx,"Extract_PEPS_AV",fs,"Extract_PEPS_AV");
+}
+
+/* =======================================================================
+   MEC 2023 / PAPRIPACT : modification de l'avancement et du commentaire
+   (MEC : Commentaires ; PAPRIPACT : Observation porteur). Le commentaire
+   s'ajoute daté et signé, sans écraser l'existant.
+   ======================================================================= */
+function anxEditable(T,f){
+  if(!f || f.displayColId || /^Ref/.test(f.baseType)) return false;
+  if(f.role==="avct") return true;
+  if(f.role==="comm") return /^(Text|Any)$/.test(f.baseType) && (anxFamDe(T)==="mec" || anxPli(f.colId)==="observationporteur");
+  return false;
+}
+/* valeur à écrire pour n %, au format de la colonne */
+function anxValeurAvct(T,f,n){
+  const vals=(T.data[f.colId]||[]);
+  if(Array.isArray(f.opts.choices) && f.opts.choices.length){
+    let best=null, d=1e9;
+    f.opts.choices.forEach(ch=>{ const m=String(ch).match(/(\d+)/); if(!m) return; const e=Math.abs(Number(m[1])-n); if(e<d){ d=e; best=ch; } });
+    if(best!=null) return best;
+  }
+  if(f.baseType==="Numeric"||f.baseType==="Int"){
+    const nums=vals.filter(v=>typeof v==="number");
+    const fraction=f.opts.numMode==="percent" || (nums.length && nums.every(v=>v>=0&&v<=1) && nums.some(v=>v>0&&v<1)) ||
+      (nums.length && nums.every(v=>v>=0&&v<=1) && f.baseType==="Numeric" && !nums.some(v=>v>1));
+    return fraction ? n/100 : n;
+  }
+  const avecPct=vals.some(v=>typeof v==="string" && /%/.test(v));
+  if(avecPct) return n+" %";
+  const nums=vals.filter(v=>typeof v==="string" && /^\s*\d+([.,]\d+)?\s*$/.test(v)).map(v=>parseFloat(v.replace(",",".")));
+  return nums.length && nums.every(v=>v<=1) ? String(n/100) : String(n);
+}
+async function anxEcrire(T,i,colId,val){
+  await grist.docApi.applyUserActions([["UpdateRecord",T.tableId,T.data.id[i],{[colId]:val}]]);
+  if(T.data[colId]) T.data[colId][i]=val;
+}
+function anxNomMoi(){ return S.moi || (typeof agentCourant==="function"?nomAgent(agentCourant()):"") || ""; }
+async function anxAjouterCom(T,f,i,texte){
+  const ancien=txt(T.data[f.colId]?T.data[f.colId][i]:"");
+  const nom=anxNomMoi();
+  const ajout=dateDuJourFR()+" — "+(nom?nom+" : ":"")+texte;
+  await anxEcrire(T,i,f.colId,ajout+(ancien.trim()?"\n\n"+ancien.replace(/^\s+/,""):""));
+}
+function anxFermerMod(){ const p=document.querySelector(".anx-mod"); if(p) p.remove(); }
+function anxMod(ancre,html){
+  anxFermerMod();
+  const m=document.createElement("div");
+  const mob=document.body.classList.contains("mob");
+  m.className="anx-mod"+(mob?" mob":"");
+  m.innerHTML=html;
+  document.body.appendChild(m);
+  if(!mob){
+    const r=ancre.getBoundingClientRect();
+    m.style.left=Math.max(6,Math.min(r.left,window.innerWidth-m.offsetWidth-6))+"px";
+    m.style.top=(r.bottom+m.offsetHeight+6>window.innerHeight ? Math.max(6,r.top-m.offsetHeight-4) : r.bottom+4)+"px";
+  }
+  setTimeout(()=>document.addEventListener("mousedown",function hors(e){
+    if(!document.body.contains(m)){ document.removeEventListener("mousedown",hors); return; }
+    if(!m.contains(e.target)){ anxFermerMod(); document.removeEventListener("mousedown",hors); }
+  }),0);
+  const x=m.querySelector(".anx-mod-x"); if(x) x.onclick=anxFermerMod;
+  return m;
+}
+function anxTitreLigne(T,i){
+  const fs=anxChamps(T,anxSection(T)), fId=fs.find(x=>x.role==="id");
+  return fId?anxTexte(T,fId,i):"Ligne "+T.data.id[i];
+}
+function anxModifAvct(ancre,T,f,i,apres){
+  const n0=anxPourcent(T,f,i);
+  const m=anxMod(ancre,'<div class="anx-mod-tete"><b>Avancement</b><button type="button" class="anx-mod-x">✕</button></div>'+
+    '<div class="anx-mod-sous">'+esc(anxTitreLigne(T,i))+'</div>'+
+    '<div class="anx-mod-pas">'+[0,25,50,75,100].map(v=>'<button type="button" data-v="'+v+'"'+(n0===v?' class="on"':'')+'>'+v+' %</button>').join("")+'</div>'+
+    '<div class="anx-mod-l"><input type="range" min="0" max="100" step="5" value="'+(n0||0)+'"><input type="number" min="0" max="100" value="'+(n0==null?"":n0)+'"> %</div>'+
+    '<div class="anx-mod-pied"><button type="button" class="btn-2 anx-mod-ann">Annuler</button><button type="button" class="btn anx-mod-ok">Enregistrer</button></div>');
+  const rg=m.querySelector("input[type=range]"), nb=m.querySelector("input[type=number]");
+  rg.oninput=()=>{ nb.value=rg.value; };
+  nb.oninput=()=>{ rg.value=nb.value; };
+  m.querySelectorAll(".anx-mod-pas button").forEach(b=>b.onclick=()=>{ nb.value=rg.value=b.dataset.v;
+    m.querySelectorAll(".anx-mod-pas button").forEach(x=>x.classList.toggle("on",x===b)); });
+  m.querySelector(".anx-mod-ann").onclick=anxFermerMod;
+  const ok=m.querySelector(".anx-mod-ok");
+  ok.onclick=async()=>{
+    const n=Math.max(0,Math.min(100,Math.round(Number(nb.value))));
+    if(nb.value===""||Number.isNaN(n)){ toast("Saisissez un avancement entre 0 et 100.",true); return; }
+    ok.disabled=true;
+    try{ await anxEcrire(T,i,f.colId,anxValeurAvct(T,f,n)); toast("Avancement enregistré"); anxFermerMod(); apres(); }
+    catch(e){ ok.disabled=false; toast("Échec de l'enregistrement : "+e.message,true); }
+  };
+  if(!document.body.classList.contains("mob")) setTimeout(()=>nb.focus(),20);
+}
+function anxModifCom(ancre,T,f,i,apres){
+  const ancien=txt(T.data[f.colId]?T.data[f.colId][i]:"");
+  const m=anxMod(ancre,'<div class="anx-mod-tete"><b>'+esc(f.label)+'</b><button type="button" class="anx-mod-x">✕</button></div>'+
+    '<div class="anx-mod-sous">'+esc(anxTitreLigne(T,i))+'</div>'+
+    (ancien.trim()?'<div class="anx-mod-hist">'+esc(ancien).replace(/\n/g,"<br>")+'</div>':'<div class="anx-mod-vide">Aucun commentaire pour l\'instant.</div>')+
+    '<textarea rows="3" placeholder="Ajouter un commentaire (daté et signé automatiquement)…"></textarea>'+
+    '<div class="anx-mod-pied"><button type="button" class="btn-2 anx-mod-ann">Annuler</button><button type="button" class="btn anx-mod-ok">Ajouter</button></div>');
+  const ta=m.querySelector("textarea");
+  m.querySelector(".anx-mod-ann").onclick=anxFermerMod;
+  const ok=m.querySelector(".anx-mod-ok");
+  ok.onclick=async()=>{
+    const t=ta.value.trim(); if(!t){ ta.focus(); return; }
+    ok.disabled=true;
+    try{ await anxAjouterCom(T,f,i,t); toast("Commentaire ajouté"); anxFermerMod(); apres(); }
+    catch(e){ ok.disabled=false; toast("Échec de l'enregistrement : "+e.message,true); }
+  };
+  if(!document.body.classList.contains("mob")) setTimeout(()=>ta.focus(),20);
+}
+/* branche les cellules modifiables d'un tableau rendu par anxTableHtml */
+function anxBrancherEdition(racine,T,fs,apres){
+  racine.querySelectorAll("td[data-anx-ed]").forEach(td=>{
+    const f=fs.find(x=>x.colId===td.dataset.anxCol), i=Number(td.dataset.anxI);
+    if(!f) return;
+    td.onclick=e=>{ e.stopPropagation(); (td.dataset.anxEd==="avct"?anxModifAvct:anxModifCom)(td,T,f,i,apres); };
+  });
 }
 
 /* =======================================================================
@@ -19520,16 +19666,21 @@ async function mbAnnexeListe(){
   z.innerHTML='<div class="mb-anx-outils">'+
       (fG?'<select id="mb-anx-grp"'+(A.grp?' class="actif"':'')+'><option value="">Tout le SDIS</option>'+grps.map(g=>'<option'+(A.grp===g?' selected':'')+'>'+esc(g)+'</option>').join("")+'</select>':'')+
       (fAv?'<button type="button" class="mb-chip'+(A.voir100?" on":"")+'" id="mb-anx-100">'+(A.voir100?"☑":"☐")+' 100 % ('+nb100+')</button>':'')+
-    '</div><div class="mb-compte">'+idx.length+' ligne'+(idx.length>1?"s":"")+' · consultation seule</div>'+
+    '</div><div class="mb-compte">'+idx.length+' ligne'+(idx.length>1?"s":"")+'</div>'+
     (idx.length?idx.map(carte).join(""):'<div class="mb-corps"><div class="mb-rien">Aucune ligne ne correspond.</div></div>');
   const sg=$("#mb-anx-grp"); if(sg) sg.onchange=()=>{ A.grp=sg.value; mbAnnexeListe(); };
   const b1=$("#mb-anx-100"); if(b1) b1.onclick=()=>{ A.voir100=!A.voir100; mbAnnexeListe(); };
   z.querySelectorAll("[data-mbai]").forEach(b=>b.onclick=()=>{
     const i=Number(b.dataset.mbai);
-    const v=mbFeuille('<h3>'+esc(fId?anxTexte(T,fId,i):"Ligne")+'</h3><p class="sous">'+esc(ANX_FAMILLES[fam].titre)+' · consultation seule</p>'+
+    const fCom=fs.find(x=>x.role==="comm" && anxEditable(T,x)), fAvE=fAv&&anxEditable(T,fAv)?fAv:null;
+    const v=mbFeuille('<h3>'+esc(fId?anxTexte(T,fId,i):"Ligne")+'</h3><p class="sous">'+esc(ANX_FAMILLES[fam].titre)+'</p>'+
+      (fAvE||fCom?'<div class="mb-anx-act">'+(fAvE?'<button type="button" class="btn-2 mb-chip" data-anxm="avct">📊 Avancement</button>':'')+
+        (fCom?'<button type="button" class="btn-2 mb-chip" data-anxm="comm">💬 Commenter</button>':'')+'</div>':'')+
       fs.filter(x=>x!==fId).map(x=>{ const val=anxTexte(T,x,i); return val?'<div class="mb-champ mb-anx-ch"><span>'+esc(x.label)+'</span><b>'+esc(val)+'</b></div>':''; }).join("")+
       '<button class="btn-2 mb-chip mbp-ann">Fermer</button>');
     v.querySelector(".mbp-ann").onclick=()=>v.remove();
+    const apres=()=>{ v.remove(); mbAnnexeListe(); };
+    v.querySelectorAll("[data-anxm]").forEach(x=>x.onclick=()=>x.dataset.anxm==="avct"?anxModifAvct(x,T,fAvE,i,apres):anxModifCom(x,T,fCom,i,apres));
   });
 }
 
