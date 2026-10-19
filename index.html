@@ -17255,7 +17255,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 15 h 54</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 16 h 02</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17434,7 +17434,7 @@ const IMPR_CSS=
   '.ip-bl{display:flex;justify-content:space-between;gap:8px}.ip-bl b{white-space:nowrap}.ip-btot{border-top:1px solid #1f6b38;font-weight:bold;color:#1f6b38;margin-top:2px}.ip-btxt{white-space:pre-line;margin-top:2px}.ip-bl+.ip-btxt{margin-top:4px}'+
   '.ip-ret{color:#c0392b;font-weight:700}.ip-av{display:flex;align-items:center;gap:5px}.ip-av i{flex:1;height:6px;border-radius:3px;background:#e8ecf3;overflow:hidden;display:block}'+
   '.ip-av i b{display:block;height:100%}.ip-vide{color:#8a93a8;font-style:italic;padding:8px 0}'+
-  '.ip-t td>span:not(.ip-code):not(.ip-com),.ip-t td>span *{font-size:9.5px!important}.ip-num{text-align:right;white-space:nowrap;font-weight:600}.ip-bdg{text-align:right;font-weight:600}.ip-bdg small{display:block;text-align:left;font-weight:normal;font-size:8.5px!important;white-space:pre-line;color:#333;margin-top:2px}.ip-bdg small+small{margin-top:5px}.ip-bdg-m{display:inline-block;white-space:nowrap;background:#eaf6ee;border:1px solid #b9dcc4;color:#1f6b38;border-radius:9px;padding:0 6px}.ip-bdg-i{display:inline-block;font-size:8.5px;background:#eaf6ee;border:1px solid #b9dcc4;border-radius:9px;padding:0 5px;margin-bottom:1px}';
+  '.ip-t td>span:not(.ip-code):not(.ip-com),.ip-t td>span *{font-size:9.5px!important}.ip-num{text-align:right;white-space:nowrap;font-weight:600}.ip-bdg{text-align:center;font-weight:600}.ip-zt-b{display:inline-block;background:#eaf6ee;border:1px solid #b9dcc4;color:#1f6b38;border-radius:9px;padding:0 6px;font-size:7.5px}.ip-bdg small{display:block;text-align:left;font-weight:normal;font-size:8.5px!important;white-space:pre-line;color:#333;margin-top:2px}.ip-bdg small+small{margin-top:5px}.ip-bdg-m{display:inline-block;white-space:nowrap;background:#eaf6ee;border:1px solid #b9dcc4;color:#1f6b38;border-radius:9px;padding:0 6px}.ip-bdg-i{display:inline-block;font-size:8.5px;background:#eaf6ee;border:1px solid #b9dcc4;border-radius:9px;padding:0 5px;margin-bottom:1px}';
 function imprAv(a,inter){
   if(a==null) return '<span class="ip-vide">—</span>';
   const b=bandesImpr(a,inter);
@@ -19970,12 +19970,13 @@ function bdgDetailHtml(cle,p){
 /* impression : pastille seule dans la colonne Budget */
 function bdgImprPastille(cle,p){
   const b=bdgTotalDe(cle,p||S.projetSel); if(!b) return "";
-  return '<span class="ip-bdg-m">💶 '+esc(bdgResume(b))+'</span>';
+  /* détail sous la ligne : un simple billet ; pastille seule : le résumé */
+  return imprBdgMode()==="detail" ? '<span class="ip-bdg-m">💶</span>' : '<span class="ip-bdg-m">💶 '+esc(bdgResume(b))+'</span>';
 }
 /* impression : détail dans le bloc sous la ligne */
 function bdgImprDetail(cle,p){
   const b=bdgTotalDe(cle,p||S.projetSel); if(!b) return "";
-  return '<div class="ip-zt">💶 Budget</div>'+
+  return '<div class="ip-zt"><span class="ip-zt-b">💶 Budget</span></div>'+
     b.lignes.map(x=>'<div class="ip-bl"><span>'+esc(x.poste||"Ligne")+(x.section?' <i>('+esc(x.section)+')</i>':'')+'</span><b>'+(x.montant!=null?esc(bdgFormat(x.montant)):"—")+'</b></div>').join("")+
     (b.lignes.length>1?'<div class="ip-bl ip-btot"><span>Total</span><span>'+esc(bdgFormat(b.total))+'</span></div>':'')+
     b.textes.map(x=>'<div class="ip-btxt">'+esc(x.cellules?x.cellules.map(c=>c.texte).join("\n"):x.texte)+'</div>').join("");
