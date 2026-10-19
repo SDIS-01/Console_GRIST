@@ -17255,7 +17255,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 16 h 02</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 16 h 14</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -19952,7 +19952,7 @@ function bdgPastille(cle,p,o){
     if(!(o&&o.ajout) || !p || !budgetPret() || APP.agentVu) return "";
     return ' <span class="bdg-pastille bdg-pastille-vide" data-bdg-cle="'+cle+'" data-bdg-pid="'+p.id+'" title="Rattacher du budget">💶 +</span>';
   }
-  return ' <span class="bdg-pastille" data-bdg-cle="'+cle+'" data-bdg-pid="'+p.id+'" title="Budget rattaché :\n'+esc(bdgDetailTexte(b))+'">💶 '+esc(bdgResume(b))+'</span>';
+  return ' <span class="bdg-pastille" data-bdg-cle="'+cle+'" data-bdg-pid="'+p.id+'" title="Budget rattaché :\n'+esc(bdgDetailTexte(b))+'">💶 BUDGET</span>';
 }
 function bdgTexte(cle,p){ const b=bdgTotalDe(cle,p||S.projetSel); return b?bdgResume(b):""; }
 /* détail complet (fenêtre de l'action, bulle) */
