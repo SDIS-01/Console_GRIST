@@ -2138,6 +2138,9 @@ tr:hover .bdg-pastille-vide,details:hover>summary .bdg-pastille-vide,.bdg-pastil
 .impr-com{display:flex;flex-direction:column;gap:3px;padding:6px 10px 8px;border-bottom:1px solid var(--trait);margin-bottom:4px;font-size:12px;}
 .impr-com>span{font-size:10.5px;text-transform:uppercase;color:var(--gris);letter-spacing:.03em;}
 .impr-com label{display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;}
+/* commentaires : affichés en entier, sans barre de défilement interne */
+.com-lecture{max-height:none!important;overflow:visible!important;overflow-wrap:anywhere;word-break:normal;}
+.ligne-com td{white-space:normal;}
 </style>
 </head>
 <body>
@@ -17240,7 +17243,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 16 h 20</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 15 h 44</div>';
   return h;
 }
 async function lancerEdition(id){
