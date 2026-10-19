@@ -17226,7 +17226,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 15 h 00</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 15 h 10</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17554,7 +17554,7 @@ function anxChamp(T,f){
   else if(cRefs.length){ refs=cRefs; styles=fSt||[]; }
   const regles=refs.map((r,i)=>{ const rc=T.colsByRef[r]; return {colId:rc?rc.colId:null, style:styles[i]||{}}; });
   const dRef=f.displayCol||col.displayCol||0, dCol=dRef?T.colsByRef[dRef]:null;
-  return {colId:col.colId, label:col.label||col.colId, type:col.type, baseType:String(col.type).split(":")[0],
+  return {colId:col.colId, label:col.label||col.colId, type:col.type, formule:!!(col.isFormula && col.formula), baseType:String(col.type).split(":")[0],
     displayColId:dCol?dCol.colId:null, width:f.width||100, opts, regles};
 }
 function anxChamps(T,sec,liste){
@@ -18078,7 +18078,7 @@ async function exporterPepsAv(){
    s'ajoute daté et signé, sans écraser l'existant.
    ======================================================================= */
 function anxEditable(T,f){
-  if(!f || f.displayColId || /^Ref/.test(f.baseType)) return false;
+  if(!f || f.formule || f.displayColId || /^Ref/.test(f.baseType)) return false;   // jamais une colonne formule
   if(f.role==="avct") return true;
   if(f.role==="comm") return /^(Text|Any)$/.test(f.baseType) && (anxFamDe(T)==="mec" || anxPli(f.colId)==="observationporteur");
   return false;
@@ -18138,6 +18138,27 @@ function anxTitreLigne(T,i){
   return fId?anxTexte(T,fId,i):"Ligne "+T.data.id[i];
 }
 function anxModifAvct(ancre,T,f,i,apres){
+  /* colonne Choix (PAPRIPACT : 0 %, -50 %, +50 %, 100 %) : on choisit exactement l'un des choix */
+  const choix=Array.isArray(f.opts.choices)&&f.opts.choices.length?f.opts.choices:null;
+  if(choix){
+    const v0=T.data[f.colId]?T.data[f.colId][i]:null;
+    const m=anxMod(ancre,'<div class="anx-mod-tete"><b>Avancement</b><button type="button" class="anx-mod-x">✕</button></div>'+
+      '<div class="anx-mod-sous">'+esc(anxTitreLigne(T,i))+'</div>'+
+      '<div class="anx-mod-pas">'+choix.map(c=>'<button type="button" data-v="'+esc(c)+'"'+(v0===c?' class="on"':'')+'>'+esc(c)+'</button>').join("")+'</div>'+
+      '<div class="anx-mod-pied"><button type="button" class="btn-2 anx-mod-ann">Annuler</button><button type="button" class="btn anx-mod-ok">Enregistrer</button></div>');
+    let sel=choix.includes(v0)?v0:null;
+    m.querySelectorAll(".anx-mod-pas button").forEach(b=>b.onclick=()=>{ sel=b.dataset.v;
+      m.querySelectorAll(".anx-mod-pas button").forEach(x=>x.classList.toggle("on",x===b)); });
+    m.querySelector(".anx-mod-ann").onclick=anxFermerMod;
+    const ok=m.querySelector(".anx-mod-ok");
+    ok.onclick=async()=>{
+      if(sel==null){ toast("Choisissez un avancement.",true); return; }
+      ok.disabled=true;
+      try{ await anxEcrire(T,i,f.colId,sel); toast("Avancement enregistré"); anxFermerMod(); apres(); }
+      catch(e){ ok.disabled=false; toast("Échec de l'enregistrement : "+e.message,true); }
+    };
+    return;
+  }
   const n0=anxPourcent(T,f,i);
   const m=anxMod(ancre,'<div class="anx-mod-tete"><b>Avancement</b><button type="button" class="anx-mod-x">✕</button></div>'+
     '<div class="anx-mod-sous">'+esc(anxTitreLigne(T,i))+'</div>'+
