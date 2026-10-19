@@ -17237,7 +17237,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 15 h 50</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 16 h 05</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17403,7 +17403,7 @@ const IMPR_CSS=
   '.ip-com{display:block;margin-top:3px;font-size:9px;color:#6b7591;white-space:pre-wrap;line-height:1.35}'+
   '.ip-ret{color:#c0392b;font-weight:700}.ip-av{display:flex;align-items:center;gap:5px}.ip-av i{flex:1;height:6px;border-radius:3px;background:#e8ecf3;overflow:hidden;display:block}'+
   '.ip-av i b{display:block;height:100%}.ip-vide{color:#8a93a8;font-style:italic;padding:8px 0}'+
-  '.ip-t td>span:not(.ip-code):not(.ip-com),.ip-t td>span *{font-size:9.5px!important}.ip-num{text-align:right;white-space:nowrap;font-weight:600}.ip-bdg{text-align:right;font-weight:600}.ip-bdg small{display:block;text-align:left;font-weight:normal;font-size:8.5px!important;white-space:pre-line;color:#333;margin-top:2px}';
+  '.ip-t td>span:not(.ip-code):not(.ip-com),.ip-t td>span *{font-size:9.5px!important}.ip-num{text-align:right;white-space:nowrap;font-weight:600}.ip-bdg{text-align:right;font-weight:600}.ip-bdg small{display:block;text-align:left;font-weight:normal;font-size:8.5px!important;white-space:pre-line;color:#333;margin-top:2px}.ip-bdg small+small{margin-top:5px}.ip-bdg-m{display:inline-block;white-space:nowrap;background:#eaf6ee;border:1px solid #b9dcc4;color:#1f6b38;border-radius:9px;padding:0 6px}.ip-bdg-i{display:inline-block;font-size:8.5px;background:#eaf6ee;border:1px solid #b9dcc4;border-radius:9px;padding:0 5px;margin-bottom:1px}';
 function imprAv(a,inter){
   if(a==null) return '<span class="ip-vide">—</span>';
   const b=bandesImpr(a,inter);
@@ -19914,7 +19914,9 @@ function bdgDetailHtml(cle,p){
 /* impression : montant en gras, texte complet en petit dessous */
 function bdgImpr(cle,p){
   const b=bdgTotalDe(cle,p||S.projetSel); if(!b) return "";
-  return (b.lignes.length?esc(bdgFormat(b.total)):"")+b.textes.map(x=>'<small>'+esc(x.texte)+'</small>').join("");
+  /* 💶 comme à l'écran, sans les titres de colonnes (« Commentaire : ») */
+  return (b.lignes.length?'<span class="ip-bdg-m">💶 '+esc(bdgFormat(b.total))+'</span>':"")+
+    b.textes.map(x=>'<small><span class="ip-bdg-i">💶</span>\n'+esc(x.cellules?x.cellules.map(c=>c.texte).join("\n"):x.texte)+'</small>').join("");
 }
 
 /* menu de choix d'une action ou d'une tâche, avec recherche
