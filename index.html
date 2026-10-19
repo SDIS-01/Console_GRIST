@@ -2134,6 +2134,7 @@ tr:hover .bdg-pastille-vide,details:hover>summary .bdg-pastille-vide,.bdg-pastil
 .bdg-detail-cel+.bdg-detail-cel{margin-top:6px;padding-top:6px;border-top:1px dashed #d5dcef;}
 .bdg-detail-cel small{display:block;font-size:10px;text-transform:uppercase;color:#6b7591;letter-spacing:.03em;margin-bottom:1px;}
 .bdg-bulle .bdg-detail{overflow:auto;}
+.date-fin-lect{display:inline-block;padding:4px 2px;color:#3c4a6b;font-variant-numeric:tabular-nums;white-space:nowrap;cursor:help;}
 </style>
 </head>
 <body>
@@ -2500,7 +2501,7 @@ const DEF = {
   colHmAncien:"Ancienne_valeur", colHmNouveau:"Nouvelle_valeur",
   tblTache:"", colTacheLien:"", colTacheLibelle:"", colTacheDebut:"", colTacheFin:"",
   colTacheAvancement:"", colTachePorteur:"", colTacheStatut:"", colTacheCommentaire:"",
-  colTachePJ:"", colTacheOrdre:"", colJnlPJ:"", colInsPJ:"",
+  colTachePJ:"", colTacheOrdre:"", colTacheFinReelle:"", colJnlPJ:"", colInsPJ:"",
   tblJournal:"", colJnlLien:"", colJnlDate:"", colJnlTexte:"", colJnlAuteur:"", colJnlNature:"",
   colJnlAction:"", colJnlCollab:"Collaborateur_Concerné", colJnlDelai:"Délai_Exécution",
   colJnlReponse:"Reponse_a", colJnlTraite:"Traité", colJnlSaisie:"Date_Saisie",
@@ -2552,7 +2553,7 @@ const CHAMPS_REGLAGES = [
   ]},
   {bloc:"Table des tâches", tableKey:"tblTache", champs:[
     ["colTacheLien","Lien vers l'action"],["colTacheLibelle","Libellé de la tâche"],
-    ["colTacheDebut","Date de début"],["colTacheFin","Date de fin"],
+    ["colTacheDebut","Date de début"],["colTacheFin","Échéance (date de fin prévue)"],["colTacheFinReelle","Date de fin (réelle)"],
     ["colTacheAvancement","Avancement"],["colTachePorteur","Porteur"],["colTacheStatut","Statut"],
     ["colTacheCommentaire","Commentaire"],["colTachePJ","Pièces jointes"],
     ["colTacheOrdre","Ordre manuel (colonne numérique)"]
@@ -6056,6 +6057,7 @@ function vueActions(p){
       (avecStatut?'<th class="col-statut">Statut</th>':'')+
       '<th class="col-mini-avct">Avct</th><th class="col-etroite">Porteur</th>'+
       '<th class="col-etroite">Début</th><th class="col-etroite">Échéance</th>'+
+      (c.colFin?'<th class="col-etroite">Date de fin</th>':'')+
       '<th style="width:22px"></th><th style="width:34px"></th></tr></thead><tbody>'+
       (()=>{
         const ligne=r=>{
@@ -6073,12 +6075,13 @@ function vueActions(p){
           '<td>'+editeur(t,r,c.colPorteur)+'</td>'+
           '<td>'+editeur(t,r,c.colDebut)+'</td>'+
           '<td>'+editeur(t,r,c.colEch)+'</td>'+
+          (c.colFin?'<td>'+dateFinLecture(r[c.colFin])+'</td>':'')+
           '<td class="col-ouvrir"><span class="chevron-ouvrir" aria-hidden="true">›</span></td>'+
           '<td><button class="btn-sup" data-sup="'+r.id+'" title="Supprimer l\'action">✕</button></td></tr>';
         };
         const grp=groupesParAxe(acts);
         if(!grp) return acts.map(ligne).join("");
-        const nbCol=avecStatut?8:7;
+        const nbCol=(avecStatut?8:7)+(c.colFin?1:0);
         return grp.map(g=>{
           const tt=teinteAxe(p,g.axe);
           return '<tr class="axe-tete"><td colspan="'+nbCol+'">'+blocAxeHtml(p,g)+'</td></tr>'+
@@ -6210,6 +6213,7 @@ function ligneTacheHtml(r,act,avecStatutT,nbColT){
     '<td>'+editeur(c.tblTache,r,c.colTachePorteur)+'</td>'+
     '<td>'+editeur(c.tblTache,r,c.colTacheDebut)+'</td>'+
     '<td>'+editeur(c.tblTache,r,c.colTacheFin)+'</td>'+
+    (c.colTacheFinReelle?'<td>'+dateFinLecture(r[c.colTacheFinReelle])+'</td>':'')+
     '<td class="col-bulle">'+(c.colTacheCommentaire
       ? '<button type="button" class="btn-bulle" data-bulle-t="'+c.tblTache+'" data-bulle-r="'+r.id+
         '" data-bulle-c="'+c.colTacheCommentaire+'" title="Ajouter un commentaire">💬</button>':'')+'</td>'+
@@ -6226,7 +6230,7 @@ function ligneTacheHtml(r,act,avecStatutT,nbColT){
 
 /* Tableau des tâches d'une action (onglet Tâches et fenêtre d'action). */
 function tableauTachesHtml(act,ts){
-  const c=S.cfg, avecStatutT=!!c.colTacheStatut, nbColT=avecStatutT?10:9;
+  const c=S.cfg, avecStatutT=!!c.colTacheStatut, nbColT=(avecStatutT?10:9)+(c.colTacheFinReelle?1:0);
   const manuel=!!c.colTacheOrdre && tachesDe(act).some(t=>ordreTache(t)!==null);
   return (manuel?'<div class="ordre-manuel">Ordre manuel · '+
       '<button type="button" class="lien-discret" data-ordre-raz="'+act.id+'">Revenir au classement par dates</button></div>':'')+
@@ -6234,7 +6238,8 @@ function tableauTachesHtml(act,ts){
     '<th>Tâche</th>'+(avecStatutT?'<th class="col-statut">Statut</th>':'')+
     '<th class="col-mini-avct">Avct</th>'+
     '<th class="col-etroite">Porteur</th><th class="col-etroite">Début</th>'+
-    '<th class="col-etroite">Échéance</th><th style="width:34px"></th><th style="width:34px"></th></tr></thead>'+
+    '<th class="col-etroite">Échéance</th>'+(c.colTacheFinReelle?'<th class="col-etroite">Date de fin</th>':'')+
+    '<th style="width:34px"></th><th style="width:34px"></th></tr></thead>'+
     '<tbody data-tbody-act="'+act.id+'">'+ts.map(r=>ligneTacheHtml(r,act,avecStatutT,nbColT)).join("")+
     '</tbody></table>';
 }
@@ -6501,6 +6506,7 @@ function rendreFenetreAction(){
       ch("Porteur",editeur(t,a,c.colPorteur))+
       ch("Début",editeur(t,a,c.colDebut))+
       ch("Échéance",editeur(t,a,c.colEch))+
+      (c.colFin?ch("Date de fin",dateFinLecture(a[c.colFin])):"")+
       (typeof bdgTotalDe==="function"&&bdgTotalDe("A:"+a.id,S.projetSel)?ch("Budget rattaché",'<div class="fige">'+bdgDetailHtml("A:"+a.id,S.projetSel)+'</div>'):"")+
     '</div>'+
     (c.colCommentaire
@@ -14183,6 +14189,7 @@ function devineDefauts(){
     if(!c.colTacheLien)    c.colTacheLien   =ids.find(i=>/action|parent|lien/i.test(i))||"";
     if(!c.colTacheDebut)   c.colTacheDebut  =ids.find(i=>/debut|début/i.test(i))||"";
     if(!c.colTacheFin)     c.colTacheFin    =ids.find(i=>/fin|ech/i.test(i))||"";
+    if(!c.colTacheFinReelle) c.colTacheFinReelle=ids.find(i=>i!==c.colTacheFin && /^date_?fin|fin_?r[ée]el/i.test(i))||"";
     if(!c.colTacheAvancement) c.colTacheAvancement=ids.find(i=>/avanc/i.test(i))||"";
     if(!c.colTachePorteur) c.colTachePorteur=ids.find(i=>/porteur|responsable/i.test(i))||"";
     if(!c.colTacheCommentaire) c.colTacheCommentaire=ids.find(i=>/comment/i.test(i))||"";
@@ -17230,7 +17237,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 15 h 25</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 15 h 50</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17426,13 +17433,13 @@ function imprActions(p){
       '<td>'+esc(lire(c.tblMain,a,c.colPorteur))+'</td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td>'+
       '<td>'+imprAv(av,inter)+'</td><td>'+imprDate(Number(a[c.colDebut])||null,true)+'</td>'+
       '<td>'+imprDate(Number(a[c.colEch])||null,(av!=null&&av>=100)||inter)+'</td>'+
+      (c.colFin?'<td>'+imprDate(Number(a[c.colFin])||null,true)+'</td>':'')+
       (typeof bdgTotalDe==="function" && acts.some(x=>bdgTotalDe("A:"+x.id,p))?'<td class="ip-bdg">'+bdgImpr("A:"+a.id,p)+'</td>':'')+'</tr>';
   };
   const avecB=typeof bdgTotalDe==="function" && acts.some(a=>bdgTotalDe("A:"+a.id,p));
-  const nbc=avecB?7:6;
-  let h='<table class="ip-t"><colgroup>'+(avecB?'<col style="width:34%"><col style="width:13%"><col style="width:10%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:11%">'
-      :'<col style="width:40%"><col style="width:14%"><col style="width:11%"><col style="width:13%"><col style="width:11%"><col style="width:11%">')+'</colgroup>'+
-    '<thead><tr><th>Action</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Début</th><th>Échéance</th>'+(avecB?'<th>Budget</th>':'')+'</tr></thead><tbody>';
+  const avecF=!!c.colFin, nbc=(avecB?7:6)+(avecF?1:0);
+  let h='<table class="ip-t">'+imprColgroup(avecB,avecF)+
+    '<thead><tr><th>Action</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Début</th><th>Échéance</th>'+(avecF?'<th>Date de fin</th>':'')+(avecB?'<th>Budget</th>':'')+'</tr></thead><tbody>';
   [...groupes].forEach(([k,l])=>{
     if(avecAxes){
       const avs=l.map(a=>pct(a[c.colAvancement])).filter(x=>x!=null);
@@ -17442,6 +17449,16 @@ function imprActions(p){
     h+=l.map(ligne).join("");
   });
   return h+'</tbody></table>';
+}
+/* largeurs des colonnes : libellé, porteur, statut, avancement, début, échéance, [fin], [budget] */
+function imprColgroup(avecB,avecF){
+  const w=[40,14,11,13,11,11];
+  if(avecF) w.push(11);
+  if(avecB) w.push(11);
+  const reste=100-w.slice(1).reduce((a,b)=>a+b,0);
+  w[0]=Math.max(24,reste);
+  if(avecF||avecB){ const tot=w.reduce((a,b)=>a+b,0); for(let i=1;i<w.length;i++) w[i]=Math.round(w[i]*(100-w[0])/(tot-w[0])); }
+  return '<colgroup>'+w.map(x=>'<col style="width:'+x+'%">').join("")+'</colgroup>';
 }
 function imprTaches(p){
   const c=S.cfg;
@@ -17457,13 +17474,13 @@ function imprTaches(p){
       '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",av||0,inter)+'</td>'+
       '<td>'+imprAv(av,inter)+'</td><td>'+imprDate(Number(t[c.colTacheDebut])||null,true)+'</td>'+
       '<td>'+imprDate(Number(t[c.colTacheFin])||null,(av!=null&&av>=100)||inter)+'</td>'+
+      (c.colTacheFinReelle?'<td>'+imprDate(Number(t[c.colTacheFinReelle])||null,true)+'</td>':'')+
       (avecBT?'<td class="ip-bdg">'+bdgImpr("T:"+t.id,p)+'</td>':'')+'</tr>';
   };
   const avecB=typeof bdgTotalDe==="function" && lots.some(([,ts])=>ts.some(x=>bdgTotalDe("T:"+x.id,p)));
-  const nbc=avecB?7:6;
-  let h='<table class="ip-t"><colgroup>'+(avecB?'<col style="width:34%"><col style="width:13%"><col style="width:10%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:11%">'
-      :'<col style="width:40%"><col style="width:14%"><col style="width:11%"><col style="width:13%"><col style="width:11%"><col style="width:11%">')+'</colgroup>'+
-    '<thead><tr><th>Tâche</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Début</th><th>Fin</th>'+(avecB?'<th>Budget</th>':'')+'</tr></thead><tbody>';
+  const avecF=!!c.colTacheFinReelle, nbc=(avecB?7:6)+(avecF?1:0);
+  let h='<table class="ip-t">'+imprColgroup(avecB,avecF)+
+    '<thead><tr><th>Tâche</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Début</th><th>Échéance</th>'+(avecF?'<th>Date de fin</th>':'')+(avecB?'<th>Budget</th>':'')+'</tr></thead><tbody>';
   lots.forEach(([x,ts])=>{
     const av=pct(x[c.colAvancement]);
     let titre;
@@ -17473,6 +17490,11 @@ function imprTaches(p){
       ts.length+' tâche'+(ts.length>1?"s":"")+(x.id!==p.id&&av!=null?' · '+av+' %':'')+'</small></td></tr>'+ts.map(ligne).join("");
   });
   return h+'</tbody></table>';
+}
+/* date de fin : renseignée automatiquement par Grist avec l'avancement → lecture seule */
+function dateFinLecture(v){
+  const n=Number(v)||null;
+  return '<span class="date-fin-lect" title="Renseignée automatiquement quand l\'avancement atteint 100 %">'+(n?esc(dateVersFR(n)):'—')+'</span>';
 }
 
 /* =======================================================================
