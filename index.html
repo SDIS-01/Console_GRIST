@@ -2033,6 +2033,17 @@ body.mb-annexe .mb-outils,body.mb-annexe .mb-filtres{display:none;}
 .impr-menu{position:fixed;z-index:90;background:#fff;border:1px solid var(--trait);border-radius:8px;box-shadow:0 8px 20px rgba(20,30,60,.15);padding:4px;display:flex;flex-direction:column;}
 .impr-menu button{border:0;background:transparent;text-align:left;padding:7px 14px;font:inherit;font-size:12.5px;color:#1c2f6b;border-radius:6px;cursor:pointer;white-space:nowrap;}
 .impr-menu button:hover{background:#eef2fb;}
+/* budget rattaché */
+.bdg-pastille{display:inline-block;margin-left:6px;background:#eaf6ee;border:1px solid #b9dcc4;color:#1f6b38;border-radius:10px;font-size:11px;padding:0 7px;font-weight:600;white-space:nowrap;vertical-align:1px;}
+.bdg-contenu td.bdg-lien{color:#1c2f6b;}
+.bdg-edit td.bdg-lien{cursor:pointer;background:#f6f8fd;}
+.bdg-edit td.bdg-lien:empty::after,.bdg-edit td.bdg-lien:has(br:only-child)::after{content:"Choisir…";color:#9aa3b8;font-style:italic;}
+.bdg-menu-lien{width:340px;max-height:320px;display:flex;flex-direction:column;padding:6px!important;}
+.bdg-menu-lien input{border:1px solid var(--trait);border-radius:6px;padding:6px 8px;font:inherit;font-size:12.5px;margin-bottom:5px;}
+.bdg-ml-liste{overflow:auto;}
+.bdg-ml-liste button{display:block;width:100%;text-align:left;}
+.bdg-ml-liste small{display:inline-block;min-width:44px;color:#6b7591;font-size:10px;text-transform:uppercase;}
+.bdg-ml-liste em{color:#8a93a8;font-style:normal;font-size:11px;}
 </style>
 </head>
 <body>
@@ -5966,7 +5977,7 @@ function vueActions(p){
             (lib.num?'<span class="pastille-meo">'+esc(lib.num)+'</span>':'')+
             '<span class="lib-action">'+esc(lib.texte||"(sans libellé)")+'</span></button>'+
             (nbT!==null?'<span class="nb-taches">'+nbT+' tâche'+(nbT>1?'s':'')+'</span>':'')+
-            pastillesP2AAction(r)+'</td>'+
+            pastillesP2AAction(r)+(typeof bdgPastille==="function"?bdgPastille("A:"+r.id,p):'')+'</td>'+
           (avecStatut?'<td>'+editeur(t,r,c.colStatut)+'</td>':'')+
           '<td>'+champAvct(t,r,c.colAvancement,a,interrompu(r))+'</td>'+
           '<td>'+editeur(t,r,c.colPorteur)+'</td>'+
@@ -6102,7 +6113,7 @@ function ligneTacheHtml(r,act,avecStatutT,nbColT){
   return '<tr class="ligne-repli" data-repli="'+cle+'" data-tache="'+r.id+'" data-act="'+act.id+'">'+
     '<td class="col-poignee">'+(c.colTacheOrdre?'<span class="poignee" title="Glisser pour déplacer">⋮⋮</span>':'')+'</td>'+
     '<td class="col-chevron">'+(detail?'<span class="chevron">'+(ouvert?"▾":"▸")+'</span>':'')+'</td>'+
-    '<td>'+editeur(c.tblTache,r,c.colTacheLibelle,{auto:true})+'</td>'+
+    '<td>'+editeur(c.tblTache,r,c.colTacheLibelle,{auto:true})+(typeof bdgPastille==="function"?bdgPastille("T:"+r.id,S.projetSel):'')+'</td>'+
     (avecStatutT?'<td>'+editeur(c.tblTache,r,c.colTacheStatut)+'</td>':'')+
     '<td>'+(c.colTacheAvancement
       ? champAvct(c.tblTache,r,c.colTacheAvancement,a,statutInterrompu(c.tblTache,r,c.colTacheStatut)):'')+'</td>'+
@@ -6400,6 +6411,7 @@ function rendreFenetreAction(){
       ch("Porteur",editeur(t,a,c.colPorteur))+
       ch("Début",editeur(t,a,c.colDebut))+
       ch("Échéance",editeur(t,a,c.colEch))+
+      (typeof bdgTotalDe==="function"&&bdgTotalDe("A:"+a.id,S.projetSel)?ch("Budget rattaché",'<div class="fige">'+bdgPastille("A:"+a.id,S.projetSel)+'</div>'):"")+
     '</div>'+
     (c.colCommentaire
       ? '<div class="fa-bloc"><div class="fa-bloc-tete"><h3>Commentaire</h3>'+
@@ -9631,7 +9643,7 @@ const BDG_BALISES={P:"p",DIV:"p",H1:"p",H2:"p",H3:"p",H4:"p",BR:"br",
   B:"b",STRONG:"b",I:"i",EM:"i",U:"u",UL:"ul",OL:"ol",LI:"li",
   TABLE:"table",THEAD:"tbody",TBODY:"tbody",TFOOT:"tbody",TR:"tr",TH:"th",TD:"td"};
 /* attributs conservés : ceux qui décrivent un tableau de budget, et rien d'autre */
-const BDG_TYPES=["txt","eur","sec"];
+const BDG_TYPES=["txt","eur","sec","lien"];
 function bdgAttributs(src,dst){
   const k=dst.tagName;
   if(k==="TABLE" && src.getAttribute("data-bdg")==="1") dst.setAttribute("data-bdg","1");
@@ -9641,6 +9653,7 @@ function bdgAttributs(src,dst){
     if(BDG_TYPES.includes(t)) dst.setAttribute("data-t",t);
     if(/^\d{2,4}$/.test(w||"")) dst.setAttribute("data-w",w);
   }
+  if(k==="TD"){ const l=src.getAttribute("data-lien"); if(/^[AT]:\d+$/.test(l||"")) dst.setAttribute("data-lien",l); }
 }
 
 /* Ne garde que paragraphes, gras, italique, listes et tableaux : un
@@ -9691,7 +9704,7 @@ function budgetDe(p){ return nettoyerBudget(txt(p[S.cfg.colBudget])); }
 
 /* --- tableau de budget : colonnes typées, montants en euros, total ------- */
 const BDG_SECTIONS=["Investissement","Fonctionnement"];
-const BDG_LARG={txt:150,eur:140,sec:160};
+const BDG_LARG={txt:150,eur:140,sec:160,lien:220};
 const BDG_EUR=new Intl.NumberFormat("fr-FR",{style:"currency",currency:"EUR"});
 
 function bdgEstBudget(t){ return !!(t && t.getAttribute("data-bdg")==="1"); }
@@ -9768,7 +9781,11 @@ function bdgPreparer(racine,edition){
     bdgLignesDonnees(t).forEach(r=>[...r.cells].forEach((td,i)=>{
       td.classList.toggle("bdg-num",types[i]==="eur");
       td.classList.toggle("bdg-sec",types[i]==="sec");
-      if(edition && types[i]==="sec") td.contentEditable="false";
+      td.classList.toggle("bdg-lien",types[i]==="lien");
+      if(edition && (types[i]==="sec"||types[i]==="lien")) td.contentEditable="false";
+      /* libellé du rattachement remis à jour (action renommée…) */
+      if(types[i]==="lien" && td.getAttribute("data-lien") && S.projetSel && typeof bdgLibelleCible==="function"){
+        const l=bdgLibelleCible(S.projetSel,td.getAttribute("data-lien")); if(l) td.textContent=l; else td.classList.add("bdg-ko"); }
       if(types[i]==="eur" && !edition) bdgFormaterCellule(td);
     }));
     const tot=bdgLigneTotal(t);
@@ -9823,7 +9840,8 @@ const BDG_OUTILS=[["gras","<b>G</b>","Gras"],["ital","<i>I</i>","Italique"],
   ["col+","+ colonne","Ajouter une colonne à droite de la colonne courante"],
   ["lig-","– ligne","Supprimer la ligne courante"],
   ["col-","– colonne","Supprimer la colonne courante"],
-  ["total","Ligne total","Ajouter ou retirer la ligne Total"]];
+  ["total","Ligne total","Ajouter ou retirer la ligne Total"],["|"],
+  ["collien","🔗 Colonne rattachement","Ajouter une colonne pour rattacher chaque ligne à une action ou une tâche"]];
 
 function blocBudget(p){
   const c=S.cfg;
@@ -9918,6 +9936,10 @@ function bdgOutil(ed,act,td){
     else if(dedans){ document.execCommand("insertHTML",false,html); }
     else ed.insertAdjacentHTML("beforeend",html);
     return;
+  }
+  if(act==="collien"){
+    const table=td?td.closest("table"):[...ed.querySelectorAll("table")].filter(bdgEstBudget).pop();
+    bdgAjouterColLien(table,td?td.cellIndex:null); return;
   }
   if(!td) return;
   const tr=td.parentNode, table=td.closest("table"), idx=td.cellIndex;
@@ -10062,9 +10084,10 @@ function brancherBudget(racine,p,redessiner){
   /* un clic sur une cellule Section ouvre le choix */
   ed.addEventListener("click",e=>{
     const td=e.target.closest&&e.target.closest("td");
-    if(!td || !ed.contains(td) || typeDe(td)!=="sec") return;
+    if(!td || !ed.contains(td) || (typeDe(td)!=="sec" && typeDe(td)!=="lien")) return;
     if(td.parentNode.getAttribute("data-total")==="1") return;
     derniere=td; majOutils();
+    if(typeDe(td)==="lien"){ bdgMenuLien(td,p,()=>{ noter(); }); return; }
     bdgMenuSection(td,()=>{ recalculer(); noter(); });
   });
   bdgRedimension(ed,noter);
@@ -17115,7 +17138,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 19/10/2026 · 11 h 30</div>';
+    '<div class="ed-version">Version du 19/10/2026 · 12 h 00</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17281,7 +17304,7 @@ const IMPR_CSS=
   '.ip-com{display:block;margin-top:3px;font-size:9px;color:#6b7591;white-space:pre-wrap;line-height:1.35}'+
   '.ip-ret{color:#c0392b;font-weight:700}.ip-av{display:flex;align-items:center;gap:5px}.ip-av i{flex:1;height:6px;border-radius:3px;background:#e8ecf3;overflow:hidden;display:block}'+
   '.ip-av i b{display:block;height:100%}.ip-vide{color:#8a93a8;font-style:italic;padding:8px 0}'+
-  '.ip-t td>span:not(.ip-code):not(.ip-com),.ip-t td>span *{font-size:9.5px!important}';
+  '.ip-t td>span:not(.ip-code):not(.ip-com),.ip-t td>span *{font-size:9.5px!important}.ip-num{text-align:right;white-space:nowrap;font-weight:600}';
 function imprAv(a,inter){
   if(a==null) return '<span class="ip-vide">—</span>';
   const b=bandesImpr(a,inter);
@@ -17310,15 +17333,19 @@ function imprActions(p){
       (c.colCommentaire?imprCom(a[c.colCommentaire]):'')+'</td>'+
       '<td>'+esc(lire(c.tblMain,a,c.colPorteur))+'</td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td>'+
       '<td>'+imprAv(av,inter)+'</td><td>'+imprDate(Number(a[c.colDebut])||null,true)+'</td>'+
-      '<td>'+imprDate(Number(a[c.colEch])||null,(av!=null&&av>=100)||inter)+'</td></tr>';
+      '<td>'+imprDate(Number(a[c.colEch])||null,(av!=null&&av>=100)||inter)+'</td>'+
+      (typeof bdgTotalDe==="function" && acts.some(x=>bdgTotalDe("A:"+x.id,p))?'<td class="ip-num">'+esc(bdgTexte("A:"+a.id,p))+'</td>':'')+'</tr>';
   };
-  let h='<table class="ip-t"><colgroup><col style="width:40%"><col style="width:14%"><col style="width:11%"><col style="width:13%"><col style="width:11%"><col style="width:11%"></colgroup>'+
-    '<thead><tr><th>Action</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Début</th><th>Échéance</th></tr></thead><tbody>';
+  const avecB=typeof bdgTotalDe==="function" && acts.some(a=>bdgTotalDe("A:"+a.id,p));
+  const nbc=avecB?7:6;
+  let h='<table class="ip-t"><colgroup>'+(avecB?'<col style="width:34%"><col style="width:13%"><col style="width:10%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:11%">'
+      :'<col style="width:40%"><col style="width:14%"><col style="width:11%"><col style="width:13%"><col style="width:11%"><col style="width:11%">')+'</colgroup>'+
+    '<thead><tr><th>Action</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Début</th><th>Échéance</th>'+(avecB?'<th>Budget</th>':'')+'</tr></thead><tbody>';
   [...groupes].forEach(([k,l])=>{
     if(avecAxes){
       const avs=l.map(a=>pct(a[c.colAvancement])).filter(x=>x!=null);
       const moy=avs.length?Math.round(avs.reduce((s,x)=>s+x,0)/avs.length):null;
-      h+='<tr class="ip-g"><td colspan="6">'+esc(k||"Sans axe")+'<small>'+l.length+' action'+(l.length>1?"s":"")+(moy!=null?' · '+moy+' %':'')+'</small></td></tr>';
+      h+='<tr class="ip-g"><td colspan="'+nbc+'">'+esc(k||"Sans axe")+'<small>'+l.length+' action'+(l.length>1?"s":"")+(moy!=null?' · '+moy+' %':'')+'</small></td></tr>';
     }
     h+=l.map(ligne).join("");
   });
@@ -17329,6 +17356,7 @@ function imprTaches(p){
   if(!c.tblTache) return '<p class="ip-vide">Table des tâches non paramétrée.</p>';
   const lots=[[p,tachesDe(p)]].concat(actionsDe(p).map(a=>[a,tachesDe(a)])).filter(x=>x[1].length);
   if(!lots.length) return '<p class="ip-vide">Aucune tâche pour ce projet.</p>';
+  const avecBT=typeof bdgTotalDe==="function" && lots.some(([,ts])=>ts.some(x=>bdgTotalDe("T:"+x.id,p)));
   const ligne=t=>{
     const av=pct(t[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,t,c.colTacheStatut);
     return '<tr><td class="ip-lib"><b>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+'</b>'+
@@ -17336,16 +17364,20 @@ function imprTaches(p){
       '<td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td>'+
       '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",av||0,inter)+'</td>'+
       '<td>'+imprAv(av,inter)+'</td><td>'+imprDate(Number(t[c.colTacheDebut])||null,true)+'</td>'+
-      '<td>'+imprDate(Number(t[c.colTacheFin])||null,(av!=null&&av>=100)||inter)+'</td></tr>';
+      '<td>'+imprDate(Number(t[c.colTacheFin])||null,(av!=null&&av>=100)||inter)+'</td>'+
+      (avecBT?'<td class="ip-num">'+esc(bdgTexte("T:"+t.id,p))+'</td>':'')+'</tr>';
   };
-  let h='<table class="ip-t"><colgroup><col style="width:40%"><col style="width:14%"><col style="width:11%"><col style="width:13%"><col style="width:11%"><col style="width:11%"></colgroup>'+
-    '<thead><tr><th>Tâche</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Début</th><th>Fin</th></tr></thead><tbody>';
+  const avecB=typeof bdgTotalDe==="function" && lots.some(([,ts])=>ts.some(x=>bdgTotalDe("T:"+x.id,p)));
+  const nbc=avecB?7:6;
+  let h='<table class="ip-t"><colgroup>'+(avecB?'<col style="width:34%"><col style="width:13%"><col style="width:10%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:11%">'
+      :'<col style="width:40%"><col style="width:14%"><col style="width:11%"><col style="width:13%"><col style="width:11%"><col style="width:11%">')+'</colgroup>'+
+    '<thead><tr><th>Tâche</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Début</th><th>Fin</th>'+(avecB?'<th>Budget</th>':'')+'</tr></thead><tbody>';
   lots.forEach(([x,ts])=>{
     const av=pct(x[c.colAvancement]);
     let titre;
     if(x.id===p.id) titre='Tâches rattachées au projet';
     else { const ca=imprCodeAction(x); titre=(ca.code?'<span class="ip-code">'+esc(ca.code)+'</span>':'')+esc(ca.lib); }
-    h+='<tr class="ip-g"><td colspan="6">'+titre+'<small>'+(x.id!==p.id&&lire(c.tblMain,x,c.colPorteur)?esc(lire(c.tblMain,x,c.colPorteur))+' · ':'')+
+    h+='<tr class="ip-g"><td colspan="'+nbc+'">'+titre+'<small>'+(x.id!==p.id&&lire(c.tblMain,x,c.colPorteur)?esc(lire(c.tblMain,x,c.colPorteur))+' · ':'')+
       ts.length+' tâche'+(ts.length>1?"s":"")+(x.id!==p.id&&av!=null?' · '+av+' %':'')+'</small></td></tr>'+ts.map(ligne).join("");
   });
   return h+'</tbody></table>';
@@ -19434,6 +19466,117 @@ async function mbAnnexeListe(){
       fs.filter(x=>x!==fId).map(x=>{ const val=anxTexte(T,x,i); return val?'<div class="mb-champ mb-anx-ch"><span>'+esc(x.label)+'</span><b>'+esc(val)+'</b></div>':''; }).join("")+
       '<button class="btn-2 mb-chip mbp-ann">Fermer</button>');
     v.querySelector(".mbp-ann").onclick=()=>v.remove();
+  });
+}
+
+/* =======================================================================
+   Budget relié aux actions et aux tâches : colonne « Rattachement » dans les
+   tableaux de budget (une ligne → une action ou une tâche du projet). Le
+   montant rattaché s'affiche sur la ligne de l'action ou de la tâche
+   (seulement ses propres lignes de budget).
+   ======================================================================= */
+function bdgCibles(p){
+  const c=S.cfg, out=[];
+  const libA=a=>{ const d=decouperLibelleAction(lire(c.tblMain,a,c.colLibelle)); return (d.num?d.num+" – ":"")+(d.texte||lire(c.tblMain,a,c.colLibelle)); };
+  actionsDe(p).forEach(a=>{
+    out.push({cle:"A:"+a.id, lib:libA(a), type:"Action"});
+    tachesDe(a).forEach(t=>out.push({cle:"T:"+t.id, lib:(lire(c.tblTache,t,c.colTacheLibelle)||"(tâche)"), sous:libA(a), type:"Tâche"}));
+  });
+  tachesDe(p).forEach(t=>out.push({cle:"T:"+t.id, lib:(lire(c.tblTache,t,c.colTacheLibelle)||"(tâche)"), sous:"Projet", type:"Tâche"}));
+  return out;
+}
+function bdgLibelleCible(p,cle){
+  const x=bdgCibles(p).find(o=>o.cle===cle);
+  return x ? (x.type==="Tâche"?"Tâche : ":"")+x.lib : "";
+}
+/* lignes de budget rattachées, par clé « A:id » / « T:id » */
+const BDG_CACHE={src:null,map:new Map()};
+function bdgLiens(p){
+  const c=S.cfg;
+  if(!p || !budgetPret()) return new Map();
+  const h=budgetDe(p);
+  if(BDG_CACHE.src===p.id+"|"+h) return BDG_CACHE.map;
+  const map=new Map();
+  if(/data-lien/.test(h)){
+    const d=document.createElement("div"); d.innerHTML=h;
+    d.querySelectorAll("table").forEach(t=>{
+      if(!bdgEstBudget(t)) return;
+      const ty=bdgTypes(t), iL=ty.indexOf("lien"), iE=ty.indexOf("eur"), iS=ty.indexOf("sec"), iP=ty.indexOf("txt");
+      if(iL<0) return;
+      bdgLignesDonnees(t).forEach(r=>{
+        const td=r.cells[iL], cle=td&&td.getAttribute("data-lien");
+        if(!cle) return;
+        const n=iE>=0&&r.cells[iE]?bdgLireMontant(r.cells[iE].textContent):null;
+        if(!map.has(cle)) map.set(cle,[]);
+        map.get(cle).push({poste:iP>=0&&r.cells[iP]?r.cells[iP].textContent.trim():"",
+          montant:(n===null||Number.isNaN(n))?null:n, section:iS>=0&&r.cells[iS]?r.cells[iS].textContent.trim():""});
+      });
+    });
+  }
+  BDG_CACHE.src=p.id+"|"+h; BDG_CACHE.map=map;
+  return map;
+}
+function bdgProjetDe(r,estTache){
+  if(!estTache) return projetDeLigne(r.id).p || (estProjet(r)?r:null);
+  return projets().find(p=>[p].concat(actionsDe(p)).some(x=>tachesDe(x).some(t=>t.id===r.id)))||S.projetSel||null;
+}
+function bdgTotalDe(cle,p){
+  const l=bdgLiens(p).get(cle); if(!l||!l.length) return null;
+  return {total:l.reduce((s,x)=>s+(x.montant||0),0), lignes:l};
+}
+/* pastille 💶 (écran) */
+function bdgPastille(cle,p){
+  const b=bdgTotalDe(cle,p||S.projetSel); if(!b) return "";
+  const detail=b.lignes.map(x=>(x.poste||"Ligne")+" : "+(x.montant!=null?bdgFormat(x.montant):"—")+(x.section?" ("+x.section+")":"")).join("\n");
+  return ' <span class="bdg-pastille" title="Budget rattaché :\n'+esc(detail)+'">💶 '+esc(bdgFormat(b.total))+'</span>';
+}
+function bdgTexte(cle,p){ const b=bdgTotalDe(cle,p||S.projetSel); return b?bdgFormat(b.total):""; }
+
+/* éditeur : menu de choix d'une action ou d'une tâche, avec recherche */
+function bdgMenuLien(td,p,apres){
+  bdgFermerMenu();
+  const m=document.createElement("div");
+  m.className="bdg-menu bdg-menu-lien";
+  const cibles=bdgCibles(p), cur=td.getAttribute("data-lien")||"";
+  const pli=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  m.innerHTML='<input type="search" placeholder="🔍 Action ou tâche…" autocomplete="off"><div class="bdg-ml-liste"></div>';
+  document.body.appendChild(m);
+  const liste=m.querySelector(".bdg-ml-liste"), q=m.querySelector("input");
+  const rendre=()=>{
+    const mots=pli(q.value).split(/\s+/).filter(Boolean);
+    const xs=cibles.filter(o=>!mots.length||mots.every(w=>pli(o.lib+" "+(o.sous||"")).includes(w)));
+    liste.innerHTML='<button type="button" data-v=""><i>Aucun rattachement</i></button>'+
+      xs.map(o=>'<button type="button" data-v="'+o.cle+'"'+(o.cle===cur?' class="on"':'')+'>'+
+        '<small>'+o.type+'</small> '+esc(o.lib)+(o.type==="Tâche"&&o.sous?'<em> · '+esc(o.sous)+'</em>':'')+'</button>').join("");
+    liste.querySelectorAll("button").forEach(b=>{
+      b.onmousedown=e=>e.preventDefault();
+      b.onclick=()=>{
+        if(b.dataset.v){ td.setAttribute("data-lien",b.dataset.v); td.textContent=bdgLibelleCible(p,b.dataset.v); }
+        else { td.removeAttribute("data-lien"); td.innerHTML="<br>"; }
+        bdgFermerMenu(); apres();
+      };
+    });
+  };
+  rendre(); q.oninput=rendre;
+  const r=td.getBoundingClientRect();
+  m.style.left=Math.max(6,Math.min(r.left,window.innerWidth-m.offsetWidth-6))+"px";
+  m.style.top=(r.bottom+m.offsetHeight+6>window.innerHeight ? Math.max(6,r.top-m.offsetHeight-2) : r.bottom+2)+"px";
+  setTimeout(()=>q.focus(),20);
+  setTimeout(()=>document.addEventListener("mousedown",function hors(e){
+    if(!m.contains(e.target)){ bdgFermerMenu(); document.removeEventListener("mousedown",hors); }
+  }),0);
+}
+/* ajoute une colonne Rattachement à droite de la colonne courante (ou en fin) */
+function bdgAjouterColLien(table,idx){
+  if(!table || !bdgEstBudget(table)){ toast("Placez le curseur dans un tableau de budget.",true); return; }
+  if(bdgTypes(table).includes("lien")){ toast("Ce tableau a déjà une colonne Rattachement.",true); return; }
+  const pos=(idx==null?bdgTypes(table).length-1:idx);
+  [...table.rows].forEach(r=>{
+    const tete=r===bdgEntete(table);
+    const n=document.createElement(tete?"th":"td");
+    if(tete){ n.setAttribute("data-t","lien"); n.setAttribute("data-w","220"); n.textContent="Rattachement"; }
+    else if(r.getAttribute("data-total")!=="1") n.innerHTML="<br>";
+    const ref=r.cells[pos]; ref?ref.after(n):r.appendChild(n);
   });
 }
 
