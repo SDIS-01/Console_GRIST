@@ -11153,7 +11153,8 @@ function ordreValide(liste){
 if(IMPR.stylePptx===undefined) IMPR.stylePptx="nouveau";
 if(IMPR.instancePptx===undefined) IMPR.instancePptx="";
 function enregistrerOptionsImpr(){
-  sauverAuto();
+  /* préférence personnelle : navigateur seulement ; options du widget pour l'administrateur */
+  if(S.deverrouille) sauverAuto();
   try{ localStorage.setItem("cp-impression",JSON.stringify(
     {versionDefauts:VERSION_DEFAUTS_IMPR,sections:IMPR.sections,ordre:IMPR.ordre,zoom:IMPR.zoom,lisible:IMPR.lisible,
      planningTaches:IMPR.planningTaches, taches:IMPR.taches,
@@ -13521,7 +13522,7 @@ function chargerPagesSup(p){
     if(pagesSup.length){
       S.pagesParProjet=S.pagesParProjet||{};
       S.pagesParProjet[cle]=pagesSup;
-      sauverAuto();
+      if(S.deverrouille) sauverAuto();
     }
   }
   pagesSup.forEach(pg=>{ if(!Array.isArray(pg.blocks)) pg.blocks=[]; });
@@ -14150,13 +14151,14 @@ async function reprendreBaseNotifs(){
   }catch(e){}
 }
 function sauverAuto(){
+  if(S.optionsBloquees) return;
   sauveDemandee=true;
   if(sauveEnCours) return;
   sauveEnCours=setTimeout(async()=>{
     sauveEnCours=null; sauveDemandee=false;
     await reprendreBaseNotifs();
     try{ await grist.widgetApi.setOptions(paquetOptions()); }
-    catch(e){ console.warn("Sauvegarde automatique : "+e.message); }
+    catch(e){ console.warn("Sauvegarde automatique : "+e.message); S.optionsBloquees=true; }
     if(sauveDemandee) sauverAuto();
   },900);
 }
@@ -17297,7 +17299,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 26/10/2026 · 14 h 29</div>';
+    '<div class="ed-version">Version du 26/10/2026 · 14 h 37</div>';
   return h;
 }
 async function lancerEdition(id){
