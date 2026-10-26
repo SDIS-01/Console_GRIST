@@ -2170,6 +2170,12 @@ body.mob .bdg-b-pied .btn,body.mob .bdg-b-pied .btn-2{flex:1;padding:10px;}
 .tdet-contenu th,.tdet-ed th{background:#eef2f8;color:var(--bleu);}
 .tdet-ed{min-height:90px;background:#fff;}
 .tdet-outils{position:static!important;margin:0 0 6px!important;}
+/* Mes notifications : blocs empilés sans trou (colonnes souples, hauteur libre) */
+.mt-grille:not(.mp-annexes){display:block;column-count:4;column-gap:14px;}
+.mt-grille:not(.mp-annexes)>*{break-inside:avoid;page-break-inside:avoid;display:block;width:100%;margin:0 0 14px;}
+@media (max-width:1400px){.mt-grille:not(.mp-annexes){column-count:3;}}
+@media (max-width:1050px){.mt-grille:not(.mp-annexes){column-count:2;}}
+@media (max-width:700px){.mt-grille:not(.mp-annexes){column-count:1;}}
 </style>
 </head>
 <body>
@@ -17291,7 +17297,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 26/10/2026 · 12 h 18</div>';
+    '<div class="ed-version">Version du 26/10/2026 · 14 h 29</div>';
   return h;
 }
 async function lancerEdition(id){
