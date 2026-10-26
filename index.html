@@ -2153,6 +2153,23 @@ body.mob .bdg-pastille-vide{opacity:1;}
 body.mob .bdg-bulle{font-size:14px;max-height:85vh;}
 body.mob .bdg-b-form input[type=text],body.mob .bdg-b-form textarea{font-size:15px;padding:9px 10px;}
 body.mob .bdg-b-pied .btn,body.mob .bdg-b-pied .btn-2{flex:1;padding:10px;}
+/* onglets Actions / Tâches : filtre des actions élargi et redimensionnable */
+#m-fa-action .msel-btn,#m-ft-action .msel-btn{min-width:340px;max-width:520px;}
+#m-fa-action .msel-pan,#m-ft-action .msel-pan{width:620px;max-width:min(900px,calc(100vw - 40px));max-height:420px;resize:both;overflow:auto;min-width:280px;min-height:160px;}
+#m-fa-action .msel-txt,#m-ft-action .msel-txt{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35;}
+#m-fa-action .msel-pan label,#m-ft-action .msel-pan label{align-items:flex-start;}
+#m-fa-action .msel-pan input[type=checkbox],#m-ft-action .msel-pan input[type=checkbox]{margin-top:2px;}
+.ft-q{min-width:220px;padding:6px 9px;border:1px solid var(--trait);border-radius:6px;font:inherit;font-size:12.5px;}
+/* détail d'une tâche (texte et tableaux) */
+.tdet{margin-top:8px;}
+.tdet-tete{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.tdet-tete label{margin:0!important;}
+.tdet-contenu{background:var(--fond);border:1px solid var(--trait);border-radius:6px;padding:8px 10px;font-size:12.5px;}
+.tdet-contenu table,.tdet-ed table{border-collapse:collapse;margin:6px 0;}
+.tdet-contenu td,.tdet-contenu th,.tdet-ed td,.tdet-ed th{border:1px solid var(--trait);padding:4px 8px;text-align:left;vertical-align:top;min-width:60px;}
+.tdet-contenu th,.tdet-ed th{background:#eef2f8;color:var(--bleu);}
+.tdet-ed{min-height:90px;background:#fff;}
+.tdet-outils{position:static!important;margin:0 0 6px!important;}
 </style>
 </head>
 <body>
@@ -2519,7 +2536,7 @@ const DEF = {
   colHmAncien:"Ancienne_valeur", colHmNouveau:"Nouvelle_valeur",
   tblTache:"", colTacheLien:"", colTacheLibelle:"", colTacheDebut:"", colTacheFin:"",
   colTacheAvancement:"", colTachePorteur:"", colTacheStatut:"", colTacheCommentaire:"",
-  colTachePJ:"", colTacheOrdre:"", colTacheFinReelle:"", colJnlPJ:"", colInsPJ:"",
+  colTachePJ:"", colTacheOrdre:"", colTacheFinReelle:"", colTacheDetail:"", colJnlPJ:"", colInsPJ:"",
   tblJournal:"", colJnlLien:"", colJnlDate:"", colJnlTexte:"", colJnlAuteur:"", colJnlNature:"",
   colJnlAction:"", colJnlCollab:"Collaborateur_Concerné", colJnlDelai:"Délai_Exécution",
   colJnlReponse:"Reponse_a", colJnlTraite:"Traité", colJnlSaisie:"Date_Saisie",
@@ -2571,7 +2588,7 @@ const CHAMPS_REGLAGES = [
   ]},
   {bloc:"Table des tâches", tableKey:"tblTache", champs:[
     ["colTacheLien","Lien vers l'action"],["colTacheLibelle","Libellé de la tâche"],
-    ["colTacheDebut","Date de début"],["colTacheFin","Échéance (date de fin prévue)"],["colTacheFinReelle","Date de fin (réelle)"],
+    ["colTacheDebut","Date de début"],["colTacheFin","Échéance (date de fin prévue)"],["colTacheFinReelle","Date de fin (réelle)"],["colTacheDetail","Détail (texte et tableaux)"],
     ["colTacheAvancement","Avancement"],["colTachePorteur","Porteur"],["colTacheStatut","Statut"],
     ["colTacheCommentaire","Commentaire"],["colTachePJ","Pièces jointes"],
     ["colTacheOrdre","Ordre manuel (colonne numérique)"]
@@ -5077,7 +5094,7 @@ function dansTranche(a,code){
 }
 
 function barreFiltres(prefixe,etat,porteurs,total,affiches,menuId,libelleDate){
-  const actif = etat.porteur||etat.avct||etat.du||etat.au||MENUS[menuId].sel.length;
+  const actif = etat.porteur||etat.avct||etat.du||etat.au||etat.q||MENUS[menuId].sel.length;
   return '<div class="barre-filtres">'+
     '<div class="msel" id="'+menuId+'"><button type="button" class="msel-btn"></button>'+
       '<div class="msel-pan" hidden></div></div>'+
@@ -5108,7 +5125,7 @@ function brancherFiltres(prefixe,etat,rendu,menuId){
   if(au) au.onchange=()=>{ etat.au=normaliserDateFR(au.value); rendu(); };
   const raz=$("#"+prefixe+"-raz");
   if(raz) raz.onclick=()=>{
-    etat.porteur=""; etat.avct=""; etat.du=""; etat.au="";
+    etat.porteur=""; etat.avct=""; etat.du=""; etat.au=""; etat.q="";
     MENUS[menuId].sel=[];
     rendu();
   };
@@ -6121,13 +6138,14 @@ function vueActions(p){
   $("#add-action").onclick=async()=>{
     if(!actionCreable(p)) return;
     const r=await feuilleAjout({titre:"Nouvelle action",
-      sous:lire(t,p,c.colLibelle),libelle:"Libellé de l'action",axe:axeOK(),projet:p});
+      sous:lire(t,p,c.colLibelle),libelle:"Libellé de l'action",axe:axeOK(),projet:p,porteur:{t:t,col:c.colPorteur}});
     if(!r) return;
     const lib=r.lib;
     const champs={[c.colLibelle]:lib};
     if(r.axe && axeOK()) champs[c.colAxe]=r.axe;
     if(c.colDebut) champs[c.colDebut]=r.debut;
     if(c.colEch)   champs[c.colEch]=r.fin;
+    if(r.porteur!=null && c.colPorteur) champs[c.colPorteur]=r.porteur;
     const infoN=infoCol(t,c.colNature);
     champs[c.colNature] = (infoN&&infoN.type.startsWith("Ref:")) ? p[c.colNature] : "MEO";
     if(c.colProjKey) champs[c.colProjKey]=p[c.colProjKey];
@@ -6160,14 +6178,20 @@ function vueTaches(p){
     if(f.porteur && lire(c.tblTache,r,c.colTachePorteur)!==f.porteur) return false;
     if(!dansTranche(pct(r[c.colTacheAvancement]),f.avct)) return false;
     if(!dansPlage(r[c.colTacheFin],f.du,f.au)) return false;
+    if(f.q){
+      const s=pliColonne([lire(c.tblTache,r,c.colTacheLibelle),c.colTachePorteur?lire(c.tblTache,r,c.colTachePorteur):"",
+        c.colTacheCommentaire?txt(r[c.colTacheCommentaire]):"", c.colTacheDetail?txt(r[c.colTacheDetail]).replace(/<[^>]+>/g," "):""].join(" "));
+      if(!pliColonne(f.q).split(/\s+/).filter(Boolean).every(w=>s.includes(w))) return false;
+    }
     return true;
   };
-  const actif=!!(f.porteur||f.avct||f.du||f.au||sel.length);
+  const actif=!!(f.porteur||f.avct||f.du||f.au||f.q||sel.length);
   const retenues=actionsVues.reduce((n,a)=>n+tachesDe(a).filter(filtre).length,0);
   const avecStatutT=!!c.colTacheStatut;
   const nbColT=avecStatutT?8:7;
 
-  let html=barreFiltres("ft",f,porteurs,toutesT.length,retenues,"m-ft-action","Échéance");
+  let html=barreFiltres("ft",f,porteurs,toutesT.length,retenues,"m-ft-action","Échéance")
+    .replace('<div class="barre-filtres">','<div class="barre-filtres"><input type="search" id="ft-q" class="ft-q" placeholder="🔍 Rechercher une tâche…" value="'+esc(f.q||"")+'">');
   actionsVues.forEach(act=>{
     const ts=tachesDe(act).filter(filtre);
     if(actif && !ts.length) return;
@@ -6189,6 +6213,12 @@ function vueTaches(p){
   brancherRepli();
   brancherPJ();
   brancherFiltres("ft",S.fTaches,()=>vueTaches(p),"m-ft-action");
+  const fq=$("#ft-q");
+  if(fq){
+    let tq=null;
+    fq.oninput=()=>{ clearTimeout(tq); tq=setTimeout(()=>{ S.fTaches.q=fq.value.trim(); vueTaches(p);
+      const n=$("#ft-q"); if(n){ n.focus(); const l=n.value.length; n.setSelectionRange(l,l); } },250); };
+  }
   brancherTaches($("#corps"),()=>rendreProjet());
 }
 
@@ -6220,7 +6250,7 @@ function ligneTacheHtml(r,act,avecStatutT,nbColT){
   const c=S.cfg;
   const a=pct(r[c.colTacheAvancement]);
   const cle=c.tblTache+":"+r.id, ouvert=!!S.ouverts[cle];
-  const detail=!!(c.colTacheCommentaire||c.colTachePJ);
+  const detail=!!(c.colTacheCommentaire||c.colTachePJ||c.colTacheDetail);
   return '<tr class="ligne-repli" data-repli="'+cle+'" data-tache="'+r.id+'" data-act="'+act.id+'">'+
     '<td class="col-poignee">'+(c.colTacheOrdre?'<span class="poignee" title="Glisser pour déplacer">⋮⋮</span>':'')+'</td>'+
     '<td class="col-chevron">'+(detail?'<span class="chevron">'+(ouvert?"▾":"▸")+'</span>':'')+'</td>'+
@@ -6240,6 +6270,7 @@ function ligneTacheHtml(r,act,avecStatutT,nbColT){
       ? '<tr class="ligne-com" data-sous="'+cle+'"'+(ouvert?'':' style="display:none"')+
         '><td colspan="'+nbColT+'">'+
         (c.colTacheCommentaire?'<label>Commentaire</label>'+commentaireLecture(r[c.colTacheCommentaire]):'')+
+        (c.colTacheDetail&&typeof tdetBlocHtml==="function"?tdetBlocHtml(r):'')+
         (c.colTachePJ?'<div class="sl-pj"><label>Pièces jointes</label>'+
           blocPJ(c.tblTache,r,c.colTachePJ)+'</div>':'')+
         '</td></tr>'
@@ -6270,12 +6301,13 @@ function brancherTaches(zone,apres){
     if(!act){ toast("Porteur introuvable pour cette tâche.",true); return; }
     const rep=await feuilleAjout({titre:"Nouvelle tâche",
       sous:lire(c.tblMain,act,c.colLibelle),libelle:"Libellé de la tâche",
-      libelleFin:"Date de fin"});
+      libelleFin:"Date de fin",porteur:{t:c.tblTache,col:c.colTachePorteur}});
     if(!rep) return;
     const info=infoCol(c.tblTache,c.colTacheLien);
     const champs={[c.colTacheLibelle]:rep.lib};
     if(c.colTacheDebut) champs[c.colTacheDebut]=rep.debut;
     if(c.colTacheFin)   champs[c.colTacheFin]=rep.fin;
+    if(rep.porteur!=null && c.colTachePorteur) champs[c.colTachePorteur]=rep.porteur;
     if(info && info.type.startsWith("Ref:")) champs[c.colTacheLien]=act.id;
     else if(info && info.type.startsWith("RefList:")) champs[c.colTacheLien]=["L",act.id];
     else champs[c.colTacheLien]=txt(act[c.colActKey])||cleProjet(act);
@@ -14207,6 +14239,7 @@ function devineDefauts(){
     if(!c.colTacheLien)    c.colTacheLien   =ids.find(i=>/action|parent|lien/i.test(i))||"";
     if(!c.colTacheDebut)   c.colTacheDebut  =ids.find(i=>/debut|début/i.test(i))||"";
     if(!c.colTacheFin)     c.colTacheFin    =ids.find(i=>/fin|ech/i.test(i))||"";
+    if(!c.colTacheDetail) c.colTacheDetail=ids.find(i=>/^d[ée]tail/i.test(i))||"";
     if(!c.colTacheFinReelle) c.colTacheFinReelle=ids.find(i=>i!==c.colTacheFin && /^date_?fin|fin_?r[ée]el/i.test(i))||"";
     if(!c.colTacheAvancement) c.colTacheAvancement=ids.find(i=>/avanc/i.test(i))||"";
     if(!c.colTachePorteur) c.colTachePorteur=ids.find(i=>/porteur|responsable/i.test(i))||"";
@@ -16075,7 +16108,7 @@ function mbTravaux(p){
   $("#mb-add-action").onclick=()=>actionCreable(p) && mbFeuilleAjout({
     titre:"Nouvelle action",
     sous:lire(c.tblMain,p,c.colLibelle),
-    libelle:"Libellé de l'action", axe:axeOK(), projet:p,
+    libelle:"Libellé de l'action", axe:axeOK(), projet:p, porteur:{t:c.tblMain,col:c.colPorteur},
     action:async (lib,r)=>{
       const t=c.tblMain, champs={[c.colLibelle]:lib};
       if(r.axe && axeOK()) champs[c.colAxe]=r.axe;
@@ -16084,6 +16117,7 @@ function mbTravaux(p){
       if(c.colProjKey) champs[c.colProjKey]=p[c.colProjKey];
       if(c.colDebut) champs[c.colDebut]=r.debut;
       if(c.colEch)   champs[c.colEch]=r.fin;
+      if(r.porteur!=null && c.colPorteur) champs[c.colPorteur]=r.porteur;
       if(!poserIdAction(champs,p,lib)) return;
       await ajouter(t,champs);
     }
@@ -16095,12 +16129,13 @@ function mbTravaux(p){
     mbFeuilleAjout({
       titre:"Nouvelle tâche",
       sous:lire(c.tblMain,porteur,c.colLibelle),
-      libelle:"Libellé de la tâche", libelleFin:"Date de fin",
+      libelle:"Libellé de la tâche", libelleFin:"Date de fin", porteur:{t:c.tblTache,col:c.colTachePorteur},
       action:async (lib,r)=>{
         const info=infoCol(c.tblTache,c.colTacheLien);
         const champs={[c.colTacheLibelle]:lib};
         if(c.colTacheDebut) champs[c.colTacheDebut]=r.debut;
         if(c.colTacheFin)   champs[c.colTacheFin]=r.fin;
+        if(r.porteur!=null && c.colTachePorteur) champs[c.colTachePorteur]=r.porteur;
         if(info && info.type.startsWith("Ref:")) champs[c.colTacheLien]=porteur.id;
         else if(info && info.type.startsWith("RefList:")) champs[c.colTacheLien]=["L",porteur.id];
         else champs[c.colTacheLien]=txt(porteur[c.colActKey])||cleProjet(porteur);
@@ -17256,7 +17291,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 26/10/2026 · 11 h 50</div>';
+    '<div class="ed-version">Version du 26/10/2026 · 12 h 18</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17431,6 +17466,8 @@ const IMPR_CSS=
   '.ip-bloc{display:flex;gap:10px;font-size:8.5px;color:#4a5571;line-height:1.4;margin:0 0 2px 2px}.ip-z{padding:1px 10px 3px 8px;min-width:0}'+
   '.ip-zc{flex:2;border-left:2px solid #c5cbd8}.ip-zb{flex:1;border-left:2px solid #b9dcc4}.ip-bloc.seul-bdg{justify-content:flex-end}.ip-bloc.seul-bdg .ip-zb{flex:0 0 34%}'+
   '.ip-zt{font-size:7.5px;font-weight:bold;text-transform:uppercase;color:#6b7591;margin-bottom:1px;letter-spacing:.03em}'+
+  '.ip-axe td{background:#E0DAD3;color:#3E382F;font-weight:bold;font-size:9.5px;padding:4px 6px;break-after:avoid;page-break-after:avoid}.ip-axe td small{font-weight:400;margin-left:8px;font-size:8.5px}'+
+  '.ip-dethtml p{margin:0 0 3px}.ip-dethtml ul{margin:0 0 3px;padding-left:16px}.ip-dethtml table{border-collapse:collapse;margin:3px 0;font-size:8.5px}.ip-dethtml td,.ip-dethtml th{border:1px solid #c5cbd8;padding:2px 5px;text-align:left;vertical-align:top}.ip-dethtml th{background:#eef2f8;color:#1c2f6b}'+
   '.ip-ent{white-space:pre-line;margin-bottom:3px}.ip-ent b{color:#2c3a5c;font-weight:600}'+
   '.ip-bl{display:flex;justify-content:space-between;gap:8px}.ip-bl b{white-space:nowrap}.ip-btot{border-top:1px solid #1f6b38;font-weight:bold;color:#1f6b38;margin-top:2px}.ip-btxt{white-space:pre-line;margin-top:2px}.ip-bl+.ip-btxt{margin-top:4px}'+
   '.ip-ret{color:#c0392b;font-weight:700}.ip-av{display:flex;align-items:center;gap:5px}.ip-av i{flex:1;height:6px;border-radius:3px;background:#e8ecf3;overflow:hidden;display:block}'+
@@ -17452,8 +17489,9 @@ function imprBdgMode(){ try{ return localStorage.getItem("cp-impr-bdg")==="pasti
 function imprBdgModeEnr(m){ try{ localStorage.setItem("cp-impr-bdg",m); }catch(e){} }
 /* bloc sur toute la largeur, sous la ligne de l'action ou de la tâche :
    💬 commentaires (2/3) et 💶 budget détaillé (1/3) */
-function imprBlocLigne(v,cle,p,nbc){
+function imprBlocLigne(v,cle,p,nbc,detail){
   let com="", bdg="";
+  const det=detail&&!budgetVide(nettoyerBudget(detail))?'<div class="ip-z ip-zc ip-det"><div class="ip-zt">📋 Détail</div><div class="ip-dethtml">'+nettoyerBudget(detail)+'</div></div>':"";
   const mode=imprComMode();
   if(mode!=="aucun"){
     let blocs=espacerCommentaire(v).split(/\n\s*\n/).map(b=>b.split("\n").map(l=>l.trim()).filter(Boolean).join("\n")).filter(Boolean);
@@ -17467,8 +17505,9 @@ function imprBlocLigne(v,cle,p,nbc){
     const d=bdgImprDetail(cle,p);
     if(d) bdg='<div class="ip-z ip-zb">'+d+'</div>';
   }
-  if(!com && !bdg) return "";
-  return '<tr class="ip-comrow"><td colspan="'+nbc+'"><div class="ip-bloc'+(com?'':' seul-bdg')+'">'+com+bdg+'</div></td></tr>';
+  if(!com && !bdg && !det) return "";
+  return (det?'<tr class="ip-comrow"><td colspan="'+nbc+'"><div class="ip-bloc">'+det+'</div></td></tr>':'')+
+    (com||bdg?'<tr class="ip-comrow"><td colspan="'+nbc+'"><div class="ip-bloc'+(com?'':' seul-bdg')+'">'+com+bdg+'</div></td></tr>':'');
 }
 function imprCom(v){ const s=espacerCommentaire(v).trim(); return s?'<span class="ip-com">'+esc(s)+'</span>':''; }
 function imprCodeAction(a){
@@ -17501,7 +17540,7 @@ function imprActions(p){
     if(avecAxes){
       const avs=l.map(a=>pct(a[c.colAvancement])).filter(x=>x!=null);
       const moy=avs.length?Math.round(avs.reduce((s,x)=>s+x,0)/avs.length):null;
-      h+='<tr class="ip-g"><td colspan="'+nbc+'">'+esc(k||"Sans axe")+'<small>'+l.length+' action'+(l.length>1?"s":"")+(moy!=null?' · '+moy+' %':'')+'</small></td></tr>';
+      h+='<tr class="ip-axe"><td colspan="'+nbc+'">'+esc(k||"Sans axe")+'<small>'+l.length+' action'+(l.length>1?"s":"")+(moy!=null?' · '+moy+' %':'')+'</small></td></tr>';
     }
     h+=l.map(a=>ligne(a)+imprBlocLigne(c.colCommentaire?a[c.colCommentaire]:"","A:"+a.id,p,nbc)).join("");
   });
@@ -17520,7 +17559,10 @@ function imprColgroup(avecB,avecF){
 function imprTaches(p){
   const c=S.cfg;
   if(!c.tblTache) return '<p class="ip-vide">Table des tâches non paramétrée.</p>';
-  const lots=[[p,tachesDe(p)]].concat(actionsDe(p).map(a=>[a,tachesDe(a)])).filter(x=>x[1].length);
+  /* ordre de l'écran : tâches du projet, puis actions regroupées par axe */
+  const grpT=groupesParAxe(actionsDe(p));
+  const actsT=grpT?grpT.reduce((l,g)=>l.concat(g.acts),[]):actionsDe(p);
+  const lots=[[p,tachesDe(p)]].concat(actsT.map(a=>[a,tachesDe(a)])).filter(x=>x[1].length);
   if(!lots.length) return '<p class="ip-vide">Aucune tâche pour ce projet.</p>';
   const avecBT=typeof bdgTotalDe==="function" && lots.some(([,ts])=>ts.some(x=>bdgTotalDe("T:"+x.id,p)));
   const ligne=t=>{
@@ -17538,13 +17580,15 @@ function imprTaches(p){
   const avecF=!!c.colTacheFinReelle, nbc=(avecB?7:6)+(avecF?1:0);
   let h='<table class="ip-t">'+imprColgroup(avecB,avecF)+
     '<thead><tr><th>Tâche</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Début</th><th>Échéance</th>'+(avecF?'<th>Date de fin</th>':'')+(avecB?'<th>Budget</th>':'')+'</tr></thead><tbody>';
+  let axePrec=null;
   lots.forEach(([x,ts])=>{
     const av=pct(x[c.colAvancement]);
+    if(grpT && x.id!==p.id){ const ax=axeDe(x)||""; if(ax!==axePrec){ axePrec=ax; h+='<tr class="ip-axe"><td colspan="'+nbc+'">'+esc(ax||"Sans axe")+'</td></tr>'; } }
     let titre;
     if(x.id===p.id) titre='Tâches rattachées au projet';
     else { const ca=imprCodeAction(x); titre=(ca.code?'<span class="ip-code">'+esc(ca.code)+'</span>':'')+esc(ca.lib); }
     h+='<tr class="ip-g"><td colspan="'+nbc+'">'+titre+'<small>'+(x.id!==p.id&&lire(c.tblMain,x,c.colPorteur)?esc(lire(c.tblMain,x,c.colPorteur))+' · ':'')+
-      ts.length+' tâche'+(ts.length>1?"s":"")+(x.id!==p.id&&av!=null?' · '+av+' %':'')+'</small></td></tr>'+ts.map(t=>ligne(t)+imprBlocLigne(c.colTacheCommentaire?t[c.colTacheCommentaire]:"","T:"+t.id,p,nbc)).join("");
+      ts.length+' tâche'+(ts.length>1?"s":"")+(x.id!==p.id&&av!=null?' · '+av+' %':'')+'</small></td></tr>'+ts.map(t=>ligne(t)+imprBlocLigne(c.colTacheCommentaire?t[c.colTacheCommentaire]:"","T:"+t.id,p,nbc,c.colTacheDetail?t[c.colTacheDetail]:"")).join("");
   });
   return h+'</tbody></table>';
 }
@@ -20440,9 +20484,9 @@ async function etpExcel(p){
   L.forEach(l=>{
     const r=ws.getRow(n);
     if(l.genre==="axe"){
-      ws.mergeCells(n,1,n,6);
+      ws.mergeCells(n,1,n,7);
       r.getCell(1).value=l.lib; st(r.getCell(1),{fond:ETP.beige,trait:false});
-      r.height=hauteur([[l.lib,0,6]])<=25.35?13.8:hauteur([[l.lib,0,6]]);
+      r.height=hauteur([[l.lib,0,7]])<=25.35?13.8:hauteur([[l.lib,0,7]]);
       n++; return;
     }
     const act=l.genre==="action";
@@ -20476,7 +20520,7 @@ function etpHtml(p){
   const t=s=>esc(s||"").replace(/\n/g,"<br>");
   let corps="";
   L.forEach(l=>{
-    if(l.genre==="axe"){ corps+='<tr class="axe"><td colspan="6">'+t(l.lib)+'</td><td class="vide"></td></tr>'; return; }
+    if(l.genre==="axe"){ corps+='<tr class="axe"><td colspan="7">'+t(l.lib)+'</td></tr>'; return; }
     corps+='<tr class="'+l.genre+'">'+
       (l.genre==="action"?'<td colspan="2" class="lib'+(l.direct?" dir":"")+'">'+t(l.lib)+'</td>':'<td></td><td class="lib">'+t(l.lib)+'</td>')+
       '<td class="c">'+t(l.porteur)+'</td>'+av(l.av,l.inter)+'<td class="st">'+t(l.statut)+'</td>'+
@@ -20492,7 +20536,7 @@ function etpHtml(p){
     'th{background:#'+ETP.entete+';color:#fff;font-weight:bold;text-align:center;border-bottom:0;height:25px}'+
     '.p td{background:#'+ETP.beige+';text-align:center;font-size:9.5pt;height:30px}.p .t{font-size:12pt;font-weight:bold}.p .av.g{font-size:9.5pt}'+
     'tr.esp td{border:0;height:8px;padding:0}'+
-    'tr.axe td{background:#'+ETP.beige+';border-bottom:0}tr.axe td.vide{background:none}'+
+    'tr.axe td{background:#'+ETP.beige+';border-bottom:0}'+
     'tr.action td.lib{font-weight:bold}tr.action td.dir{font-style:italic}'+
     '.c{text-align:center}.av{text-align:center;font-weight:bold}td.st{font-size:7.5pt;white-space:nowrap;text-align:center}'+
     '</style></head><body><table>'+cg+'<tbody><tr class="p"><td colspan="2" class="t">'+t(H.titre)+'</td><td>'+t(H.porteur)+'</td>'+
@@ -20510,6 +20554,81 @@ function etpImprimer(p){
     setTimeout(()=>fr.remove(),60000); },200); };
   fr.srcdoc=etpHtml(p);
 }
+
+/* =======================================================================
+   Détail d'une tâche : texte mis en forme avec tableaux (colonne Texte
+   « Détail » de la table des tâches), affiché sous la tâche dépliée.
+   Même nettoyage que l'onglet Budget : paragraphes, gras, italique,
+   listes et tableaux seulement.
+   ======================================================================= */
+function tdetBlocHtml(r){
+  const c=S.cfg, h=nettoyerBudget(txt(r[c.colTacheDetail]));
+  const vide=budgetVide(h);
+  return '<div class="tdet" data-tdet="'+r.id+'"><div class="tdet-tete"><label>Détail</label>'+
+    (APP&&APP.agentVu?'':'<button type="button" class="lien-discret" data-tdet-mod="'+r.id+'">'+(vide?'＋ Ajouter du texte ou un tableau':'✎ Modifier')+'</button>')+'</div>'+
+    (vide?'':'<div class="tdet-contenu">'+h+'</div>')+'</div>';
+}
+const TDET_OUTILS=[["gras","<b>G</b>","Gras"],["ital","<i>I</i>","Italique"],["puces","• Liste","Liste à puces"],["|"],
+  ["tableau","Insérer un tableau","Insérer un tableau"],["|"],
+  ["lig+","+ ligne","Ajouter une ligne sous la ligne courante"],["col+","+ colonne","Ajouter une colonne à droite"],
+  ["lig-","– ligne","Supprimer la ligne courante"],["col-","– colonne","Supprimer la colonne courante"]];
+function tdetTableauHtml(){
+  return '<table><tbody><tr><th>Colonne 1</th><th>Colonne 2</th><th>Colonne 3</th></tr>'+
+    '<tr><td><br></td><td><br></td><td><br></td></tr><tr><td><br></td><td><br></td><td><br></td></tr></tbody></table><p><br></p>';
+}
+function tdetOuvrir(id){
+  const c=S.cfg, t=(S.data.taches||[]).find(x=>x.id===id), bloc=document.querySelector('.tdet[data-tdet="'+id+'"]');
+  if(!t||!bloc) return;
+  const h=nettoyerBudget(txt(t[c.colTacheDetail]));
+  bloc.innerHTML='<div class="tdet-tete"><label>Détail</label><span class="fil-esp"></span>'+
+      '<button type="button" class="btn-2" data-tdet-ann>Annuler</button><button type="button" class="btn" data-tdet-enr>Enregistrer</button></div>'+
+    '<div class="bdg-outils tdet-outils">'+TDET_OUTILS.map(o=>o[0]==="|"?'<span class="sep"></span>':
+      '<button type="button" data-tdo="'+o[0]+'" title="'+esc(o[2])+'"'+(/^(lig|col)/.test(o[0])?' disabled':'')+'>'+o[1]+'</button>').join("")+'</div>'+
+    '<div class="bdg-contenu bdg-edit tdet-ed" contenteditable="true">'+(budgetVide(h)?"<p><br></p>":h)+'</div>';
+  const ed=bloc.querySelector(".tdet-ed");
+  let derniere=null;
+  const maj=()=>{ const td=bdgCellule(ed); if(td) derniere=td; if(derniere&&!ed.contains(derniere)) derniere=null;
+    bloc.querySelectorAll('[data-tdo^="lig"],[data-tdo^="col"]').forEach(b=>b.disabled=!derniere); };
+  ed.onkeyup=maj; ed.onmouseup=maj; ed.onfocus=maj;
+  ed.onpaste=e=>{
+    const d=e.clipboardData; if(!d) return;
+    e.preventDefault();
+    if(bdgCellule(ed)) document.execCommand("insertText",false,d.getData("text/plain"));
+    else{ const pr=nettoyerBudget(d.getData("text/html")||d.getData("text/plain")); if(pr) document.execCommand("insertHTML",false,pr); }
+  };
+  bloc.querySelectorAll("[data-tdo]").forEach(b=>{
+    b.onmousedown=e=>e.preventDefault();
+    b.onclick=()=>{
+      if(document.activeElement!==ed && !bdgCellule(ed)) ed.focus();
+      const td=bdgCellule(ed)||(derniere&&ed.contains(derniere)?derniere:null), act=b.dataset.tdo;
+      if(act==="tableau"){
+        const s=window.getSelection(), dedans=s&&s.rangeCount&&ed.contains(s.anchorNode);
+        if(td) td.closest("table").insertAdjacentHTML("afterend",tdetTableauHtml());
+        else if(dedans) document.execCommand("insertHTML",false,tdetTableauHtml());
+        else ed.insertAdjacentHTML("beforeend",tdetTableauHtml());
+      } else bdgOutil(ed,act,td);
+      maj();
+    };
+  });
+  bloc.querySelector("[data-tdet-ann]").onclick=()=>{ bloc.outerHTML=tdetBlocHtml(t); };
+  bloc.querySelector("[data-tdet-enr]").onclick=async e=>{
+    let v=nettoyerBudget(ed.innerHTML); if(budgetVide(v)) v="";
+    e.target.disabled=true;
+    try{
+      await grist.docApi.applyUserActions([["UpdateRecord",c.tblTache,t.id,{[c.colTacheDetail]:v}]]);
+      t[c.colTacheDetail]=v;
+      toast("Détail enregistré");
+      const b2=document.querySelector('.tdet[data-tdet="'+id+'"]'); if(b2) b2.outerHTML=tdetBlocHtml(t);
+    }catch(err){ e.target.disabled=false; toast("Échec de l'enregistrement : "+err.message,true); }
+  };
+  setTimeout(()=>ed.focus(),20);
+}
+document.addEventListener("click",e=>{
+  const b=e.target.closest&&e.target.closest("[data-tdet-mod]");
+  if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  tdetOuvrir(Number(b.dataset.tdetMod));
+},true);
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
    déjà installée dans le document — réglages, impression, coup d'œil, modules —
@@ -20693,6 +20812,7 @@ function feuilleAjout(o){
       '<label>'+esc(o.libelle)+'</label><textarea id="fa-lib"></textarea>'+
       (o.axe?'<label>Axe <span style="font-weight:normal;color:var(--gris)">(facultatif)</span></label>'+
         '<input type="text" id="fa-axe" list="dl-axes-ajout" autocomplete="off">'+listeAxesHtml("dl-axes-ajout",o.projet):'')+
+      (o.porteur&&o.porteur.col?'<label>Porteur</label>'+champOuvert(o.porteur.t,o.porteur.col,"fa-nv-porteur"):'')+
       '<label>Date de début</label>'+champDateFR('id="fa-debut"','',dateDuJourFR())+
       '<label>'+esc(o.libelleFin||"Échéance prévue")+'</label>'+
         champDateFR('id="fa-fin"','','')+
@@ -20715,7 +20835,8 @@ function feuilleAjout(o){
         toast("La date de fin est obligatoire (jj/mm/aaaa).",true); return; }
       if(f<d){ toast("La date de fin précède la date de début.",true); return; }
       const ax=v.querySelector("#fa-axe");
-      fermer({lib,debut:d,fin:f,axe:ax?ax.value.trim():""});
+      const po=o.porteur&&o.porteur.col&&v.querySelector("#fa-nv-porteur")?valeurOuverte("fa-nv-porteur",o.porteur.t,o.porteur.col):null;
+      fermer({lib,debut:d,fin:f,axe:ax?ax.value.trim():"",porteur:(po===0||po==="")?null:po});
     };
   });
 }
