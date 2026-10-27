@@ -16944,9 +16944,8 @@ function rendreListeApp(){
       [["","Aucun"],["porteur","Porteur"],["groupement","Groupement"]].map(([v,l])=>'<option value="'+v+'"'+(E.grp===v?" selected":"")+'>'+l+'</option>').join("")+'</select>'+
       chip("meo","Actions MEO")+chip("taches","Tâches")+'<span class="fil-esp"></span>'+
       '<button type="button" class="fil-lien" id="et-opts">⚙ Options d\'édition ▾</button>'+
-      '<button type="button" class="anx-pdf" id="et-pdf">🖨 État PDF</button>'+
+      '<button type="button" class="anx-pdf" id="et-pdf" title="État de tous les groupements (ou sponsors), limité aux filtres de la console">🖨 État PDF</button>'+
       (S.cfg.colMillesime?'<button type="button" class="anx-pdf" id="et-revue-p2a" title="Revue PDF du P2A, selon les filtres Groupement / Sponsor">📄 Revue P2A</button>':'')+
-      '<button type="button" class="anx-pdf" id="et-pdf-tous">PDF tous '+(sponsorFiltre?"sponsors":"groupements")+'</button>'+
       '<button type="button" class="anx-xl" id="et-xl" title="Extraction PEPS / AV des projets affichés">⬇ Excel</button>'+
       '<button type="button" class="anx-pdf" id="et-plus" title="Autres éditions du portefeuille">⋯</button></div>'+
     (tot ? '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([kk])=>rep[kk]).map(([kk,col])=>'<i style="flex:'+rep[kk]+';background:'+col+'"></i>').join("")+'</div>'+
@@ -17381,7 +17380,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 13 h 47</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 13 h 56</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18569,8 +18568,7 @@ function rendreEtatsApp(){
       chip("meo","Actions MEO")+chip("taches","Tâches")+
       '<span class="fil-esp"></span>'+
       '<button type="button" class="fil-lien" id="et-opts">⚙ Options d\'édition ▾</button>'+
-      '<button type="button" class="anx-pdf" id="et-pdf">🖨 État PDF</button>'+
-      '<button type="button" class="anx-pdf" id="et-pdf-tous">PDF tous '+(sponsorFiltre?"sponsors":"groupements")+'</button>'+
+      '<button type="button" class="anx-pdf" id="et-pdf" title="État de tous les groupements (ou sponsors), limité aux filtres de la console">🖨 État PDF</button>'+
       '<button type="button" class="anx-xl" id="et-xl">⬇ Excel</button>'+
       '<button type="button" class="anx-pdf" id="et-xl-tous">Excel tous</button></div>'+
     '<div class="kpi-app et-kpi"><div><b>'+ps.length+'</b><span>projets</span></div><div><b>'+nbA+'</b><span>actions MEO</span></div><div><b>'+nbT+'</b><span>tâches</span></div></div>'+
@@ -18589,8 +18587,7 @@ function rendreEtatsApp(){
   });
   $("#et-opts").onclick=e=>{ e.stopPropagation(); etPopupOptions(e.currentTarget); };
   const lancer=(fn,msg)=>{ toast(msg); fn().catch(er=>toast("Édition impossible : "+er.message,true)); };
-  $("#et-pdf").onclick=()=>lancer(()=>etImprimer(false),"Préparation de l'état…");
-  $("#et-pdf-tous").onclick=()=>lancer(()=>etImprimer(true),"Préparation de l'état complet…");
+  $("#et-pdf").onclick=()=>lancer(()=>etImprimer(true),"Préparation de l'état…");
   $("#et-xl").onclick=()=>lancer(()=>etExcel(false),"Préparation du fichier Excel…");
   $("#et-xl-tous").onclick=()=>lancer(()=>etExcel(true),"Préparation du fichier Excel complet…");
   /* MEC 2023 et PAPRIPACT rattachés, comme sous la Liste */
@@ -18649,9 +18646,8 @@ function brancherEditionsListe(){
   const lancer=(fn,msg)=>{ toast(msg); fn().catch(er=>toast("Édition impossible : "+er.message,true)); };
   const on=(id,f)=>{ const b=$("#"+id); if(b) b.onclick=f; };
   on("et-opts",e=>{ e.stopPropagation(); etPopupOptions(e.currentTarget); });
-  on("et-pdf",()=>lancer(()=>etImprimer(false),"Préparation de l'état…"));
+  on("et-pdf",()=>lancer(()=>etImprimer(true),"Préparation de l'état…"));
   on("et-revue-p2a",()=>revueImprimer("p2a"));
-  on("et-pdf-tous",()=>lancer(()=>etImprimer(true),"Préparation de l'état complet…"));
   /* Excel de la Liste = extraction PEPS / AV des projets affichés */
   on("et-xl",()=>lancer(()=>exporterPepsAv(),"Préparation de l'extraction PEPS / AV…"));
   on("et-plus",e=>{
@@ -27198,13 +27194,22 @@ function imprimerTous(){
   const zone = document.getElementById("contenu");
   const sauvegarde = zone.innerHTML;
   const TG = reglages.tGroupement;
-  const codes = ctxDe(TG).lignes.map(l => texte(TG, l, "Groupement")).filter(Boolean);
+  let codes = ctxDe(TG).lignes.map(l => texte(TG, l, "Groupement")).filter(Boolean);
+  /* console : « tous les groupements » limité aux groupements filtrés */
+  const fg = (window.FILTRE_TOUS && window.FILTRE_TOUS.g) || [];
+  if (fg.length){
+    const sel = document.getElementById("selGroupement");
+    const retenus = new Set(fg.map(v => { const o = sel && ([...sel.options].find(x => x.value === v)
+      || [...sel.options].find(x => x.text.indexOf(v) >= 0) || [...sel.options].find(x => x.value && v.indexOf(x.value) >= 0));
+      return o ? o.value : v; }).map(norm));
+    codes = codes.filter(c => retenus.has(norm(c)));
+  }
   const morceaux = codes.map(code => {
     const e = construireEtat(code, true);
     return e ? '<div class="section-impression">' + etatHtml(e, true) + "</div>" : "";
   });
   zone.innerHTML =
-    '<div class="entete-impression">' + LOGO_HTML + '<div class="txt-ent"><div class="t">État par groupement — tous les groupements</div>'
+    '<div class="entete-impression">' + LOGO_HTML + '<div class="txt-ent"><div class="t">État par groupement — ' + (fg.length ? echapper(codes.join(", ")) : "tous les groupements") + '</div>'
     + '<div class="d">Édité le ' + new Date().toLocaleDateString("fr-FR") + "</div></div></div>"
     + rappelHtml(document.getElementById("selDetail").value === "projets" ? "sponsor" : "groupement") + morceaux.join("");
   window.print();
@@ -28434,14 +28439,15 @@ function etatsSponsorsNonVides(){
 function imprimerTousSponsors(){
   const zone = document.getElementById("contenu");
   const sauvegarde = zone.innerHTML;
-  const etats = etatsSponsorsNonVides();
+  const fs = (window.FILTRE_TOUS && window.FILTRE_TOUS.sp) || [];
+  const etats = etatsSponsorsNonVides().filter(e => !fs.length || fs.some(v => norm(v) === norm(e.sponsor || e.nom || e.titre || "")));
   const morceaux = etats
     .filter(e => e.compte.projets || e.mec.length || e.papripact.length)
     .map(e => '<div class="section-impression">' + etatSponsorHtml(Object.assign(e, { avecRappel: true }), true) + "</div>");
   const clos = grouperClos(etats.reduce((acc, e) => acc.concat(e.closListe), []));
   if (clos.length) morceaux.push('<div class="section-impression">' + closHtml(clos) + "</div>");
   zone.innerHTML =
-    '<div class="entete-impression">' + LOGO_HTML + '<div class="txt-ent"><div class="t">État par sponsor CODIR — tous les sponsors</div>'
+    '<div class="entete-impression">' + LOGO_HTML + '<div class="txt-ent"><div class="t">État par sponsor CODIR — ' + (fs.length ? echapper(fs.join(", ")) : "tous les sponsors") + '</div>'
     + '<div class="d">Édité le ' + new Date().toLocaleDateString("fr-FR") + "</div></div></div>"
     + morceaux.join("");
   window.print();
@@ -28940,11 +28946,12 @@ window.preparerEtatConsole = o => {
 function documentEtatConsole(contenu, titre){
   const styles = Array.from(document.querySelectorAll("style")).map(x => x.outerHTML).join("");
   return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + echapper(titre || "État") + "</title>" + styles
-    + "<style>@page{size:A4 portrait;margin:14mm 12mm}body{background:#fff}</style></head><body><div id=\"contenu\" class=\"contenu\">"
+    + "<style>@page{size:A4 portrait;margin:14mm 12mm}body{background:#fff}#contenu td,#contenu td *{font-weight:normal!important}#contenu td .pastille{font-weight:bold!important}</style></head><body><div id=\"contenu\" class=\"contenu\">"
     + contenu + "</div></body></html>";
 }
 window.htmlEtatConsole = (o, tous) => {
   if (!window.preparerEtatConsole(o)) return null;
+  window.FILTRE_TOUS = tous ? { g:(o && o.g) || [], sp:(o && o.sp) || [] } : null;
   const zone = document.getElementById("contenu");
   let html = zone.innerHTML;
   if (tous){
@@ -29004,7 +29011,7 @@ window.htmlAnnexeConsole = (famille, groupements, sponsors) => {
   const date = new Date().toLocaleDateString("fr-FR");
   return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + nom + " — " + echapper(e.titre) + "</title>" + styles
     + "<style>@page{size:A4 portrait;margin:14mm 12mm}.annexes{break-before:auto!important;page-break-before:auto!important}"
-    + ".entete-impression{display:flex!important}body{background:#fff}</style></head><body><div id=\"contenu\" class=\"contenu\">"
+    + ".entete-impression{display:flex!important}body{background:#fff}#contenu td,#contenu td *{font-weight:normal!important}#contenu td .pastille{font-weight:bold!important}</style></head><body><div id=\"contenu\" class=\"contenu\">"
     + '<div class="entete-impression">' + LOGO_HTML + '<div class="txt-ent"><div class="t">' + nom + " — " + echapper(e.titre)
     + '</div><div class="d">Édité le ' + date + " · " + lignes.length + " ligne" + (lignes.length > 1 ? "s" : "") + "</div></div></div>"
     + (corps || '<div class="vide-etat">Aucune ligne ' + nom + " pour cette sélection.</div>") + "</div></body></html>";
