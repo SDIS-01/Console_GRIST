@@ -2178,6 +2178,14 @@ body.mob .bdg-b-pied .btn,body.mob .bdg-b-pied .btn-2{flex:1;padding:10px;}
 @media (max-width:700px){.mt-grille:not(.mp-annexes){column-count:1;}}
 .kpi-sous{display:block;margin-top:2px;font-size:11px;color:#4E7D2A;font-weight:600;}
 .kpi-sur{font-style:normal;font-weight:600;color:var(--gris);font-size:.7em;}
+/* Liste : colonne Instances */
+.app-table td.app-ins{white-space:normal;min-width:120px;max-width:210px;}
+.ins-chip{display:inline-block;margin:1px 4px 1px 0;padding:1px 7px;border-radius:9px;background:#eef2fb;border:1px solid #c5cfe8;color:#1c2f6b;font-size:11px;white-space:nowrap;}
+.ins-chip b{font-weight:700;}
+.ins-chip.passee{background:#f3f4f7;border-color:#dde1ea;color:#7a8299;}
+.ins-chip.aprog{background:#fff6e5;border-color:#f0d49a;color:#8a5a00;}
+.ins-plus{font-size:11px;color:var(--gris);}
+.app-table .app-av span{white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -16824,6 +16832,24 @@ function barreAppHtml(p){
   const b=bandesImpr(a,interrompu(p));
   return '<div class="app-av"><div class="app-av-b"><i style="width:'+Math.max(0,Math.min(100,a||0))+'%;background:'+b.fill+'"></i></div><span>'+(a==null?"–":a+" %")+'</span></div>';
 }
+/* instances d'un projet dans la Liste : les prochaines (au plus 2), sinon la dernière passée */
+function prochaineInstance(p){
+  if(typeof instancesDe!=="function") return null;
+  const auj=aujourdHuiUTC();
+  return instancesDe(p).find(x=>x.date && x.date>=auj)||null;
+}
+function instancesListeHtml(p){
+  if(typeof instancesDe!=="function" || !S.cfg.tblInstance) return "";
+  const xs=instancesDe(p), auj=aujourdHuiUTC();
+  if(!xs.length) return '<span class="app-mut">—</span>';
+  const nom=x=>{ const t=String(x.type||x.libelleSaisi||x.libelle||"Instance").replace(/\s*[—-]?\s*\d{2}\/\d{2}\/\d{4}\s*/,"").trim(); return t.length>22?t.slice(0,21)+"…":t||"Instance"; };
+  const chip=(x,passee)=>'<span class="ins-chip'+(passee?" passee":x.aProgrammer?" aprog":"")+'" title="'+esc((x.libelle||"")+(x.date?" — "+dateVersFR(x.date):""))+'">'+
+    (x.date?'<b>'+esc(dateVersFR(x.date).slice(0,5))+(new Date(x.date*1000).getUTCFullYear()!==new Date().getFullYear()?"/"+String(new Date(x.date*1000).getUTCFullYear()).slice(2):"")+'</b> ':'')+esc(nom(x))+'</span>';
+  const fut=xs.filter(x=>(x.date&&x.date>=auj)||x.aProgrammer);
+  if(fut.length) return fut.slice(0,2).map(x=>chip(x,false)).join("")+(fut.length>2?'<span class="ins-plus">+'+(fut.length-2)+'</span>':'');
+  const der=xs.filter(x=>x.date).pop();
+  return der?chip(der,true):'<span class="app-mut">—</span>';
+}
 function rendreListeApp(){
   const c=S.cfg, ps=projetsFiltres(), E=APP.etat;
   /* chiffres-clés, répartition des projets, actions et tâches */
@@ -16839,7 +16865,8 @@ function rendreListeApp(){
   const cle={
     nom:p=>plierTexte(lire(c.tblMain,p,c.colLibelle)), grp:p=>plierTexte(lire(c.tblMain,p,c.colGroupement)),
     por:p=>plierTexte(lire(c.tblMain,p,c.colPorteur)), pri:p=>plierTexte(lire(c.tblMain,p,c.colPriorite)||"zz"),
-    av:p=>{ const a=pct(p[c.colAvancement]); return a==null?-1:a; }, ech:p=>echeanceProjet(p)||9e15
+    av:p=>{ const a=pct(p[c.colAvancement]); return a==null?-1:a; }, ech:p=>echeanceProjet(p)||9e15,
+    ins:p=>{ const x=prochaineInstance(p); return x&&x.date?x.date:9e15; }
   };
   const k=APP.tri.k, sens=APP.tri.sens;
   const liste=[...ps].sort((a,b)=>{ const x=cle[k](a), y=cle[k](b); return (x<y?-1:x>y?1:0)*sens; });
@@ -16852,6 +16879,7 @@ function rendreListeApp(){
     return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+
       '<span class="et-chev" data-chev="'+p.id+'">'+(n?(ouvert?"▾":"▸"):"")+'</span>'+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+(typeof piPastille==="function"?piPastille(p):'')+
       (estArchive(p)?' <span class="app-mut">(archivé)</span>':'')+(sous?'<div class="app-sous">'+esc(sous)+'</div>':'')+'</td>'+
+      '<td class="app-ins">'+instancesListeHtml(p)+'</td>'+
       '<td>'+esc(lire(c.tblMain,p,c.colGroupement))+'</td><td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>'+
       '<td>'+pastillePriorite(lire(c.tblMain,p,c.colPriorite))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
       '<td class="'+(e&&e<auj&&etatDe(p)!=="termine"?"app-ret":"")+'">'+(e?dateVersFR(e):"—")+'</td>'+
@@ -16861,13 +16889,13 @@ function rendreListeApp(){
     const av=pct(a[c.colAvancement]), inter=interrompu(a), e=Number(a[c.colEch])||null;
     const d=decouperLibelleAction(lire(c.tblMain,a,c.colActKey)||""), d2=d.num?d:decouperLibelleAction(lire(c.tblMain,a,c.colLibelle));
     return '<tr class="et-action" data-p="'+p.id+'" data-a="'+a.id+'"><td class="et-lib"><span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(d2.num?d2.texte:lire(c.tblMain,a,c.colLibelle))+'</td>'+
-      '<td></td><td>'+esc(lire(c.tblMain,a,c.colPorteur))+'</td><td></td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td>'+
+      '<td></td><td></td><td>'+esc(lire(c.tblMain,a,c.colPorteur))+'</td><td></td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td>'+
       '<td>'+etBarre(av)+'</td><td>'+etEch(e,av>=100||inter)+'</td><td></td></tr>';
   };
   const ligneTache=(t,p)=>{
     const av=pct(t[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,t,c.colTacheStatut), e=Number(t[c.colTacheFin])||null;
     return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+'</td>'+
-      '<td></td><td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td><td></td>'+
+      '<td></td><td></td><td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td><td></td>'+
       '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",av||0,inter)+'</td><td>'+(av==null?"":etBarre(av))+'</td><td>'+etEch(e,av>=100||inter)+'</td><td></td></tr>';
   };
   const blocProjet=p=>{
@@ -16887,7 +16915,7 @@ function rendreListeApp(){
     const groupes=new Map(); liste.forEach(p=>{ const g=cg(p); if(!groupes.has(g)) groupes.set(g,[]); groupes.get(g).push(p); });
     [...groupes.keys()].sort((a,b)=>a.localeCompare(b,"fr")).forEach(g=>{
       const l=groupes.get(g), na=l.reduce((s2,p)=>s2+actionsDe(p).length,0);
-      corps+='<tr class="et-grp"><td colspan="8">'+esc(g)+'<small>'+l.length+' projet'+(l.length>1?"s":"")+(na?' · '+na+' action'+(na>1?"s":""):"")+'</small></td></tr>';
+      corps+='<tr class="et-grp"><td colspan="9">'+esc(g)+'<small>'+l.length+' projet'+(l.length>1?"s":"")+(na?' · '+na+' action'+(na>1?"s":""):"")+'</small></td></tr>';
       l.forEach(p=>{ corps+=blocProjet(p); });
     });
   } else liste.forEach(p=>{ corps+=blocProjet(p); });
@@ -16906,7 +16934,7 @@ function rendreListeApp(){
     (tot ? '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([kk])=>rep[kk]).map(([kk,col])=>'<i style="flex:'+rep[kk]+';background:'+col+'"></i>').join("")+'</div>'+
       '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([kk])=>rep[kk]).map(([kk,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[kk]).join("")+
       ' <span class="app-mut">(projets, actions et tâches)</span></div>' : '')+
-    (liste.length ? '<table class="app-table"><thead><tr>'+th("nom","Projet")+th("grp","Groupement")+th("por","Porteur")+
+    (liste.length ? '<table class="app-table"><thead><tr>'+th("nom","Projet")+th("ins","Instances")+th("grp","Groupement")+th("por","Porteur")+
       th("pri","Priorité")+'<th>Statut</th>'+th("av","Avancement")+th("ech","Échéance")+'<th></th></tr></thead><tbody>'+corps+'</tbody></table>'
       : '<div class="app-vide">Aucun projet ne correspond aux filtres.</div>');
   const z=$("#zone-liste");
@@ -17330,7 +17358,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 13 h 31</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 13 h 36</div>';
   return h;
 }
 async function lancerEdition(id){
