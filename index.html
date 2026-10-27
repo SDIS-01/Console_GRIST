@@ -2193,6 +2193,9 @@ button.ins-plus{border:0;background:none;padding:0 3px;font:inherit;font-size:11
 .p2a-table tr.p2a-tete td{background:#fafbfd;color:#5b6684;font-size:12px;padding:6px 10px 3px;border-bottom:0;}
 .p2a-table tr.p2a-act td.app-nom{padding-left:28px;}
 .p2a-table tr[data-p]{cursor:pointer;}
+.p2a-table tr.p2a-tete td{font-weight:700;color:#1c2f6b;font-size:12.5px;}
+.p2a-table tr.p2a-act td.app-nom,.p2a-table tr.p2a-act td.app-nom *{font-weight:400;}
+.p2a-table tr.p2a-act td.app-nom .et-t{font-weight:600;}
 </style>
 </head>
 <body>
@@ -16826,7 +16829,7 @@ function rendreKpi(ps, detail){
   const sur=n=>' <i class="kpi-sur">/ '+n+'</i>';
   const sous=t=>'<small class="kpi-sous">'+t+'</small>';
   $("#kpi-app").innerHTML=
-    '<div><b>'+ps.length+'</b><span>projets / actions en cours</span></div>'+
+    '<div><b>'+ps.length+'</b><span>projets + actions en cours</span></div>'+
     '<div><b>'+nPeps+(c.colFin?sur(nPeps+nPepsT):'')+'</b><span>projets inscrits au PEPS</span>'+
       (c.colFin?sous(nPepsT+' terminé'+(nPepsT>1?'s':'')+' en '+an):'')+'</div>'+
     '<div><b>'+nAv+(c.colFin?sur(nAv+nAvT):'')+'</b><span>actions (hors PEPS)</span>'+
@@ -17393,7 +17396,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 14 h 30</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 14 h 53</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -20780,7 +20783,7 @@ document.addEventListener("click",e=>{
    fois ; si des actions MEO sont elles-mêmes inscrites, ce sont elles qui
    comptent (affichées sous leur projet), et plus le projet.
    Millésimes : filtre Millésime P2A de la console, à défaut l'année en cours.
-   Les autres filtres de la console s'appliquent à l'écran.
+   Les autres filtres de la console ne s'appliquent pas (même périmètre que la revue).
    ======================================================================= */
 APP.p2a=APP.p2a||{grp:"groupement"};
 function p2aMillesimes(){
@@ -20805,7 +20808,9 @@ function rendreP2A(){
   const z=$("#zone-p2a"); if(!z) return;
   const c=S.cfg;
   if(!c.colMillesime){ z.innerHTML='<div class="app-vide">Aucune colonne « Millésime P2A » n\'est paramétrée dans les réglages.</div>'; return; }
-  const mil=p2aMillesimes(), ps=projetsFiltres(), L=p2aLignes(ps,mil);
+  /* comme la revue : aucun filtre de la console (ni état, ni archives, ni groupement…),
+     seul le filtre Millésime P2A choisit les millésimes */
+  const mil=p2aMillesimes(), ps=S.data.main.filter(estProjet), L=p2aLignes(ps,mil);
   const etat=x=>etatDe(x);
   const n={termine:0,encours:0,afaire:0,interrompu:0};
   L.forEach(l=>{ n[etat(l.x)]=(n[etat(l.x)]||0)+1; });
@@ -20853,7 +20858,7 @@ function rendreP2A(){
       kpi(n.afaire,"à engager","#C0504D")+(n.interrompu?kpi(n.interrompu,"interrompues","#55554F"):"")+kpi(moy==null?"—":moy+" %","avancement moyen")+'</div>'+
     (L.length?'<div class="et-defil"><table class="app-table p2a-table"><thead><tr><th>Projet / action</th><th>Nature</th><th>Priorité</th><th>Groupement</th>'+
       '<th>Porteur</th><th>Échéance</th><th>Avancement</th><th>Statut</th></tr></thead><tbody>'+corps+'</tbody></table></div>'
-      :'<div class="app-vide">Aucune inscription au '+esc(mil.lib)+' pour ces filtres.</div>');
+      :'<div class="app-vide">Aucune inscription au '+esc(mil.lib)+'.</div>');
   $("#p2a-grp").onchange=e=>{ APP.p2a.grp=e.target.value; rendreP2A(); };
   $("#p2a-revue").onclick=()=>revueImprimer("p2a");
   $("#p2a-xl").onclick=()=>{ toast("Préparation du fichier Excel…"); p2aExcel(L,mil).catch(er=>toast("Excel impossible : "+er.message,true)); };
@@ -25861,6 +25866,13 @@ html.integre #contenu tr[data-id]:hover td{background:#f2f5fc;}
   @media print{ .tab td, .tab td *{font-weight:normal!important;} .tab td .pastille, .tab td .etat-txt, .tab td .prio-e{font-weight:bold!important;} }
   /* colonnes resserrées : le libellé garde de la place malgré Prio. et Instance */
   .tab .w-nat{width:38px;} .tab .w-prio{width:44px;} .tab .w-p2a{width:52px;} .tab .w-origine{width:68px;} .tab .w-ins{width:84px;} .tab .w-service{width:88px;} .tab .w-echeance{width:64px;} .tab .w-avct{width:62px;}
+  /* annexes MEC / PAPRIPACT : le libellé prend la place, les autres colonnes se resserrent */
+  .annexes .tab .w-cat{width:80px;} .annexes .tab .w-porteur{width:74px;} .annexes .tab .w-service{width:54px;}
+  .annexes .tab .w-grp{width:52px;} .annexes .tab .w-avct{width:50px;} .annexes .tab .w-echeance{width:56px;} .annexes .tab .w-com{width:130px;}
+  .annexes .tab.pap .w-pap-or{width:52px;} .annexes .tab.pap .w-pap-fam{width:56px;} .annexes .tab.pap .w-pap-st{width:52px;}
+  .annexes .tab td, .annexes .tab th{padding-left:3px;padding-right:3px;}
+  .annexes .tab th{white-space:normal!important;font-size:8.5px!important;line-height:1.15;letter-spacing:0!important;overflow-wrap:anywhere;}
+  .annexes .tab td.lib{overflow-wrap:normal;word-break:normal;hyphens:manual;}
 </style>
 </head>
 <body>
@@ -30592,6 +30604,12 @@ function bilanMEC(fraction){
   return { parValeur, familles, resteListe };
 }
 
+/* Interrompu : date de suspension ou d'abandon, ou statut « Interrompu » (comme la console) */
+function interrompuPEPS(l){
+  if([cfg.colSuspension, cfg.colAbandon].some(k => k && versDate(l[k]))) return true;
+  const k = Object.keys(l).find(c => normalise(c) === "statut");
+  return !!k && /interromp|abandon|suspen/.test(normalise(txt(l[k])));
+}
 function bilanP2A(fraction){
   const choisis = cfg.p2aChoisis || [];
   if(!cfg.colP2A || !choisis.length) return { lignes: [], parMillesime: {}, projets: new Map() };
@@ -30633,7 +30651,7 @@ function bilanP2A(fraction){
       sponsor: sponsorProjet(l),
       commentaire: txt(l[cfg.colCommentaire]),
       avancement: versPourcent(l[cfg.colAvancement], fraction),
-      interrompu: [cfg.colSuspension, cfg.colAbandon].some(c => c && versDate(l[c])),
+      interrompu: interrompuPEPS(l),
       idProjet: idParent,
       idAction: cfg.colIdAction ? txt(l[cfg.colIdAction]) : "",
       libelleProjet: projet ? txt(projet[cfg.colLibelle]) : "",
@@ -32214,7 +32232,7 @@ function lignesExergue(){
       debut: cfg.colDebut ? versDate(l[cfg.colDebut]) : null,
       echeance: (cfg.colFin ? versDate(l[cfg.colFin]) : null) ||
                 (cfg.colEchPrev ? versDate(l[cfg.colEchPrev]) : null),
-      interrompu: [cfg.colSuspension, cfg.colAbandon].some(k => k && versDate(l[k]))
+      interrompu: interrompuPEPS(l)
     };
   });
 }
@@ -33108,7 +33126,7 @@ function jeuProjets(c, natures){
   natures.forEach(n => {
     const bilan = n === "PEPS" ? c.peps : c.av;
     bilan.stockLignes.forEach(l => {
-      const inter = [cfg.colSuspension, cfg.colAbandon].some(k => k && versDate(l[k]));
+      const inter = interrompuPEPS(l);
       const av = versPourcent(l[cfg.colAvancement], frac);
       const prio = prioriteEffective(l) || "Sans priorité";
       const nat = txt(l[cfg.colNature]).toUpperCase() || n;
