@@ -2186,6 +2186,8 @@ body.mob .bdg-b-pied .btn,body.mob .bdg-b-pied .btn-2{flex:1;padding:10px;}
 .ins-chip.aprog{background:#fff6e5;border-color:#f0d49a;color:#8a5a00;}
 .ins-plus{font-size:11px;color:var(--gris);}
 .app-table .app-av span{white-space:nowrap;}
+button.ins-plus{border:0;background:none;padding:0 3px;font:inherit;font-size:11px;color:var(--bleu);cursor:pointer;text-decoration:underline;}
+.ins-chip.aprog{white-space:normal;}
 </style>
 </head>
 <body>
@@ -16806,16 +16808,18 @@ function rendreKpi(ps, detail){
   };
   const nPepsT=tous.filter(p=>nat(p)==="PEPS" && termineAn(p)).length;
   const nAvT=tous.filter(p=>nat(p)!=="PEPS" && termineAn(p)).length;
-  const totP2A=tous.filter(auP2A).length;
+  const totP2A=tous.filter(auP2A).length, nP2AT=tous.filter(p=>auP2A(p) && termineAn(p)).length;
+  const nPeps=ps.filter(p=>nat(p)==="PEPS").length, nAv=ps.filter(p=>nat(p)!=="PEPS").length;
+  const sur=n=>' <i class="kpi-sur">/ '+n+'</i>';
   const sous=t=>'<small class="kpi-sous">'+t+'</small>';
   $("#kpi-app").innerHTML=
     '<div><b>'+ps.length+'</b><span>projets / actions en cours</span></div>'+
-    '<div><b>'+ps.filter(p=>nat(p)==="PEPS").length+'</b><span>projets inscrits au PEPS</span>'+
+    '<div><b>'+nPeps+(c.colFin?sur(nPeps+nPepsT):'')+'</b><span>projets inscrits au PEPS</span>'+
       (c.colFin?sous(nPepsT+' terminé'+(nPepsT>1?'s':'')+' en '+an):'')+'</div>'+
-    '<div><b>'+ps.filter(p=>nat(p)!=="PEPS").length+'</b><span>actions (hors PEPS)</span>'+
+    '<div><b>'+nAv+(c.colFin?sur(nAv+nAvT):'')+'</b><span>actions (hors PEPS)</span>'+
       (c.colFin?sous(nAvT+' terminée'+(nAvT>1?'s':'')+' en '+an):'')+'</div>'+
-    (c.colMillesime ? '<div><b>'+p2a+' <i class="kpi-sur">/ '+totP2A+'</i></b><span>actions au P2A '+an+'</span>'+
-      sous(totP2A+' inscrite'+(totP2A>1?'s':'')+' au millésime '+an)+'</div>' : '')+
+    (c.colMillesime ? '<div><b>'+p2a+sur(totP2A)+'</b><span>actions au P2A '+an+'</span>'+
+      (c.colFin?sous(nP2AT+' terminée'+(nP2AT>1?'s':'')+' en '+an):'')+'</div>' : '')+
     (detail ? '<div><b>'+detail.actions+'</b><span>actions MEO</span></div><div><b>'+detail.taches+'</b><span>tâches</span></div>' : '');
 }
 
@@ -16840,15 +16844,28 @@ function prochaineInstance(p){
 }
 function instancesListeHtml(p){
   if(typeof instancesDe!=="function" || !S.cfg.tblInstance) return "";
-  const xs=instancesDe(p), auj=aujourdHuiUTC();
+  const xs=instancesDe(p), auj=aujourdHuiUTC(), an=new Date().getFullYear();
   if(!xs.length) return '<span class="app-mut">—</span>';
-  const nom=x=>{ const t=String(x.type||x.libelleSaisi||x.libelle||"Instance").replace(/\s*[—-]?\s*\d{2}\/\d{2}\/\d{4}\s*/,"").trim(); return t.length>22?t.slice(0,21)+"…":t||"Instance"; };
-  const chip=(x,passee)=>'<span class="ins-chip'+(passee?" passee":x.aProgrammer?" aprog":"")+'" title="'+esc((x.libelle||"")+(x.date?" — "+dateVersFR(x.date):""))+'">'+
-    (x.date?'<b>'+esc(dateVersFR(x.date).slice(0,5))+(new Date(x.date*1000).getUTCFullYear()!==new Date().getFullYear()?"/"+String(new Date(x.date*1000).getUTCFullYear()).slice(2):"")+'</b> ':'')+esc(nom(x))+'</span>';
+  APP.insOuverts=APP.insOuverts||new Set();
+  const ouvert=APP.insOuverts.has(p.id);
+  const nom=x=>{
+    if(x.aProgrammer) return (x.type?x.type+" · ":"")+(x.periode&&x.periode.libelle||"");
+    const t=String(x.type||x.libelleSaisi||x.libelle||"Instance").replace(/\s*[—-]?\s*\d{2}\/\d{2}\/\d{4}\s*/,"").trim();
+    return ouvert||t.length<=22?t||"Instance":t.slice(0,21)+"…";
+  };
+  const chip=x=>{
+    const passee=!x.aProgrammer && x.date && x.date<auj;
+    const a=x.date?new Date(x.date*1000).getUTCFullYear():null;
+    return '<span class="ins-chip'+(passee?" passee":x.aProgrammer?" aprog":"")+'" title="'+esc((x.libelle||"").replace(/^À programmer — /,"")+(x.date?" — "+dateVersFR(x.date):""))+'">'+
+      (x.date?'<b>'+esc(dateVersFR(x.date).slice(0,5))+(a!==an?"/"+String(a).slice(2):"")+'</b> ':'')+esc(nom(x))+'</span>';
+  };
+  if(ouvert)
+    return xs.map(chip).join("")+'<button type="button" class="ins-plus" data-insplus="'+p.id+'" title="Réduire">▴ réduire</button>';
   const fut=xs.filter(x=>(x.date&&x.date>=auj)||x.aProgrammer);
-  if(fut.length) return fut.slice(0,2).map(x=>chip(x,false)).join("")+(fut.length>2?'<span class="ins-plus">+'+(fut.length-2)+'</span>':'');
-  const der=xs.filter(x=>x.date).pop();
-  return der?chip(der,true):'<span class="app-mut">—</span>';
+  const vus=fut.length?fut.slice(0,2):[xs.filter(x=>x.date).pop()].filter(Boolean);
+  const reste=xs.length-vus.length;
+  return (vus.length?vus.map(chip).join(""):'<span class="app-mut">—</span>')+
+    (reste>0?'<button type="button" class="ins-plus" data-insplus="'+p.id+'" title="Voir toutes les instances">+'+reste+'</button>':'');
 }
 function rendreListeApp(){
   const c=S.cfg, ps=projetsFiltres(), E=APP.etat;
@@ -16928,6 +16945,7 @@ function rendreListeApp(){
       chip("meo","Actions MEO")+chip("taches","Tâches")+'<span class="fil-esp"></span>'+
       '<button type="button" class="fil-lien" id="et-opts">⚙ Options d\'édition ▾</button>'+
       '<button type="button" class="anx-pdf" id="et-pdf">🖨 État PDF</button>'+
+      (S.cfg.colMillesime?'<button type="button" class="anx-pdf" id="et-revue-p2a" title="Revue PDF du P2A, selon les filtres Groupement / Sponsor">📄 Revue P2A</button>':'')+
       '<button type="button" class="anx-pdf" id="et-pdf-tous">PDF tous '+(sponsorFiltre?"sponsors":"groupements")+'</button>'+
       '<button type="button" class="anx-xl" id="et-xl" title="Extraction PEPS / AV des projets affichés">⬇ Excel</button>'+
       '<button type="button" class="anx-pdf" id="et-plus" title="Autres éditions du portefeuille">⋯</button></div>'+
@@ -16951,6 +16969,10 @@ function rendreListeApp(){
     ouvrirFiche(p, tr.dataset.a?"actions":(tr.classList.contains("et-tache")?"taches":null));
   });
   brancherEditionsListe();
+  document.querySelectorAll("#zone-liste [data-insplus]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation(); APP.insOuverts=APP.insOuverts||new Set();
+    const id=Number(b.dataset.insplus); if(APP.insOuverts.has(id)) APP.insOuverts.delete(id); else APP.insOuverts.add(id);
+    rendreListeApp(); });
   /* filtre Groupement ou Sponsor : les lignes MEC 2023 et PAPRIPACT rattachées, sous les projets */
   annexesSousListe();
 }
@@ -17171,7 +17193,8 @@ const MODULES={
 let tOptionsModules=null;
 function sauverOptionsModules(){
   clearTimeout(tOptionsModules);
-  tOptionsModules=setTimeout(()=>{ grist.widgetApi.setOptions(paquetOptions()).catch(()=>{}); },800);
+  if(S.optionsBloquees) return;
+  tOptionsModules=setTimeout(()=>{ grist.widgetApi.setOptions(paquetOptions()).catch(()=>{ S.optionsBloquees=true; }); },800);
 }
 function optionsModule(nom){
   S.modulesOptions=S.modulesOptions||{};
@@ -17358,7 +17381,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 13 h 36</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 13 h 47</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18121,7 +18144,7 @@ async function rendreAnnexes(){
     z.innerHTML='<div class="anx-outils"><div class="anx-onglets">'+["mec","pap"].map(k=>
         '<button type="button" class="anx-og'+(f===k?" actif":"")+'" data-anx="'+k+'">'+ANX_FAMILLES[k].titre+'<b>'+(L[k]?L[k].idx.length:"—")+'</b></button>').join("")+'</div>'+
       '<span class="anx-lect">✏️ Cliquez sur un avancement ou un commentaire pour le modifier · '+info+'</span><span class="fil-esp"></span>'+
-      (cur?'<button type="button" class="anx-pdf" id="anx-pdf">🖨 État PDF</button><button type="button" class="anx-xl" id="anx-xl">⬇ Exporter en .xlsx</button>':'')+'</div>'+
+      (cur?'<button type="button" class="anx-pdf" id="anx-pdf" title="Revue PDF (synthèse, répartition et détail), selon les filtres de la console">📄 Revue PDF</button><button type="button" class="anx-xl" id="anx-xl">⬇ Exporter en .xlsx</button>':'')+'</div>'+
       (cur ? '<div class="anx-actifs">'+(pastilles.length?'Filtres du tableau : '+pastilles.join("")+'<button type="button" class="fil-lien" id="anx-fz">Tout effacer</button>':'<span>Filtrez ou triez avec ▾ dans l\'en-tête des colonnes.</span>')+
           (!F.sans100?'<button type="button" class="fil-lien" id="anx-r100">Masquer les lignes à 100 %</button>':'')+
           '<span class="fil-esp"></span><span>'+cur.idx.length+' ligne'+(cur.idx.length>1?"s":"")+' sur '+cur.base.length+(pastilles.length?" · l'export Excel reprend ces filtres":"")+'</span></div>'+anxTableHtml(cur.T,cur.sec,cur.idx,f)
@@ -18136,7 +18159,7 @@ async function rendreAnnexes(){
     z.querySelectorAll("[data-f100]").forEach(b=>b.onclick=()=>{ F.sans100=false; redessiner(); });
     const fz=$("#anx-fz"); if(fz) fz.onclick=()=>{ F.val={}; F.tri=null; F.sans100=false; redessiner(); };
     const bx=$("#anx-xl"); if(bx) bx.onclick=()=>anxExporter(cur.T,cur.sec,cur.idx,ANX_FAMILLES[f].titre).catch(e=>toast("Export impossible : "+e.message,true));
-    const bp=$("#anx-pdf"); if(bp) bp.onclick=()=>{ toast("Préparation de l'état "+ANX_FAMILLES[f].titre+"…"); anxImprimer(f).catch(e=>toast("État PDF impossible : "+e.message,true)); };
+    const bp=$("#anx-pdf"); if(bp) bp.onclick=()=>revueImprimer(f);
   }catch(e){
     if(jeton===ANX.jeton) z.innerHTML='<div class="app-vide">MEC 2023 / PAPRIPACT indisponibles : '+esc(e.message)+'.</div>';
   }
@@ -18162,7 +18185,7 @@ async function annexesSousListe(cont){
       const idx=anxOrdre(T,sec, fam==="mec"?ids.mec:ids.pap).filter(i=>{ if(!faL) return true; const n=anxPourcent(T,faL,i); return n===null||n<100; });
       if(!idx.length) return;
       h+='<div class="anx-bloc"><div class="anx-bloc-tete"><b>'+ANX_FAMILLES[fam].titre+'</b><span>'+idx.length+' ligne'+(idx.length>1?"s":"")+' rattachée'+(idx.length>1?"s":"")+' · hors avancement 100 % · consultation seule</span>'+
-        '<span class="fil-esp"></span><button type="button" class="anx-pdf petit" data-pdf="'+fam+'">🖨 État PDF</button><button type="button" class="anx-xl petit" data-xl="'+fam+'">⬇ Excel</button></div>'+anxTableHtml(T,sec,idx)+'</div>';
+        '<span class="fil-esp"></span><button type="button" class="anx-pdf petit" data-pdf="'+fam+'">📄 Revue PDF</button><button type="button" class="anx-xl petit" data-xl="'+fam+'">⬇ Excel</button></div>'+anxTableHtml(T,sec,idx)+'</div>';
       d._anx=d._anx||{}; d._anx[fam]={T,sec,idx};
     });
     d.innerHTML=h;
@@ -18172,7 +18195,7 @@ async function annexesSousListe(cont){
       bl.querySelectorAll(".anx-table tbody tr").forEach(tr=>{ tr.classList.add("anx-cliquable"); tr.title="Ouvrir dans l'onglet MEC · PAPRIPACT";
         tr.onclick=()=>{ ANX.onglet=fam; APP.retour=null; allerVue("portefeuille","annexes"); }; });
     });
-    d.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=()=>{ toast("Préparation de l'état…"); anxImprimer(b.dataset.pdf).catch(e=>toast("État PDF impossible : "+e.message,true)); });
+    d.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=()=>revueImprimer(b.dataset.pdf));
     d.querySelectorAll("[data-xl]").forEach(b=>b.onclick=()=>{ const o=d._anx[b.dataset.xl];
       anxExporter(o.T,o.sec,o.idx,ANX_FAMILLES[b.dataset.xl].titre).catch(e=>toast("Export impossible : "+e.message,true)); });
   }catch(e){
@@ -18403,6 +18426,44 @@ function anxBrancherEdition(racine,T,fs,apres){
 }
 
 /* =======================================================================
+   Revues PDF ouvertes à tous : MEC 2023, PAPRIPACT et P2A, produites par le
+   module Revues (réglages de l'administrateur), selon les filtres Groupement
+   et Sponsor de la console. Le module est chargé en arrière-plan, sans
+   mot de passe ; rien n'est écrit dans le document.
+   ======================================================================= */
+async function revuePrete(){
+  await chargerModule("revue");
+  const t0=Date.now();
+  while(Date.now()-t0<40000){
+    const w=fenetreModule("revue");
+    if(w && w.revuePrete && w.revuePrete() && w.revueConsole) return w;
+    await new Promise(r=>setTimeout(r,300));
+  }
+  throw new Error("le module Revues n'a pas pu être chargé");
+}
+let REVUE_EN_COURS=false;
+async function revueImprimer(id){
+  if(REVUE_EN_COURS) return;
+  REVUE_EN_COURS=true;
+  const titre={mec:"MEC 2023",pap:"PAPRIPACT",p2a:"P2A"}[id]||id;
+  toast("Préparation de la revue "+titre+"…");
+  try{
+    const f=anxFiltres();
+    const o={groupements:f.g, sponsors:f.sp,
+      mention:[f.g.length?"Groupement : "+f.g.join(", "):"", f.sp.length?"Sponsor : "+f.sp.join(", "):""].filter(Boolean).join(" - ")};
+    if(id==="mec"||id==="pap"){
+      const ids=(f.g.length||f.sp.length)?await anxIds().catch(()=>null):null;
+      if(ids) o.ids=id==="mec"?ids.mec:ids.pap;
+      if(id==="pap") o.table=anxNomTable("pap");
+    }
+    const w=await revuePrete();
+    const n=await w.revueConsole(id,o);
+    toast("Revue "+titre+" créée ("+n+" page"+(n>1?"s":"")+")");
+  }catch(e){ toast("Revue impossible : "+e.message,true); }
+  finally{ REVUE_EN_COURS=false; }
+}
+
+/* =======================================================================
    Onglet États simplifié : présentation de la Liste (projets, actions MEO,
    tâches), filtres de la barre du haut, MEC 2023 / PAPRIPACT en bas.
    Les éditions (PDF, PDF tous, Excel) restent produites par le moteur de
@@ -18589,6 +18650,7 @@ function brancherEditionsListe(){
   const on=(id,f)=>{ const b=$("#"+id); if(b) b.onclick=f; };
   on("et-opts",e=>{ e.stopPropagation(); etPopupOptions(e.currentTarget); });
   on("et-pdf",()=>lancer(()=>etImprimer(false),"Préparation de l'état…"));
+  on("et-revue-p2a",()=>revueImprimer("p2a"));
   on("et-pdf-tous",()=>lancer(()=>etImprimer(true),"Préparation de l'état complet…"));
   /* Excel de la Liste = extraction PEPS / AV des projets affichés */
   on("et-xl",()=>lancer(()=>exporterPepsAv(),"Préparation de l'extraction PEPS / AV…"));
@@ -33221,6 +33283,154 @@ async function demarre(){
     $("etat").textContent = "Accès refusé";
   }
 }
+
+/* ================================================================== */
+/* Console : revues PDF ouvertes à tous (MEC 2023, PAPRIPACT, P2A),    */
+/* avec les réglages de l'administrateur et les filtres de la console. */
+/* Rien n'est écrit dans le document.                                  */
+/* ================================================================== */
+window.revuePrete = () => !!calcul;
+function plie(v){ return String(v == null ? "" : v).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+/* correspondance souple entre une valeur et les choix de la console */
+function correspond(v, choix){
+  if(!choix || !choix.length) return true;
+  const x = plie(v); if(!x) return false;
+  return choix.some(c => { const y = plie(c); return y && (x === y || x.includes(y) || y.includes(x)); });
+}
+/* trame commune : synthèse, évolution, détail, sommaire, pied de page */
+function pdfDepuisJeu(type, jeu, sousTitreFiltres, nomFichier){
+  const n = jeu.total;
+  const unite = type.unite ? type.unite(n) : (n > 1 ? "lignes" : "ligne");
+  const ctx = {
+    titre: type.nom,
+    sousTitre: "Édition du " + jjmmaaaa(new Date()) + " — " + n + " " + unite + (sousTitreFiltres || ""),
+    pied: piedDe(type, sousTitreFiltres || ""),
+    pages: ["portrait"]
+  };
+  const doc = new window.jspdf.jsPDF({ unit:"mm", format:"a4", orientation:"portrait" });
+  jeu.lignes.forEach((l, i) => l.id = i);
+  const synthese = pageSynthesePdf(doc, ctx, jeu);
+  pageEvolutionPdf(doc, ctx, jeu, synthese.y);
+  const avantDetail = doc.internal.getNumberOfPages();
+  let ancres = pageDetailPdf(doc, ctx, jeu);
+  const avantSommaire = doc.internal.getNumberOfPages();
+  const nbSommaire = dessinerSommaire(doc, ctx, jeu, ancres);
+  for(let i = 0; i < nbSommaire; i++) doc.deletePage(doc.internal.getNumberOfPages());
+  ancres = decalerAncres(ancres, nbSommaire, avantDetail);
+  dessinerSommaire(doc, ctx, jeu, ancres);
+  for(let k = 0; k < nbSommaire; k++) doc.movePage(avantSommaire + 1 + k, avantDetail + 1 + k);
+  poserLiens(doc, synthese.zones, ancres);
+  piedDePagePdf(doc, ctx);
+  doc.save(nomFichier);
+  return doc.getNumberOfPages();
+}
+/* PAPRIPACT : même revue que la MEC, par famille ; avancement 0 / -50 / +50 / 100 % */
+function avancementPAP(v){
+  if(typeof v === "number") return Math.round(v <= 1 ? v * 100 : v);
+  const t = String(v == null ? "" : v).replace(/\s/g, "");
+  if(/^-50/.test(t)) return 25;
+  if(/^\+?50/.test(t) && t.startsWith("+")) return 75;
+  const n = parseFloat(t.replace(",", ".").replace(/[^\d.\-]/g, ""));
+  if(isNaN(n)) return 0;
+  if(n < 0) return 25;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+async function jeuPAP(table, o){
+  const t = await grist.docApi.fetchTable(table);
+  const lignesBrutes = versLignes(t);
+  await resoudreLignes(lignesBrutes, table);
+  const cles = Object.keys(t);
+  const col = (...noms) => cles.find(k => noms.some(n => plie(k) === plie(n))) || null;
+  const cAct = col("Action_PAPRIPACT", "Action"), cFam = col("Famille"), cEch = col("Echéance", "Echeance"),
+        cSt = col("Statut"), cAv = col("Avancement"), cObs = col("Observation_Porteur", "Observation porteur"),
+        cServ = col("Service_Porteur", "Service porteur"), cGrp = col("Groupement_Pilote", "Groupement pilote");
+  const ids = o && o.ids ? new Set(o.ids) : null;
+  const lignes = [];
+  lignesBrutes.forEach(l => {
+    if(ids && !ids.has(l.id)) return;
+    if(!ids && o && o.groupements && o.groupements.length && !correspond(txt(l[cGrp]), o.groupements)) return;
+    const av = avancementPAP(cAv ? l[cAv] : null);
+    const st = cSt ? String(l[cSt] || "").toLowerCase() : "";
+    const inter = /interromp|abandon|suspen/.test(st);
+    const statut = statutDeLigne(av, inter), ech = cEch ? versDate(l[cEch]) : null;
+    lignes.push({
+      libelle: txt(cAct ? l[cAct] : ""), porteur: txt(cServ ? l[cServ] : ""),
+      groupement: txt(cGrp ? l[cGrp] : ""), commentaire: txt(cObs ? l[cObs] : ""),
+      echeance: ech, enRetard: enRetard(ech, statut), avancement: av, statut,
+      categorie: txt(cFam ? l[cFam] : "") || "(non renseigné)"
+    });
+  });
+  const valeurs = [...new Set(lignes.map(l => l.categorie))].sort((a, b) => a.localeCompare(b, "fr", { numeric:true }));
+  const jeu = agrege({
+    axe: "famille",
+    categories: categoriesDepuis(valeurs),
+    lignes,
+    titreDetail: "Détail des actions PAPRIPACT",
+    champs: [{ cle:"libelle", titre:"Action" }, { cle:"porteur", titre:"Service porteur" },
+             { cle:"groupement", titre:"Groupement pilote" }, { cle:"commentaire", titre:"Observation porteur" },
+             { cle:"echeance", titre:"Échéance" }, { cle:"avancement", titre:"Avct" }]
+  });
+  return jeu;
+}
+/* id : "mec" | "pap" | "p2a" ; o : {ids, groupements, sponsors, mention, table} */
+window.revueConsole = async (id, o) => {
+  o = o || {};
+  if(typeof window.jspdf === "undefined") throw new Error("bibliothèque PDF non chargée (accès Internet ?)");
+  if(!calcul) throw new Error("données de la revue non chargées");
+  const mention = o.mention ? " — " + o.mention : "";
+  if(id === "pap"){
+    const jeu = await jeuPAP(o.table || "PAPRIPACT", o);
+    jeu.evolution = null;
+    const type = { id:"pap", nom:"PAPRIPACT", fichier:"Revue_PAPRIPACT",
+                   unite: n => n > 1 ? "actions" : "action" };
+    return pdfDepuisJeu(type, jeu, mention, "Revue_PAPRIPACT_" + calcul.annee + ".pdf");
+  }
+  if(id === "mec"){
+    const sv = recMEC;
+    if(o.ids){ const s2 = new Set(o.ids); recMEC = sv.filter(l => s2.has(l.id)); }
+    else if((o.groupements && o.groupements.length) || (o.sponsors && o.sponsors.length))
+      recMEC = sv.filter(l => (!o.groupements.length || correspond(txt(l[cfg.mecGroupement]), o.groupements)) &&
+                              (!o.sponsors.length || correspond(sponsorMEC(l), o.sponsors)));
+    try{
+      recalcule();
+      const type = TYPES.find(t => t.id === "mec");
+      const jeu = jeuMEC(calcul);
+      jeu.evolution = (o.ids || (o.groupements && o.groupements.length)) ? null : evolutionDe(jeu, "mec");
+      return pdfDepuisJeu(Object.assign({}, type, { unite: n => n > 1 ? "préconisations" : "préconisation" }), jeu,
+        mentionFiltres({ prio:false, cat:true }) + mention, type.fichier + "_" + calcul.annee + ".pdf");
+    } finally { recMEC = sv; recalcule(); }
+  }
+  if(id === "p2a"){
+    const type = TYPES.find(t => t.id === "p2a");
+    const filtre = l => correspond(l.groupement, o.groupements) && correspond(l.sponsor, o.sponsors);
+    const actif = (o.groupements && o.groupements.length) || (o.sponsors && o.sponsors.length);
+    const jeu = jeuP2A(calcul, "tous");
+    const global = jeuP2A(calculComplet || calcul, "tous").global;
+    if(actif){
+      jeu.lignes = jeu.lignes.filter(filtre);
+      agrege(jeu);
+      const garde = new Set(jeu.lignes.map(l => l.categorie));
+      jeu.categories = jeu.categories.filter(c => garde.has(c.cle));
+      const gs = new Set(jeu.lignes.map(l => l.groupement));
+      if(jeu.focus){
+        jeu.focus.categories = jeu.focus.categories.filter(c => gs.has(c.cle));
+        jeu.categoriesSommaire = jeu.focus.categories;
+        Object.keys(jeu.focus.croise).forEach(g => { if(!gs.has(g)) delete jeu.focus.croise[g]; else
+          STATUTS_P.forEach(s => jeu.focus.croise[g][s.cle] = jeu.lignes.filter(l => l.groupement === g && l.statut === s.cle).length); });
+      }
+      if(jeu.donut) jeu.donut.forEach(d => d.valeur = jeu.lignes.filter(l => l.nature === d.cle).length);
+      if(jeu.natures) jeu.natures.forEach(nn => nn.valeur = jeu.lignes.filter(l => l.millesimes.includes(nn.libelle)).length);
+      jeu.selection = { global: jeu.global, court: o.mention || "sélection", libelle: (o.mention || "sélection") + " au " + jjmmaaaa(new Date()), vide: !jeu.total };
+      jeu.evolution = null;
+    } else jeu.evolution = evolutionDe(jeu, "p2a");
+    jeu.global = global;
+    jeu.libelleGlobal = "ensemble du P2A au " + jjmmaaaa(new Date());
+    jeu.libelleGlobalCourt = "ensemble du P2A";
+    return pdfDepuisJeu(Object.assign({}, type, { unite: n => n > 1 ? "projets et actions" : "projet ou action" }), jeu,
+      mentionFiltres({ prio:true, cat:false }) + mention, type.fichier + "_" + calcul.annee + ".pdf");
+  }
+  throw new Error("type de revue inconnu");
+};
 demarre();
 <\/script>
 </body>
