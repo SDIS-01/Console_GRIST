@@ -17299,7 +17299,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 26/10/2026 · 14 h 37</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 8 h 55</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -20535,18 +20535,23 @@ function etpHtml(p){
       '<td>'+t(l.budget)+'</td><td>'+t(l.com)+'</td></tr>';
   });
   const coH=etpCouleurAv(H.av,H.inter);
-  const cg='<colgroup>'+ETP.larg.map(w=>'<col style="width:'+(w/tot*100).toFixed(2)+'%">').join("")+'</colgroup>';
+  /* même échelle que l'Excel imprimé : largeurs de colonnes Excel en pixels (7 px par
+     caractère + 5), police 10 pt, puis réduction pour tenir dans la largeur d'un A4 */
+  const px=ETP.larg.map(w=>Math.round(w*7+5)), totPx=px.reduce((a,b)=>a+b,0);
+  const zoom=Math.min(1,718/totPx).toFixed(3);
+  const cg='<colgroup>'+px.map(w=>'<col style="width:'+w+'px">').join("")+'</colgroup>';
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>'+esc(H.titre)+'</title><style>'+
-    '@page{size:A4 portrait;margin:12mm 10mm}*{box-sizing:border-box}body{margin:0;font-family:Tahoma,Verdana,sans-serif;color:#'+ETP.texte+';-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
-    'table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8.5pt;line-height:1.3}'+
-    'td,th{padding:3px 4px;vertical-align:middle;border-bottom:.5px solid #'+ETP.trait+';overflow-wrap:anywhere}'+
+    '@page{size:A4 portrait;margin:12.7mm 10mm}*{box-sizing:border-box}body{margin:0;zoom:'+zoom+';font-family:Tahoma,Verdana,sans-serif;color:#'+ETP.texte+';-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    'table{width:'+totPx+'px;border-collapse:collapse;table-layout:fixed;font-size:10pt;line-height:1.25}'+
+    'td,th{padding:2px 3px;vertical-align:middle;border-bottom:1px solid #'+ETP.trait+';overflow-wrap:break-word}'+
     'thead{display:table-header-group}tr{page-break-inside:avoid}'+
     'th{background:#'+ETP.entete+';color:#fff;font-weight:bold;text-align:center;border-bottom:0;height:25px}'+
-    '.p td{background:#'+ETP.beige+';text-align:center;font-size:9.5pt;height:30px}.p .t{font-size:12pt;font-weight:bold}.p .av.g{font-size:9.5pt}'+
+    'th{height:34px}.p td{background:#'+ETP.beige+';text-align:center;font-size:11pt;height:40px}.p .t{font-size:14pt;font-weight:bold}.p .av.g{font-size:11pt}'+
     'tr.esp td{border:0;height:8px;padding:0}'+
-    'tr.axe td{background:#'+ETP.beige+';border-bottom:0}'+
+    'tr.axe td{background:#'+ETP.beige+';border-bottom:0;height:18px}'+
+    'tr.action td,tr.tache td{height:34px;padding-top:3px;padding-bottom:3px}'+
     'tr.action td.lib{font-weight:bold}tr.action td.dir{font-style:italic}'+
-    '.c{text-align:center}.av{text-align:center;font-weight:bold}td.st{font-size:7.5pt;white-space:nowrap;text-align:center}'+
+    '.c{text-align:center}.av{text-align:center;font-weight:bold}td.st{text-align:center}'+
     '</style></head><body><table>'+cg+'<tbody><tr class="p"><td colspan="2" class="t">'+t(H.titre)+'</td><td>'+t(H.porteur)+'</td>'+
       '<td class="av g" style="'+(coH?'background:#'+coH.fond+';'+(coH.blanc?'color:#fff;':''):'')+'">'+(H.av==null?"":H.av+" %")+'</td>'+
       '<td>'+t(H.statut)+'</td><td colspan="2">'+t(H.ech)+'</td></tr>'+
