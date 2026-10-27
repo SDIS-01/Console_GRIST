@@ -17386,7 +17386,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 14 h 15</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 14 h 23</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -25741,6 +25741,7 @@ html.integre #contenu tr[data-id]:hover td{background:#f2f5fc;}
   html.integre .etat-txt{font-size:11.5px;font-weight:bold;white-space:nowrap;}
   .etat-txt{font-weight:bold;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   @media print{ html.integre .contenu{padding:0;} html.integre .code-projet,html.integre .bandeau,html.integre .tab th{-webkit-print-color-adjust:exact;print-color-adjust:exact;} }
+  @media print{ .tab td, .tab td *{font-weight:normal!important;} .tab td .pastille, .tab td .etat-txt{font-weight:bold!important;} }
 </style>
 </head>
 <body>
@@ -27215,6 +27216,7 @@ function imprimerTous(){
       return o ? o.value : v; }).map(norm));
     codes = codes.filter(c => retenus.has(norm(c)));
   }
+  codes.sort((x, y) => String(x).localeCompare(String(y), "fr", { numeric:true, sensitivity:"base" }));
   const morceaux = codes.map(code => {
     const e = construireEtat(code, true);
     return e ? '<div class="section-impression">' + etatHtml(e, true) + "</div>" : "";
@@ -28976,7 +28978,7 @@ window.preparerEtatConsole = o => {
 function documentEtatConsole(contenu, titre){
   const styles = Array.from(document.querySelectorAll("style")).map(x => x.outerHTML).join("");
   return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + echapper(titre || "État") + "</title>" + styles
-    + "<style>@page{size:A4 portrait;margin:14mm 12mm}body{background:#fff}#contenu td,#contenu td *{font-weight:normal!important}#contenu td .pastille{font-weight:bold!important}</style></head><body><div id=\"contenu\" class=\"contenu\">"
+    + "<style>@page{size:A4 portrait;margin:14mm 12mm}body{background:#fff}#contenu td,#contenu td *{font-weight:normal!important}#contenu td .pastille,#contenu td .etat-txt{font-weight:bold!important}</style></head><body><div id=\"contenu\" class=\"contenu\">"
     + contenu + "</div></body></html>";
 }
 window.htmlEtatConsole = (o, tous) => {
@@ -29041,7 +29043,7 @@ window.htmlAnnexeConsole = (famille, groupements, sponsors) => {
   const date = new Date().toLocaleDateString("fr-FR");
   return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + nom + " — " + echapper(e.titre) + "</title>" + styles
     + "<style>@page{size:A4 portrait;margin:14mm 12mm}.annexes{break-before:auto!important;page-break-before:auto!important}"
-    + ".entete-impression{display:flex!important}body{background:#fff}#contenu td,#contenu td *{font-weight:normal!important}#contenu td .pastille{font-weight:bold!important}</style></head><body><div id=\"contenu\" class=\"contenu\">"
+    + ".entete-impression{display:flex!important}body{background:#fff}#contenu td,#contenu td *{font-weight:normal!important}#contenu td .pastille,#contenu td .etat-txt{font-weight:bold!important}</style></head><body><div id=\"contenu\" class=\"contenu\">"
     + '<div class="entete-impression">' + LOGO_HTML + '<div class="txt-ent"><div class="t">' + nom + " — " + echapper(e.titre)
     + '</div><div class="d">Édité le ' + date + " · " + lignes.length + " ligne" + (lignes.length > 1 ? "s" : "") + "</div></div></div>"
     + (corps || '<div class="vide-etat">Aucune ligne ' + nom + " pour cette sélection.</div>") + "</div></body></html>";
@@ -32724,10 +32726,29 @@ function pageDetailPdf(doc, ctx, jeu){
   const ancres = new Map();
 
   const champs = jeu.champs;
+  /* Largeurs : chaque colonne reçoit au moins la place de son mot le plus long
+     (aucun mot coupé), le reste est réparti selon les poids habituels. */
+  doc.setFontSize(7.5);
+  const total = droite - MARGE_P;
+  const minis = champs.map(c => {
+    if(c.cle === "avancement") return 14;
+    if(c.cle === "echeance") return doc.getTextWidth("00/00/0000") + 3;
+    let m = 0;
+    jeu.lignes.forEach(l => String(nettoiePdf(l[c.cle] || "")).split(/\s+/).forEach(w => { if(w) m = Math.max(m, doc.getTextWidth(w)); }));
+    return Math.min(total * 0.45, m + 3);
+  });
   const somme = champs.reduce((a, c) => a + POIDS[c.cle], 0);
+  let largeurs = champs.map(c => total * POIDS[c.cle] / somme);
+  for(let passe = 0; passe < 4; passe++){
+    const manque = largeurs.reduce((a, l, i) => a + Math.max(0, minis[i] - l), 0);
+    if(manque <= 0.01) break;
+    const libres = largeurs.map((l, i) => Math.max(0, l - minis[i]));
+    const dispo = libres.reduce((a, b) => a + b, 0) || 1;
+    largeurs = largeurs.map((l, i) => l < minis[i] ? minis[i] : l - manque * libres[i] / dispo);
+  }
   let curseur = MARGE_P;
-  const colonnes = champs.map(c => {
-    const l = (droite - MARGE_P) * POIDS[c.cle] / somme;
+  const colonnes = champs.map((c, i) => {
+    const l = largeurs[i];
     const col = { titre:c.titre, cle:c.cle, x:curseur, l:l - 2 };
     curseur += l;
     return col;
@@ -32740,8 +32761,10 @@ function pageDetailPdf(doc, ctx, jeu){
   // Même découpage et même ordre que le sommaire : groupes, puis libellés par ordre alphabétique.
   const champGroupe = jeu.sommaireCle || "categorie";
   for(const cat of categoriesOrdonnees(jeu)){
+    const cleTriD = l => String(l.projetRattache || l.libelle);
     const membres = jeu.lignes.filter(l => l[champGroupe] === cat.cle)
-      .sort((a, b) => String(a.libelle).localeCompare(String(b.libelle), "fr", { numeric:true }));
+      .sort((a, b) => cleTriD(a).localeCompare(cleTriD(b), "fr", { numeric:true }) ||
+                      String(a.libelleSeul || a.libelle).localeCompare(String(b.libelleSeul || b.libelle), "fr", { numeric:true }));
     if(!membres.length) continue;
 
     y = assurerPlace(doc, ctx, y, 30);
@@ -32771,11 +32794,24 @@ function pageDetailPdf(doc, ctx, jeu){
     y = enteteGroupe(y, false);
 
     {
+      let projetCourantD = null;
       for(const r of membres){
+        /* actions MEO : le projet en tête, une seule fois, puis ses actions en retrait */
+        if(r.projetRattache && r.projetRattache !== projetCourantD){
+          projetCourantD = r.projetRattache;
+          doc.setFontSize(7.5);
+          const lp = lignesCellule(doc, "Projet : " + r.projetRattache, droite - MARGE_P, 99);
+          if(y + lp.length * 3.6 + 8 > bas) y = enteteGroupe(nouvelleFeuillePdf(doc, ctx), true);
+          doc.setTextColor(...GRIS_P);
+          lp.forEach((t, k) => doc.text(t, MARGE_P, y + 3 + k * 3.6));
+          y += lp.length * 3.6 + 2.5;
+        }else if(!r.projetRattache) projetCourantD = String(r.libelle);
+        const retraitD = r.projetRattache ? 3 : 0;
         doc.setFontSize(7.5);
         const cellules = colonnes.map(c => c.cle === "avancement" ? [""]
           : c.cle === "echeance" ? [r.echeance ? jjmmaaaa(r.echeance) : "—"]
-          : lignesCellule(doc, r[c.cle], c.l, c.cle === "commentaire" ? 8 : (c.cle === "libelle" ? 5 : 3)));
+          : c.cle === "libelle" ? lignesCellule(doc, r.libelleSeul || r.libelle, c.l - retraitD, 99)
+          : lignesCellule(doc, r[c.cle], c.l, c.cle === "commentaire" ? 12 : 6));
         const hauteur = Math.max(6, Math.max(...cellules.map(t => t.length)) * 3.4 + 3);
         if(y + hauteur > bas) y = enteteGroupe(nouvelleFeuillePdf(doc, ctx), true);
         const cible = { page:doc.internal.getNumberOfPages(), top:Math.max(0, y - 6) };
@@ -32790,7 +32826,7 @@ function pageDetailPdf(doc, ctx, jeu){
             doc.setTextColor(...(c.cle === "echeance" && r.enRetard ? [192, 40, 40] : [61, 61, 58]));
             // Une ligne à la fois : le tracé d'un tableau laisse jsPDF gérer
             // l'interligne et peut étirer le texte.
-            cellules[i].forEach((t, k) => doc.text(t, c.x, y + 4 + k * 3.4));
+            cellules[i].forEach((t, k) => doc.text(t, c.x + (c.cle === "libelle" ? retraitD : 0), y + 4 + k * 3.4));
           }
         });
         doc.setDrawColor(237, 235, 228); doc.setLineWidth(0.15);
@@ -32851,17 +32887,19 @@ function dessinerSommaire(doc, ctx, jeu, ancres){
       if(y > bas - 6) y = nouvelleFeuillePdf(doc, ctx);
       if(r.projetRattache && r.projetRattache !== projetCourant){
         projetCourant = r.projetRattache;
-        doc.setFontSize(7.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...GRIS_P);
-        doc.text(lignesCellule(doc, "Projet : " + r.projetRattache, largeurTexte, 1)[0] || "", MARGE_P + 5, y);
-        doc.setFont("helvetica", "normal");
-        y += 4.8;
+        doc.setFontSize(7.5); doc.setTextColor(...GRIS_P);
+        const lp = lignesCellule(doc, "Projet : " + r.projetRattache, largeurTexte, 99);
+        if(y + (lp.length - 1) * 3.6 > bas - 6) y = nouvelleFeuillePdf(doc, ctx);
+        lp.forEach((t, k) => doc.text(t, MARGE_P + 5, y + k * 3.6));
+        y += 4.8 + (lp.length - 1) * 3.6;
         if(y > bas - 6) y = nouvelleFeuillePdf(doc, ctx);
       }else if(!r.projetRattache) projetCourant = String(r.libelle);   // ses MEO suivent sans rappel
       const retrait = r.projetRattache ? 4 : 0;
       doc.setFontSize(7.5);
-      const texte = lignesCellule(doc, r.libelle, largeurTexte - retrait, 1)[0];
+      const lignesT = lignesCellule(doc, r.libelleSeul || r.libelle, largeurTexte - retrait, 99);
+      if(y + (lignesT.length - 1) * 3.6 > bas - 2) y = nouvelleFeuillePdf(doc, ctx);
       doc.setTextColor(61, 61, 58);
-      doc.text(texte || "—", MARGE_P + 5 + retrait, y);
+      lignesT.forEach((t, k) => doc.text(t || (k ? "" : "—"), MARGE_P + 5 + retrait, y + k * 3.6));
       if(avecPrio && r.priorite && r.priorite !== "—"){
         doc.setTextColor(...GRIS_P);
         doc.text(lignesCellule(doc, r.priorite, largeurPrio - 2, 1)[0] || "",
@@ -32876,9 +32914,9 @@ function dessinerSommaire(doc, ctx, jeu, ancres){
       doc.setTextColor(...s.encre);
       doc.text(s.libelle, droite, y, { align:"right" });
       const cible = ancres.get("ligne:" + r.id);
-      if(cible) doc.link(MARGE_P, y - 3.4, droite - MARGE_P, 4.8,
+      if(cible) doc.link(MARGE_P, y - 3.4, droite - MARGE_P, 4.8 + (lignesT.length - 1) * 3.6,
                          { pageNumber:cible.page, top:cible.top });
-      y += 5.2;
+      y += 5.2 + (lignesT.length - 1) * 3.6;
     }
     y += 2;
   }
@@ -33044,7 +33082,8 @@ function jeuP2A(c, nature){
   const lignes = c.p2a.lignes.filter(l => natureP2ARetenue(l.nature, choix)).map(l => ({
     // Une action MEO rappelle, sous son intitulé, le projet auquel elle est rattachée.
     libelle: l.estProjet ? l.libelle
-      : l.libelle + "\nProjet : " + (l.libelleProjet || "non identifié"),
+      : "Projet : " + (l.libelleProjet || "non identifié") + "\n" + l.libelle,
+    libelleSeul: l.libelle,
     projetRattache: l.estProjet ? "" : (l.libelleProjet || "non identifié"),
     rowId: l.rowId,
     porteur: l.porteur,
