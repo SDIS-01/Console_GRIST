@@ -2176,6 +2176,8 @@ body.mob .bdg-b-pied .btn,body.mob .bdg-b-pied .btn-2{flex:1;padding:10px;}
 @media (max-width:1400px){.mt-grille:not(.mp-annexes){column-count:3;}}
 @media (max-width:1050px){.mt-grille:not(.mp-annexes){column-count:2;}}
 @media (max-width:700px){.mt-grille:not(.mp-annexes){column-count:1;}}
+.kpi-sous{display:block;margin-top:2px;font-size:11px;color:#4E7D2A;font-weight:600;}
+.kpi-sur{font-style:normal;font-weight:600;color:var(--gris);font-size:.7em;}
 </style>
 </head>
 <body>
@@ -16766,17 +16768,46 @@ function projetEnRetard(p){
   const e=echeanceProjet(p), a=pct(p[S.cfg.colAvancement]);
   return (e && e<aujourdHuiUTC() && etatDe(p)!=="termine" && etatDe(p)!=="interrompu") || alerteProjet(p).retard>0;
 }
+/* projets du portefeuille qui passent les filtres (groupement, porteur, recherche…),
+   sans tenir compte de l'état, de l'avancement, de l'échéance ni de l'archivage :
+   base des « terminés dans l'année » et du total du millésime */
+function projetsHorsEtat(){
+  const sv={arch:S.voirArchives, et:MENUS["m-etat"].sel, av:MENUS["m-avct"].sel,
+    du:$("#f-ech-du")?$("#f-ech-du").value:"", au:$("#f-ech-au")?$("#f-ech-au").value:""};
+  try{
+    S.voirArchives=true; MENUS["m-etat"].sel=[]; MENUS["m-avct"].sel=[];
+    if($("#f-ech-du")) $("#f-ech-du").value=""; if($("#f-ech-au")) $("#f-ech-au").value="";
+    return projetsFiltres();
+  }finally{
+    S.voirArchives=sv.arch; MENUS["m-etat"].sel=sv.et; MENUS["m-avct"].sel=sv.av;
+    if($("#f-ech-du")) $("#f-ech-du").value=sv.du; if($("#f-ech-au")) $("#f-ech-au").value=sv.au;
+  }
+}
 function rendreKpi(ps, detail){
-  /* projets affichés, répartis par nature, et ceux inscrits au P2A de l'année en cours
-     (millésime du projet ou d'une de ses actions) */
-  const an=String(new Date().getFullYear());
+  /* en cours (affichés), PEPS et actions hors PEPS avec les terminés de l'année,
+     P2A de l'année : affichés / total du millésime */
+  const c=S.cfg, an=String(new Date().getFullYear());
   const nat=p=>natureDe(p);
-  const p2a=ps.filter(p=>[...millesimesProjet(p)].some(m=>String(m).indexOf(an)>=0)).length;
+  const auP2A=p=>[...millesimesProjet(p)].some(m=>String(m).indexOf(an)>=0);
+  const p2a=ps.filter(auP2A).length;
+  let tous=[]; try{ tous=projetsHorsEtat(); }catch(e){ tous=ps; }
+  const termineAn=p=>{
+    if(etatDe(p)!=="termine") return false;
+    const f=Number(c.colFin?p[c.colFin]:0)||0;
+    return !!f && new Date(f*1000).getUTCFullYear()===Number(an);
+  };
+  const nPepsT=tous.filter(p=>nat(p)==="PEPS" && termineAn(p)).length;
+  const nAvT=tous.filter(p=>nat(p)!=="PEPS" && termineAn(p)).length;
+  const totP2A=tous.filter(auP2A).length;
+  const sous=t=>'<small class="kpi-sous">'+t+'</small>';
   $("#kpi-app").innerHTML=
-    '<div><b>'+ps.length+'</b><span>projets affichés</span></div>'+
-    '<div><b>'+ps.filter(p=>nat(p)==="PEPS").length+'</b><span>PEPS</span></div>'+
-    '<div><b>'+ps.filter(p=>nat(p)==="AV").length+'</b><span>AV</span></div>'+
-    (S.cfg.colMillesime ? '<div><b>'+p2a+'</b><span>au P2A '+an+'</span></div>' : '')+
+    '<div><b>'+ps.length+'</b><span>projets / actions en cours</span></div>'+
+    '<div><b>'+ps.filter(p=>nat(p)==="PEPS").length+'</b><span>projets inscrits au PEPS</span>'+
+      (c.colFin?sous(nPepsT+' terminé'+(nPepsT>1?'s':'')+' en '+an):'')+'</div>'+
+    '<div><b>'+ps.filter(p=>nat(p)!=="PEPS").length+'</b><span>actions (hors PEPS)</span>'+
+      (c.colFin?sous(nAvT+' terminée'+(nAvT>1?'s':'')+' en '+an):'')+'</div>'+
+    (c.colMillesime ? '<div><b>'+p2a+' <i class="kpi-sur">/ '+totP2A+'</i></b><span>actions au P2A '+an+'</span>'+
+      sous(totP2A+' inscrite'+(totP2A>1?'s':'')+' au millésime '+an)+'</div>' : '')+
     (detail ? '<div><b>'+detail.actions+'</b><span>actions MEO</span></div><div><b>'+detail.taches+'</b><span>tâches</span></div>' : '');
 }
 
@@ -17299,7 +17330,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 8 h 55</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 13 h 31</div>';
   return h;
 }
 async function lancerEdition(id){
