@@ -17396,7 +17396,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 14 h 53</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 14 h 57</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -32475,7 +32475,21 @@ const MARGE_P = 12;
 const droiteDe = doc => doc.internal.pageSize.getWidth() - MARGE_P;
 const basDe    = doc => doc.internal.pageSize.getHeight() - 16;
 
-const statutParCle = cle => STATUTS_P.find(s => s.cle === cle) || STATUTS_P[3];
+const STATUTS_ORIG = STATUTS_P.map(s => Object.assign({}, s));
+const statutParCle = cle => STATUTS_P.find(s => s.cle === cle) || STATUTS_ORIG.find(s => s.cle === cle) || STATUTS_P[3];
+/* PAPRIPACT : statuts et avancements propres à la table (0 / -50 / +50 / 100 %) */
+const STATUTS_PAP = [
+  { cle:"s3", libelle:"3 - Terminé",   couleur:[155,187, 89], fond:[237,245,224], encre:[ 59,109, 17] },
+  { cle:"s2", libelle:"2 - Engagé",    couleur:[255,204,  0], fond:[255,248,219], encre:[122, 96,  0] },
+  { cle:"s1", libelle:"1 - Engagé",    couleur:[247,150, 70], fond:[253,238,225], encre:[168, 90, 18] },
+  { cle:"s0", libelle:"0 - A engager", couleur:[192, 80, 77], fond:[251,235,235], encre:[153, 51, 51] }
+];
+const FOCUS_PAP = [
+  { cle:"s0", x: 80, l:30, titre:"0 - A engager", taille:7.5, principal:true },
+  { cle:"s1", x:112, l:30, titre:"1 - Engagé",    taille:7.5, principal:true },
+  { cle:"s2", x:144, l:26, titre:"2 - Engagé",    taille:7.5 },
+  { cle:"s3", x:172, l:26, titre:"3 - Terminé",   taille:7.5 }
+];
 const pourcentPdf = x => (Math.round(x * 1000) / 10).toFixed(1).replace(".", ",") + " %";
 const entierPdf   = x => String(Math.round(x));
 
@@ -32586,12 +32600,12 @@ function donut(segments, total){
   return canvas.toDataURL("image/png");
 }
 
-function bulleAvancement(doc, x, y, avancement, statut, l){
+function bulleAvancement(doc, x, y, avancement, statut, l, texte){
   const s = statutParCle(statut);
   doc.setFillColor(...s.fond);
   doc.roundedRect(x, y, l, 5, 1.6, 1.6, "F");
   doc.setFontSize(7); doc.setTextColor(...s.encre);
-  doc.text(entierPdf(avancement) + " %", x + l / 2, y + 3.5, { align:"center" });
+  doc.text(texte ? nettoiePdf(texte) : entierPdf(avancement) + " %", x + l / 2, y + 3.5, { align:"center" });
 }
 
 /* ---------- Page de synthèse ---------- */
@@ -32633,7 +32647,7 @@ function pageSynthesePdf(doc, ctx, jeu){
   let x = MARGE_P;
   for(const s of STATUTS_P){
     cadreValeur(doc, x, y + 28, 44, 18, s.libelle, String(jeu.parStatut[s.cle] || 0),
-                s.cle === "en cours" ? [154,122,0] : s.couleur);
+                (s.cle === "en cours" || s.cle === "s2") ? [154,122,0] : s.couleur);
     x += 46.5;
   }
 
@@ -32968,7 +32982,7 @@ function pageDetailPdf(doc, ctx, jeu){
         if(!ancres.has(cleStatut)) ancres.set(cleStatut, cible);
         colonnes.forEach((c, i) => {
           if(c.cle === "avancement"){
-            bulleAvancement(doc, c.x, y + 0.4, r.avancement, r.statut, c.l);
+            bulleAvancement(doc, c.x, y + 0.4, r.avancement, r.statut, c.l, r.avctTexte);
           }else{
             doc.setTextColor(...(c.cle === "echeance" && r.enRetard ? [192, 40, 40] : [61, 61, 58]));
             // Une ligne à la fois : le tracé d'un tableau laisse jsPDF gérer
@@ -33583,13 +33597,18 @@ async function jeuPAP(table, o){
     if(ids && !ids.has(l.id)) return;
     if(!ids && o && o.groupements && o.groupements.length && !correspond(txt(l[cGrp]), o.groupements)) return;
     const av = avancementPAP(cAv ? l[cAv] : null);
-    const st = cSt ? String(l[cSt] || "").toLowerCase() : "";
-    const inter = /interromp|abandon|suspen/.test(st);
-    const statut = statutDeLigne(av, inter), ech = cEch ? versDate(l[cEch]) : null;
+    const brutAv = cAv ? l[cAv] : null;
+    const avctTexte = typeof brutAv === "string" && brutAv.trim() ? brutAv.trim()
+      : (brutAv == null || brutAv === "" ? "" : av + " %");
+    const st = cSt ? String(l[cSt] || "") : "";
+    /* statut : chiffre de tête du choix (0 à 3), à défaut déduit de l'avancement */
+    const m = st.match(/^\s*([0-3])/);
+    const statut = m ? "s" + m[1] : (av >= 100 ? "s3" : av >= 75 ? "s2" : av > 0 ? "s1" : "s0");
+    const ech = cEch ? versDate(l[cEch]) : null;
     lignes.push({
       libelle: txt(cAct ? l[cAct] : ""), porteur: txt(cServ ? l[cServ] : ""),
       groupement: txt(cGrp ? l[cGrp] : ""), commentaire: txt(cObs ? l[cObs] : ""),
-      echeance: ech, enRetard: enRetard(ech, statut), avancement: av, statut,
+      echeance: ech, enRetard: enRetard(ech, statut === "s3" ? "termine" : statut), avancement: av, statut, avctTexte,
       categorie: txt(cFam ? l[cFam] : "") || "(non renseigné)"
     });
   });
@@ -33612,11 +33631,18 @@ window.revueConsole = async (id, o) => {
   if(!calcul) throw new Error("données de la revue non chargées");
   const mention = o.mention ? " — " + o.mention : "";
   if(id === "pap"){
-    const jeu = await jeuPAP(o.table || "PAPRIPACT", o);
-    jeu.evolution = null;
-    const type = { id:"pap", nom:"PAPRIPACT", fichier:"Revue_PAPRIPACT",
-                   unite: n => n > 1 ? "actions" : "action" };
-    return pdfDepuisJeu(type, jeu, mention, "Revue_PAPRIPACT_" + calcul.annee + ".pdf");
+    const svS = STATUTS_P.splice(0, STATUTS_P.length, ...STATUTS_PAP);
+    const svF = COLONNES_FOCUS.splice(0, COLONNES_FOCUS.length, ...FOCUS_PAP);
+    try{
+      const jeu = await jeuPAP(o.table || "PAPRIPACT", o);
+      jeu.evolution = null;
+      const type = { id:"pap", nom:"PAPRIPACT", fichier:"Revue_PAPRIPACT",
+                     unite: n => n > 1 ? "actions" : "action" };
+      return pdfDepuisJeu(type, jeu, mention, "Revue_PAPRIPACT_" + calcul.annee + ".pdf");
+    } finally {
+      STATUTS_P.splice(0, STATUTS_P.length, ...svS);
+      COLONNES_FOCUS.splice(0, COLONNES_FOCUS.length, ...svF);
+    }
   }
   if(id === "mec"){
     const sv = recMEC;
