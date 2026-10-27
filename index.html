@@ -16799,7 +16799,7 @@ function rendreKpi(ps, detail){
   const c=S.cfg, an=String(new Date().getFullYear());
   const nat=p=>natureDe(p);
   const auP2A=p=>[...millesimesProjet(p)].some(m=>String(m).indexOf(an)>=0);
-  const p2a=ps.filter(auP2A).length;
+  const p2a=0;   /* remplacé plus bas : inscriptions non terminées */
   let tous=[]; try{ tous=projetsHorsEtat(); }catch(e){ tous=ps; }
   const termineAn=p=>{
     if(etatDe(p)!=="termine") return false;
@@ -16808,7 +16808,13 @@ function rendreKpi(ps, detail){
   };
   const nPepsT=tous.filter(p=>nat(p)==="PEPS" && termineAn(p)).length;
   const nAvT=tous.filter(p=>nat(p)!=="PEPS" && termineAn(p)).length;
-  const totP2A=tous.filter(auP2A).length, nP2AT=tous.filter(p=>auP2A(p) && termineAn(p)).length;
+  /* inscriptions au P2A : un projet compte une fois ; si des actions MEO sont inscrites
+     elles-mêmes, ce sont elles qui comptent, et plus leur projet (même règle que la revue) */
+  const inscrit=x=>millesimesDe(x).some(m=>String(m).indexOf(an)>=0);
+  const inscriptions=l=>l.reduce((acc,p)=>{ const as=actionsDe(p).filter(inscrit); return acc.concat(as.length?as:(inscrit(p)?[p]:[])); },[]);
+  const insT=inscriptions(tous);
+  const totP2A=insT.length;
+  const nP2AT=insT.filter(x=>etatDe(x)==="termine").length;
   const nPeps=ps.filter(p=>nat(p)==="PEPS").length, nAv=ps.filter(p=>nat(p)!=="PEPS").length;
   const sur=n=>' <i class="kpi-sur">/ '+n+'</i>';
   const sous=t=>'<small class="kpi-sous">'+t+'</small>';
@@ -16818,7 +16824,7 @@ function rendreKpi(ps, detail){
       (c.colFin?sous(nPepsT+' terminé'+(nPepsT>1?'s':'')+' en '+an):'')+'</div>'+
     '<div><b>'+nAv+(c.colFin?sur(nAv+nAvT):'')+'</b><span>actions (hors PEPS)</span>'+
       (c.colFin?sous(nAvT+' terminée'+(nAvT>1?'s':'')+' en '+an):'')+'</div>'+
-    (c.colMillesime ? '<div><b>'+p2a+sur(totP2A)+'</b><span>actions au P2A '+an+'</span>'+
+    (c.colMillesime ? '<div><b>'+(totP2A-nP2AT)+sur(totP2A)+'</b><span>actions au P2A '+an+'</span>'+
       (c.colFin?sous(nP2AT+' terminée'+(nP2AT>1?'s':'')+' en '+an):'')+'</div>' : '')+
     (detail ? '<div><b>'+detail.actions+'</b><span>actions MEO</span></div><div><b>'+detail.taches+'</b><span>tâches</span></div>' : '');
 }
@@ -17380,7 +17386,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 13 h 56</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 14 h 06</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -25607,7 +25613,9 @@ window.planningPret = ()=>!!(lastView && lastView.units && lastView.units.length
   .tab tr.ins .prog{font-style:italic;color:#A2551A;}
   .w-nat{width:46px;} .w-p2a{width:72px;} .w-origine{width:78px;}
   .tab td.col-p2a{overflow:visible;white-space:nowrap;}
-  .tab td.col-origine{white-space:normal;overflow:hidden;line-height:1.25;} .w-porteur{width:112px;}
+  .tab td.col-origine{white-space:normal;overflow:hidden;line-height:1.25;}
+  .w-ins{width:104px;} .tab td.col-ins{white-space:normal;line-height:1.25;font-size:10.5px;}
+  .ins-e{display:block;color:#1c2f6b;} .ins-e.passee{color:#8a8f9c;} .ins-e.plus{color:#7a7f8c;font-size:10px;} .w-porteur{width:112px;}
   .w-service{width:112px;}
   .tab td.col-service{white-space:normal;overflow-wrap:anywhere;} .w-echeance{width:76px;} .w-avct{width:80px;} .w-cat{width:130px;}
   .w-nb{width:74px;} .w-grp{width:90px;}
@@ -26943,7 +26951,7 @@ function projetsSeulsHtml(ps){
           origine: a.origine, avecService: true };
         if (impact) opts.grpPorteur = a.groupement || "";
         h.push(ligneTableau(opts));
-        h.push(ligneInstances(p.noeud.cle, impact ? 8 : 7));
+        h.push(ligneInstances(p.noeud.cle, impact ? 9 : 8));
       });
       h.push("</tbody></table>");
     });
@@ -27057,7 +27065,7 @@ function etatHtml(etat, pourImpression){
         + (replie ? "▸" : "▾") + "</span>";
       h.push(ligneTableau({ classe: "pj", libelleHtml: repli + echapper(p.noeud.cle), o: p.direct ? a : null,
         nature: a ? a.nature : "", millesime: a ? a.millesime : "", origine: a ? a.origine : "", avecService: true }));
-      h.push(ligneInstances(p.noeud.cle, 7));
+      h.push(ligneInstances(p.noeud.cle, 8));
       if (replie) return;
       const ligneAction = (x, liseret) => {
         const aa = x.noeud.a;
@@ -27069,7 +27077,7 @@ function etatHtml(etat, pourImpression){
       const parAxe = groupesAxes(p.actions);
       if (!parAxe) p.actions.forEach(x => ligneAction(x, ""));
       else parAxe.forEach(g => {
-        h.push(ligneAxe(g, 7));
+        h.push(ligneAxe(g, 8));
         g.actions.forEach(x => ligneAction(x, g.couleur));
       });
       p.taches.forEach(t => h.push(ligneTableau({ classe: "ta", libelleHtml: echapper(t.libelle), o: t, nature: "Tâche", avecService: true })));
@@ -28148,7 +28156,7 @@ function ligneTableau(opts){
     h.push('<td class="lib lib-tache" colspan="' + (1 + visibles) + '"' + styleLiseret + '>'
       + '<span class="tq">Tâche</span><span class="lt">' + opts.libelleHtml + "</span></td>");
   } else h.push('<td class="lib"' + styleLiseret + ">" + opts.libelleHtml + "</td>");
-  if (opts.nature === "Tâche" && opts.categorie === undefined){ /* colonnes déjà couvertes */ }
+  if (opts.nature === "Tâche" && opts.categorie === undefined){ h.push('<td class="col-ins"></td>'); }
   else if (opts.categorie !== undefined) h.push('<td class="w-cat">' + echapper(opts.categorie) + "</td>");
   else {
     h.push('<td class="c col-nat">' + echapper(opts.nature || "") + "</td>");
@@ -28157,6 +28165,7 @@ function ligneTableau(opts){
     /* Origine sur deux lignes si besoin : coupure possible après chaque « _ ». */
     h.push('<td class="c col-origine">' + (opts.origine
       ? pastilleOrigine(opts.origine).replace(/>([^<]*)</, m => m.replace(/_/g, "_<wbr>")) : "") + "</td>");
+    h.push('<td class="col-ins">' + instancesEtat(o) + "</td>");
   }
   if (opts.grpPorteur !== undefined) h.push('<td class="c txt">' + echapper(opts.grpPorteur) + "</td>");
   if (opts.avecPorteur) h.push('<td class="c col-porteur">' + echapper(o ? o.porteur : "") + "</td>");
@@ -28168,10 +28177,25 @@ function ligneTableau(opts){
   return h.join("");
 }
 
+/* Colonne Instance : les prochaines instances du projet (au plus 2), à défaut la dernière passée */
+function instancesEtat(o){
+  try{
+    if (!o || !o.cleProjet || /^(MEO|Tâche)$/i.test(String(o.nature || ""))) return "";
+    const liste = indexInstances().get(o.cleProjet);
+    if (!liste || !liste.length) return "";
+    const j = new Date(); j.setHours(0, 0, 0, 0);
+    const lib = x => x.date ? (x.dateTxt + " " + (x.instance || "Instance"))
+                            : ((x.instance ? x.instance + " · " : "") + (x.periode || ""));
+    const fut = liste.filter(x => !x.date || x.date >= j);
+    const vus = fut.length ? fut.slice(0, 2) : [liste.filter(x => x.date).pop()].filter(Boolean);
+    return vus.map(x => '<span class="ins-e' + (!fut.length ? " passee" : "") + '">' + echapper(lib(x)) + "</span>").join("")
+      + (fut.length > 2 ? '<span class="ins-e plus">+' + (fut.length - 2) + "</span>" : "");
+  }catch(e){ return ""; }
+}
 function enteteTableau(premiere, avecPorteur, avecService, annexe, sansEcheance, avecGrpPorteur, avecGrpAnnexe){
   const h = ['<thead><tr><th>' + echapper(premiere) + "</th>"];
   if (annexe) h.push('<th class="w-cat">Catégorie</th>');
-  else h.push('<th class="c w-nat col-nat">Nat.</th><th class="c w-p2a col-p2a">P2A</th><th class="c w-origine col-origine">Origine</th>');
+  else h.push('<th class="c w-nat col-nat">Nat.</th><th class="c w-p2a col-p2a">P2A</th><th class="c w-origine col-origine">Origine</th><th class="c w-ins col-ins">Instance</th>');
   if (avecGrpPorteur) h.push('<th class="c w-grp">Groupement porteur</th>');
   if (avecPorteur) h.push('<th class="c w-porteur col-porteur">Porteur</th>');
   if (avecService) h.push('<th class="c w-service col-service">Service</th>');
@@ -28404,7 +28428,7 @@ function etatSponsorHtml(etat, sansClos){
     g.projets.forEach(p => {
       h.push(ligneTableau({ libelleHtml: echapper(p.a.cleProjet), o: p.a,
         nature: p.a.nature, millesime: p.a.millesime, origine: p.a.origine, avecPorteur: true }));
-      h.push(ligneInstances(p.a.cleProjet, 7));
+      h.push(ligneInstances(p.a.cleProjet, 8));
     });
     h.push("</tbody></table>");
   });
@@ -30482,8 +30506,16 @@ function bilanP2A(fraction){
                 (cfg.colEchPrev ? versDate(l[cfg.colEchPrev]) : null)
     });
   });
-  lignes.sort((a, b) => a.nature.localeCompare(b.nature) || a.libelle.localeCompare(b.libelle));
-  return { lignes, parMillesime, projets };
+  /* Un projet dont des actions MEO sont elles-mêmes inscrites au P2A ne compte plus :
+     ce sont ses actions qui portent l'inscription (sinon le projet compterait plusieurs fois). */
+  const parActions = new Set(lignes.filter(l => !l.estProjet && l.idProjet).map(l => l.idProjet));
+  const retenues = lignes.filter(l => {
+    if(!(l.estProjet && l.idProjet && parActions.has(l.idProjet))) return true;
+    l.millesimes.split(" · ").forEach(m => { if(m in parMillesime) parMillesime[m]--; });
+    return false;
+  });
+  retenues.sort((a, b) => a.nature.localeCompare(b.nature) || a.libelle.localeCompare(b.libelle));
+  return { lignes: retenues, parMillesime, projets };
 }
 
 /* Échéance d'une ligne : l'échéance prévisionnelle, à défaut la date de fin. */
