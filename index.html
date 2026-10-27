@@ -17386,7 +17386,7 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 14 h 06</div>';
+    '<div class="ed-version">Version du 27/10/2026 · 14 h 15</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18149,7 +18149,7 @@ async function rendreAnnexes(){
     z.innerHTML='<div class="anx-outils"><div class="anx-onglets">'+["mec","pap"].map(k=>
         '<button type="button" class="anx-og'+(f===k?" actif":"")+'" data-anx="'+k+'">'+ANX_FAMILLES[k].titre+'<b>'+(L[k]?L[k].idx.length:"—")+'</b></button>').join("")+'</div>'+
       '<span class="anx-lect">✏️ Cliquez sur un avancement ou un commentaire pour le modifier · '+info+'</span><span class="fil-esp"></span>'+
-      (cur?'<button type="button" class="anx-pdf" id="anx-pdf" title="Revue PDF (synthèse, répartition et détail), selon les filtres de la console">📄 Revue PDF</button><button type="button" class="anx-xl" id="anx-xl">⬇ Exporter en .xlsx</button>':'')+'</div>'+
+      (cur?'<button type="button" class="anx-pdf" id="anx-etat" title="État PDF des lignes, selon les filtres Groupement / Sponsor">🖨 État PDF</button><button type="button" class="anx-pdf" id="anx-pdf" title="Revue PDF complète (synthèse, répartition et détail), sans filtre">📄 Revue PDF</button><button type="button" class="anx-xl" id="anx-xl">⬇ Exporter en .xlsx</button>':'')+'</div>'+
       (cur ? '<div class="anx-actifs">'+(pastilles.length?'Filtres du tableau : '+pastilles.join("")+'<button type="button" class="fil-lien" id="anx-fz">Tout effacer</button>':'<span>Filtrez ou triez avec ▾ dans l\'en-tête des colonnes.</span>')+
           (!F.sans100?'<button type="button" class="fil-lien" id="anx-r100">Masquer les lignes à 100 %</button>':'')+
           '<span class="fil-esp"></span><span>'+cur.idx.length+' ligne'+(cur.idx.length>1?"s":"")+' sur '+cur.base.length+(pastilles.length?" · l'export Excel reprend ces filtres":"")+'</span></div>'+anxTableHtml(cur.T,cur.sec,cur.idx,f)
@@ -18165,6 +18165,7 @@ async function rendreAnnexes(){
     const fz=$("#anx-fz"); if(fz) fz.onclick=()=>{ F.val={}; F.tri=null; F.sans100=false; redessiner(); };
     const bx=$("#anx-xl"); if(bx) bx.onclick=()=>anxExporter(cur.T,cur.sec,cur.idx,ANX_FAMILLES[f].titre).catch(e=>toast("Export impossible : "+e.message,true));
     const bp=$("#anx-pdf"); if(bp) bp.onclick=()=>revueImprimer(f);
+    const be=$("#anx-etat"); if(be) be.onclick=()=>{ toast("Préparation de l'état "+ANX_FAMILLES[f].titre+"…"); anxImprimer(f).catch(e=>toast("État PDF impossible : "+e.message,true)); };
   }catch(e){
     if(jeton===ANX.jeton) z.innerHTML='<div class="app-vide">MEC 2023 / PAPRIPACT indisponibles : '+esc(e.message)+'.</div>';
   }
@@ -18190,7 +18191,7 @@ async function annexesSousListe(cont){
       const idx=anxOrdre(T,sec, fam==="mec"?ids.mec:ids.pap).filter(i=>{ if(!faL) return true; const n=anxPourcent(T,faL,i); return n===null||n<100; });
       if(!idx.length) return;
       h+='<div class="anx-bloc"><div class="anx-bloc-tete"><b>'+ANX_FAMILLES[fam].titre+'</b><span>'+idx.length+' ligne'+(idx.length>1?"s":"")+' rattachée'+(idx.length>1?"s":"")+' · hors avancement 100 % · consultation seule</span>'+
-        '<span class="fil-esp"></span><button type="button" class="anx-pdf petit" data-pdf="'+fam+'">📄 Revue PDF</button><button type="button" class="anx-xl petit" data-xl="'+fam+'">⬇ Excel</button></div>'+anxTableHtml(T,sec,idx)+'</div>';
+        '<span class="fil-esp"></span><button type="button" class="anx-pdf petit" data-etat="'+fam+'">🖨 État PDF</button><button type="button" class="anx-pdf petit" data-pdf="'+fam+'">📄 Revue PDF</button><button type="button" class="anx-xl petit" data-xl="'+fam+'">⬇ Excel</button></div>'+anxTableHtml(T,sec,idx)+'</div>';
       d._anx=d._anx||{}; d._anx[fam]={T,sec,idx};
     });
     d.innerHTML=h;
@@ -18201,6 +18202,7 @@ async function annexesSousListe(cont){
         tr.onclick=()=>{ ANX.onglet=fam; APP.retour=null; allerVue("portefeuille","annexes"); }; });
     });
     d.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=()=>revueImprimer(b.dataset.pdf));
+    d.querySelectorAll("[data-etat]").forEach(b=>b.onclick=()=>{ toast("Préparation de l'état…"); anxImprimer(b.dataset.etat).catch(e=>toast("État PDF impossible : "+e.message,true)); });
     d.querySelectorAll("[data-xl]").forEach(b=>b.onclick=()=>{ const o=d._anx[b.dataset.xl];
       anxExporter(o.T,o.sec,o.idx,ANX_FAMILLES[b.dataset.xl].titre).catch(e=>toast("Export impossible : "+e.message,true)); });
   }catch(e){
@@ -18448,19 +18450,19 @@ async function revuePrete(){
 }
 let REVUE_EN_COURS=false;
 async function revueImprimer(id){
+  /* La revue est toujours complète : elle ne suit pas les filtres de la console,
+     sauf le filtre Millésime P2A pour la revue P2A. L'état PDF, lui, suit les filtres. */
   if(REVUE_EN_COURS) return;
   REVUE_EN_COURS=true;
   const titre={mec:"MEC 2023",pap:"PAPRIPACT",p2a:"P2A"}[id]||id;
   toast("Préparation de la revue "+titre+"…");
   try{
-    const f=anxFiltres();
-    const o={groupements:f.g, sponsors:f.sp,
-      mention:[f.g.length?"Groupement : "+f.g.join(", "):"", f.sp.length?"Sponsor : "+f.sp.join(", "):""].filter(Boolean).join(" - ")};
-    if(id==="mec"||id==="pap"){
-      const ids=(f.g.length||f.sp.length)?await anxIds().catch(()=>null):null;
-      if(ids) o.ids=id==="mec"?ids.mec:ids.pap;
-      if(id==="pap") o.table=anxNomTable("pap");
+    const o={};
+    if(id==="p2a"){
+      const mi=(MENUS["m-millesime"]&&MENUS["m-millesime"].sel)||[];
+      if(mi.length){ o.millesimes=mi.slice(); o.mention="Millésime : "+mi.join(", "); }
     }
+    if(id==="pap") o.table=anxNomTable("pap");
     const w=await revuePrete();
     const n=await w.revueConsole(id,o);
     toast("Revue "+titre+" créée ("+n+" page"+(n>1?"s":"")+")");
@@ -25614,7 +25616,7 @@ window.planningPret = ()=>!!(lastView && lastView.units && lastView.units.length
   .w-nat{width:46px;} .w-p2a{width:72px;} .w-origine{width:78px;}
   .tab td.col-p2a{overflow:visible;white-space:nowrap;}
   .tab td.col-origine{white-space:normal;overflow:hidden;line-height:1.25;}
-  .w-ins{width:104px;} .tab td.col-ins{white-space:normal;line-height:1.25;font-size:10.5px;}
+  .w-ins{width:104px;} .w-com{width:150px;} .tab.pap th,.tab.plat th.w-com{white-space:normal;} .tab td.com{white-space:pre-line;font-size:10px;line-height:1.3;color:#3e382f;} .tab td.col-ins{white-space:normal;line-height:1.25;font-size:10.5px;}
   .ins-e{display:block;color:#1c2f6b;} .ins-e.passee{color:#8a8f9c;} .ins-e.plus{color:#7a7f8c;font-size:10px;} .w-porteur{width:112px;}
   .w-service{width:112px;}
   .tab td.col-service{white-space:normal;overflow-wrap:anywhere;} .w-echeance{width:76px;} .w-avct{width:80px;} .w-cat{width:130px;}
@@ -26322,6 +26324,7 @@ function lireAnnexe(tableId, ligne, facteur, clesLibelle){
     groupement: texte(tableId, ligne, "Groupement", "Groupement_Pilote"),
     origineAnnexe: texte(tableId, ligne, "Origine"),
     famille: texte(tableId, ligne, "Famille"),
+    commentaire: texte(tableId, ligne, "Commentaires", "Commentaire", "Observation_Porteur"),
     statutTexte: statutBrut,
     avctTexte,
     echeance: formatDate(ctx.brut(ligne, "Ech_Prev", "Ech.prev", "Echeance", "Echéance", "Échéance")),
@@ -28286,7 +28289,7 @@ function tableauPapripact(lignes){
     + '<th class="c w-pap-or">Origine</th><th class="c w-pap-fam">Famille</th>'
     + '<th class="c w-service col-service">Service</th><th class="c w-grp">Groupement</th>'
     + '<th class="c w-echeance col-echeance">Échéance</th><th class="c w-pap-st">Statut</th>'
-    + '<th class="c w-avct">Avct</th></tr></thead><tbody>'];
+    + '<th class="c w-avct">Avct</th><th class="w-com">Commentaire</th></tr></thead><tbody>'];
   lignes.forEach(o => {
     const c = couleurAvancement(o.pourcent, o.interrompu);
     const av = o.avctTexte
@@ -28299,7 +28302,8 @@ function tableauPapripact(lignes){
       + '<td class="c txt">' + coupable(o.groupement) + "</td>"
       + celluleEcheance(o)
       + '<td class="c txt">' + coupable(o.statutTexte) + "</td>"
-      + '<td class="c">' + av + "</td></tr>");
+      + '<td class="c">' + av + "</td>"
+      + '<td class="com">' + echapper(o.commentaire || "") + "</td></tr>");
   });
   h.push("</tbody></table>");
   return h.join("");
@@ -28315,9 +28319,11 @@ function annexesHtml(mec, pap, avecGroupement){
     if (titre === "PAPRIPACT"){ h.push(tableauPapripact(lignes)); return; }
     const sansEch = titre === "MEC 2023";
     const grp = avecGroupement && titre === "MEC 2023";
-    h.push('<table class="tab plat">' + enteteTableau("Libellé", true, true, true, sansEch, false, grp) + "<tbody>");
+    h.push('<table class="tab plat">' + enteteTableau("Libellé", true, true, true, sansEch, false, grp)
+      .replace('<th class="c w-avct">Avct</th></tr>', '<th class="c w-avct">Avct</th><th class="w-com">Commentaire</th></tr>') + "<tbody>");
     lignes.forEach(o => h.push(ligneTableau({ libelleHtml: echapper(o.libelle), o, categorie: o.categorie || "",
-      avecPorteur: true, avecService: true, sansEcheance: sansEch, grpAnnexe: grp ? (o.groupement || "") : undefined })));
+      avecPorteur: true, avecService: true, sansEcheance: sansEch, grpAnnexe: grp ? (o.groupement || "") : undefined })
+      .replace(/<\/tr>$/, '<td class="com">' + echapper(o.commentaire || "") + "</td></tr>")));
     h.push("</tbody></table>");
   });
   h.push("</div>");
@@ -30485,6 +30491,7 @@ function bilanP2A(fraction){
     const groupement = (projet ? txt(projet[cfg.colGroupement]) : "")
                        || txt(l[cfg.colGroupement]) || "Non renseigné";
     lignes.push({
+      rowId: l.id,
       millesimes: communs.join(" · "),
       nature,
       libelle: txt(l[cfg.colLibelle]),
@@ -33039,6 +33046,7 @@ function jeuP2A(c, nature){
     libelle: l.estProjet ? l.libelle
       : l.libelle + "\nProjet : " + (l.libelleProjet || "non identifié"),
     projetRattache: l.estProjet ? "" : (l.libelleProjet || "non identifié"),
+    rowId: l.rowId,
     porteur: l.porteur,
     groupement: l.groupement,
     priorite: l.priorite,
@@ -33440,33 +33448,21 @@ window.revueConsole = async (id, o) => {
     } finally { recMEC = sv; recalcule(); }
   }
   if(id === "p2a"){
+    /* toujours complète ; seul le filtre Millésime P2A de la console change les millésimes retenus */
     const type = TYPES.find(t => t.id === "p2a");
-    const filtre = l => correspond(l.groupement, o.groupements) && correspond(l.sponsor, o.sponsors);
-    const actif = (o.groupements && o.groupements.length) || (o.sponsors && o.sponsors.length);
-    const jeu = jeuP2A(calcul, "tous");
-    const global = jeuP2A(calculComplet || calcul, "tous").global;
-    if(actif){
-      jeu.lignes = jeu.lignes.filter(filtre);
-      agrege(jeu);
-      const garde = new Set(jeu.lignes.map(l => l.categorie));
-      jeu.categories = jeu.categories.filter(c => garde.has(c.cle));
-      const gs = new Set(jeu.lignes.map(l => l.groupement));
-      if(jeu.focus){
-        jeu.focus.categories = jeu.focus.categories.filter(c => gs.has(c.cle));
-        jeu.categoriesSommaire = jeu.focus.categories;
-        Object.keys(jeu.focus.croise).forEach(g => { if(!gs.has(g)) delete jeu.focus.croise[g]; else
-          STATUTS_P.forEach(s => jeu.focus.croise[g][s.cle] = jeu.lignes.filter(l => l.groupement === g && l.statut === s.cle).length); });
-      }
-      if(jeu.donut) jeu.donut.forEach(d => d.valeur = jeu.lignes.filter(l => l.nature === d.cle).length);
-      if(jeu.natures) jeu.natures.forEach(nn => nn.valeur = jeu.lignes.filter(l => l.millesimes.includes(nn.libelle)).length);
-      jeu.selection = { global: jeu.global, court: o.mention || "sélection", libelle: (o.mention || "sélection") + " au " + jjmmaaaa(new Date()), vide: !jeu.total };
-      jeu.evolution = null;
-    } else jeu.evolution = evolutionDe(jeu, "p2a");
-    jeu.global = global;
-    jeu.libelleGlobal = "ensemble du P2A au " + jjmmaaaa(new Date());
-    jeu.libelleGlobalCourt = "ensemble du P2A";
-    return pdfDepuisJeu(Object.assign({}, type, { unite: n => n > 1 ? "projets et actions" : "projet ou action" }), jeu,
-      mentionFiltres({ prio:true, cat:false }) + mention, type.fichier + "_" + calcul.annee + ".pdf");
+    const svM = cfg.p2aChoisis;
+    if(o.millesimes && o.millesimes.length){ cfg.p2aChoisis = o.millesimes.slice(); recalcule(); }
+    try{
+      const jeu = jeuP2A(calcul, "tous");
+      jeu.global = jeuP2A(calculComplet || calcul, "tous").global;
+      jeu.libelleGlobal = "ensemble du P2A au " + jjmmaaaa(new Date());
+      jeu.libelleGlobalCourt = "ensemble du P2A";
+      jeu.evolution = (o.millesimes && o.millesimes.length) ? null : evolutionDe(jeu, "p2a");
+      return pdfDepuisJeu(Object.assign({}, type, { unite: n => n > 1 ? "projets et actions" : "projet ou action" }), jeu,
+        mentionFiltres({ prio:true, cat:false }) + mention, type.fichier + "_" + calcul.annee + ".pdf");
+    } finally {
+      if(o.millesimes && o.millesimes.length){ cfg.p2aChoisis = svM; recalcule(); }
+    }
   }
   throw new Error("type de revue inconnu");
 };
