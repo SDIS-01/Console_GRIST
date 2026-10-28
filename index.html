@@ -2196,6 +2196,12 @@ button.ins-plus{border:0;background:none;padding:0 3px;font:inherit;font-size:11
 .p2a-table tr.p2a-tete td{font-weight:700;color:#1c2f6b;font-size:12.5px;}
 .p2a-table tr.p2a-act td.app-nom,.p2a-table tr.p2a-act td.app-nom *{font-weight:400;}
 .p2a-table tr.p2a-act td.app-nom .et-t{font-weight:600;}
+/* instances : commentaire */
+.tab-histo .col-com{min-width:180px;}
+.ins-com{display:flex;align-items:flex-start;gap:6px;}
+.ins-com-t{flex:1;white-space:pre-wrap;overflow-wrap:anywhere;}
+.ins-com .cel-vide{flex:1;}
+.ins-com-b{flex:none;padding:1px 5px;font-size:12px;}
 </style>
 </head>
 <body>
@@ -2569,7 +2575,7 @@ const DEF = {
   colJnlReponse:"Reponse_a", colJnlTraite:"Traité", colJnlSaisie:"Date_Saisie",
   colJalCommentaire:"",
   tblInstance:"", colInsLien:"", colInsDate:"", colInsLibelle:"", colInsHisto:"",
-  colInsType:"", colInsRapporteur:"", colInsAction:"", colInsPeriode:"Periode_Prevue",
+  colInsType:"", colInsRapporteur:"", colInsAction:"", colInsPeriode:"Periode_Prevue", colInsCommentaire:"Commentaire",
   /* périodes d'instances, saisies dans Grist (instances « à programmer ») */
   tblPeriode:"Periodes_Instances", colPerLibelle:"Libelle", colPerDebut:"Debut", colPerFin:"Fin",
   tblNote:"", colNoteLien:"Projet", colNoteAction:"Action_MEO", colNoteAuteur:"Auteur",
@@ -2635,7 +2641,7 @@ const CHAMPS_REGLAGES = [
     ["colInsLibelle","Libellé saisi à l'ajout"],
     ["colInsHisto","Colonne affichée dans l'historique"],
     ["colInsType","Type"],["colInsRapporteur","Rapporteur"],
-    ["colInsPJ","Pièces jointes"],
+    ["colInsPJ","Pièces jointes"],["colInsCommentaire","Commentaire"],
     ["colInsPeriode","Période prévue (référence, instance à programmer)"]
   ]},
   {bloc:"Table des périodes d'instances", tableKey:"tblPeriode", champs:[
@@ -4194,8 +4200,11 @@ function projetsFiltres(){
   });
 }
 
+function anxFiltresActifs(){
+  return typeof ANX!=="undefined" && !!ANX.fc && Object.values(ANX.fc).some(F=>Object.keys(F.val).length || F.tri || !F.sans100);
+}
 function filtresActifs(){
-  return !!$("#q").value.trim() || DATES_FILTRE.some(s=>$(s).value)
+  return !!$("#q").value.trim() || DATES_FILTRE.some(s=>$(s).value) || anxFiltresActifs()
     || S.voirArchives || Object.keys(MENUS).some(id=>MENUS[id].sel.length);
 }
 
@@ -4205,6 +4214,9 @@ function reinitialiserFiltres(){
   S.voirArchives=false;
   const cba=$("#f-archives"); if(cba) cba.checked=false;
   Object.keys(MENUS).forEach(id=>{ MENUS[id].sel=[]; rendreMenu(id); });
+  /* filtres de colonnes MEC 2023 / PAPRIPACT : retour aux valeurs par défaut (100 % masqués) */
+  if(typeof ANX!=="undefined" && ANX.fc) Object.keys(ANX.fc).forEach(k=>{ ANX.fc[k]={val:{},tri:null,sans100:true}; });
+  document.querySelectorAll(".anx-pop,.msel-pan").forEach(x=>{ if(x.classList.contains("anx-pop")) x.remove(); else x.hidden=true; });
   rendreListe();
   $("#q").focus();
 }
@@ -4313,10 +4325,23 @@ function agentCourant(){
     if(a){ S.agentParCompte=true; return a; }
   }
   S.agentParCompte=false;
+  const parNom=agentParNom(agents);
+  if(parNom){ S.agentParCompte=true; return parNom; }
   const choisi=Number(lsLire(NT_AGENT));
   return choisi ? agents.find(r=>r.id===choisi)||null : null;
 }
 function nomAgent(a){ return a ? txt(lire(S.cfg.tblAgent,a,S.cfg.colAgentNom)).trim() : ""; }
+/* nom du compte (Grist) ou partie gauche de l'e-mail (prenom.nom) comparés au nom de l'agent,
+   sans tenir compte de l'ordre prénom / nom ni des accents ; un seul agent doit correspondre */
+function agentParNom(agents){
+  const mots=v=>plierTexte(String(v||"")).replace(/[^a-z0-9]+/g," ").trim().split(" ").filter(Boolean).sort().join(" ");
+  const pistes=[S.moi, nomDepuisCompte()].map(mots).filter(x=>x && x.includes(" "));
+  for(const k of pistes){
+    const ok=agents.filter(a=>mots(nomAgent(a))===k);
+    if(ok.length===1) return ok[0];
+  }
+  return null;
+}
 
 /* la cellule désigne-t-elle l'agent ? Référence vers la table des agents :
    par la ligne ; sinon par le nom, écrit comme dans la table des agents */
@@ -6466,7 +6491,7 @@ function nomDepuisCompte(){
 function ouvrirBulle(bouton,tableId,rowId,colId,apres){
   fermerBulle();
   const nonTrace=commentaireNonTrace(tableId,rowId);
-  const auto=S.moi||(nonTrace?nomDepuisCompte():"");
+  const auto=S.moi||nomDepuisCompte();
   const connu=auto||((!hmPret()||nonTrace)?moiMemorise():"");
   const demanderNom=!auto && (!hmPret()||nonTrace);
   const b=document.createElement("div");
@@ -6512,8 +6537,8 @@ async function ajouterCommentaire(tableId,rowId,colId,texte,nom){
   const ligne=ligneDe(tableId,rowId);
   if(!ligne){ toast("Ligne introuvable.",true); return false; }
   const ancien=txt(ligne[colId]);
-  const JOKER="\u2063AUTEUR\u2063";           // remplacé dès que le nom est connu
-  const entete=dateDuJourFR()+" — "+(nom||JOKER)+" : ";
+  if(!nom) nom=S.moi||nomDepuisCompte()||moiMemorise()||"";
+  const entete=dateDuJourFR()+" — "+(nom?nom+" : ":"");
   const ajout=entete+texte;
   const nouveau=ajout+(ancien.trim()?"\n\n"+ancien.replace(/^\s+/,""):"");   // une ligne vide entre deux saisies
   const tr=traceModif(tableId,rowId,colId,nouveau,ancien);
@@ -6521,14 +6546,13 @@ async function ajouterCommentaire(tableId,rowId,colId,texte,nom){
   try{
     await appliquer([["UpdateRecord",tableId,rowId,{[colId]:nouveau}]],tr?[tr]:[]);
   }catch(e){ toast("Échec de l'enregistrement : "+e.message,true); return false; }
-  if(!nom){
-    /* première écriture de la session : le nom vient d'être appris */
-    const vrai=S.moi||"";
-    const fix=s=>s.replace(JOKER+" : ",vrai?vrai+" : ":"").replace(JOKER,vrai);
-    const acts=[["UpdateRecord",tableId,rowId,{[colId]:fix(nouveau)}]];
+  if(!nom && S.moi){
+    /* aucun nom connu avant l'écriture : celui que Grist vient d'inscrire est ajouté ensuite,
+       commentaire et historique en deux écritures séparées */
+    const fix=s=>s.replace(entete,entete.replace(/ — $/," — "+S.moi+" : "));
+    try{ await grist.docApi.applyUserActions([["UpdateRecord",tableId,rowId,{[colId]:fix(nouveau)}]]); }catch(e){}
     if(tr && S.derniersHm && S.derniersHm.length && c.colHmNouveau)
-      acts.push(["UpdateRecord",c.tblHm,S.derniersHm[S.derniersHm.length-1],{[c.colHmNouveau]:fix(ajout)}]);
-    try{ await grist.docApi.applyUserActions(acts); }catch(e){}
+      try{ await grist.docApi.applyUserActions([["UpdateRecord",c.tblHm,S.derniersHm[S.derniersHm.length-1],{[c.colHmNouveau]:fix(ajout)}]]); }catch(e){}
   }
   toast("Commentaire ajouté");
   return true;
@@ -6698,7 +6722,20 @@ function brancherAjout(p,prefixe,cles,extras,alerte){
 const CLES_INSTANCE={table:"tblInstance",lien:"colInsLien",date:"colInsDate",
                      lib:"colInsLibelle",action:"colInsAction",periode:"colInsPeriode"};
 const EXTRAS_INSTANCE=[{cle:"colInsType",id:"type",libelle:"Type"},
-                       {cle:"colInsRapporteur",id:"rapporteur",libelle:"Rapporteur"}];
+                       {cle:"colInsRapporteur",id:"rapporteur",libelle:"Rapporteur"},
+                       {cle:"colInsCommentaire",id:"commentaire",libelle:"Commentaire"}];
+/* la colonne Commentaire n'est retenue que si elle existe dans la table */
+function insComOk(){
+  const c=S.cfg, col=c.colInsCommentaire;
+  return !!(col && c.tblInstance && infoCol(c.tblInstance,col));
+}
+function extrasInstance(){ return EXTRAS_INSTANCE.filter(e=>e.cle!=="colInsCommentaire"||insComOk()); }
+function insComHtml(j){
+  const c=S.cfg, v=txt(j.ligne[c.colInsCommentaire]).trim();
+  return '<div class="ins-com">'+(v?'<div class="ins-com-t">'+esc(v)+'</div>':'<span class="cel-vide">—</span>')+
+    '<button type="button" class="btn-bulle ins-com-b" data-bulle-t="'+esc(c.tblInstance)+'" data-bulle-r="'+j.id+
+    '" data-bulle-c="'+esc(c.colInsCommentaire)+'" title="Ajouter un commentaire daté">💬</button></div>';
+}
 
 function btnSupHisto(j){
   return '<button class="btn-sup" data-supjal="'+j.id+'" data-tbl="'+esc(j.table)+'" '+
@@ -6723,8 +6760,8 @@ function tableauInstances(instances){
   const configuree=!!(c.tblInstance&&c.colInsLien);
   const filtre=filtreHisto(id,actionsPresentes(instances),instances.some(e=>!e.action));
   const avecType=!!c.colInsType, avecRap=!!c.colInsRapporteur, avecAction=!!c.colInsAction;
-  const avecPJ=!!c.colInsPJ;
-  const nbCol=2+(avecType?1:0)+(avecRap?1:0)+(avecAction?1:0)+(avecPJ?1:0)+1;
+  const avecPJ=!!c.colInsPJ, avecCom=insComOk();
+  const nbCol=2+(avecType?1:0)+(avecRap?1:0)+(avecAction?1:0)+(avecCom?1:0)+(avecPJ?1:0)+1;
   const ouvert=S.deverrouille;
   const cel=v=>v?esc(v):'<span class="cel-vide">—</span>';
   /* déverrouillé, chaque cellule devient un éditeur sur sa colonne d'origine */
@@ -6738,11 +6775,12 @@ function tableauInstances(instances){
         (avecType?'<th class="col-etroite">Type</th>':'')+
         (avecRap?'<th class="col-etroite">Rapporteur</th>':'')+
         (avecAction?'<th class="col-etroite">Action</th>':'')+
+        (avecCom?'<th class="col-com">Commentaire</th>':'')+
         (avecPJ?'<th>Pièces jointes</th>':'')+
         '<th style="width:'+(instances.some(j=>j.aProgrammer)?"118px":"34px")+'"></th></tr></thead><tbody>'+
         instances.map(j=>
-          S.insProg===j.id ? ligneProgrammation(j,avecType,avecRap,avecAction,avecPJ) :
-          (j.aProgrammer && !ouvert) ? ligneAProgrammer(j,avecType,avecRap,avecAction,avecPJ) :
+          S.insProg===j.id ? ligneProgrammation(j,avecType,avecRap,avecAction,avecPJ,avecCom) :
+          (j.aProgrammer && !ouvert) ? ligneAProgrammer(j,avecType,avecRap,avecAction,avecPJ,avecCom) :
           '<tr class="ligne-histo'+(j.aProgrammer?" ins-prog":"")+'" id="ins-'+j.id+'" data-act="'+esc(j.action||"")+'">'+
           '<td class="col-date cel-date">'+
             (ed(j,c.colInsDate)||esc(dateVersFR(j.date)||"—"))+
@@ -6757,6 +6795,7 @@ function tableauInstances(instances){
           (avecAction?'<td>'+(j.action
             ? '<span class="pastille p-action" title="'+esc(j.action)+'">'+esc(j.action)+'</span>'
             : '<span class="cel-vide">—</span>')+'</td>':'')+
+          (avecCom?'<td class="cel-texte">'+(ed(j,c.colInsCommentaire,{auto:true})||insComHtml(j))+'</td>':'')+
           (avecPJ?'<td>'+blocPJ(c.tblInstance,j.ligne,c.colInsPJ)+'</td>':'')+
           '<td>'+btnSupHisto(j)+'</td></tr>').join("")+
         ligneRienHisto(nbCol)+'</tbody></table>';
@@ -6766,7 +6805,7 @@ function tableauInstances(instances){
 }
 
 /* ligne d'une instance à programmer, en consultation */
-function ligneAProgrammer(j,avecType,avecRap,avecAction,avecPJ){
+function ligneAProgrammer(j,avecType,avecRap,avecAction,avecPJ,avecCom){
   const c=S.cfg, e=etatPeriode(j.periode);
   const vide='<span class="cel-vide">—</span>';
   return '<tr class="ligne-histo ins-prog" id="ins-'+j.id+'" data-act="'+esc(j.action||"")+'">'+
@@ -6778,12 +6817,13 @@ function ligneAProgrammer(j,avecType,avecRap,avecAction,avecPJ){
     (avecRap?'<td>'+(j.rapporteur?esc(j.rapporteur):vide)+'</td>':'')+
     (avecAction?'<td>'+(j.action
       ? '<span class="pastille p-action" title="'+esc(j.action)+'">'+esc(j.action)+'</span>':vide)+'</td>':'')+
+    (avecCom?'<td class="cel-texte">'+insComHtml(j)+'</td>':'')+
     (avecPJ?'<td>'+blocPJ(c.tblInstance,j.ligne,c.colInsPJ)+'</td>':'')+
     '<td style="white-space:nowrap"><button type="button" class="btn-prog" data-insprog="'+j.id+'" '+
       'title="Saisir la date, le libellé, le type et le rapporteur">Programmer</button>'+btnSupHisto(j)+'</td></tr>';
 }
 /* même ligne, ouverte pour la programmer : date, libellé, type, rapporteur */
-function ligneProgrammation(j,avecType,avecRap,avecAction,avecPJ){
+function ligneProgrammation(j,avecType,avecRap,avecAction,avecPJ,avecCom){
   const c=S.cfg;
   return '<tr class="ins-edition" id="ins-'+j.id+'" data-act="'+esc(j.action||"")+'">'+
     '<td class="col-date"><span class="ins-per">'+esc(j.periode?j.periode.libelle:"")+'</span>'+
@@ -6792,6 +6832,7 @@ function ligneProgrammation(j,avecType,avecRap,avecAction,avecPJ){
     (avecType?'<td>'+champVierge(c.tblInstance,c.colInsType,"ip-type")+'</td>':'')+
     (avecRap?'<td>'+champVierge(c.tblInstance,c.colInsRapporteur,"ip-rap")+'</td>':'')+
     (avecAction?'<td>'+(j.action?'<span class="pastille p-action">'+esc(j.action)+'</span>':'')+'</td>':'')+
+    (avecCom?'<td class="cel-texte">'+insComHtml(j)+'</td>':'')+
     (avecPJ?'<td></td>':'')+
     '<td><div class="ins-boutons"><button type="button" class="btn" id="ip-ok">Enregistrer</button>'+
       '<button type="button" class="btn-2" id="ip-ko">Annuler</button></div></td></tr>';
@@ -6846,13 +6887,17 @@ function vueInstances(p){
   $("#corps").innerHTML =
     '<div class="duo">'+
       '<div class="duo-ajout">'+
-        carteAjout(p,"in","Ajouter une instance",CLES_INSTANCE,EXTRAS_INSTANCE,
+        carteAjout(p,"in","Ajouter une instance",CLES_INSTANCE,extrasInstance(),
                    "Libellé de l'instance","Ajouter l'instance")+
       '</div>'+
       '<div class="duo-histo">'+tableauInstances(instances)+'</div>'+
     '</div>';
 
-  brancherAjout(p,"in",CLES_INSTANCE,EXTRAS_INSTANCE,"Indiquez le libellé de l'instance avant d'ajouter.");
+  brancherAjout(p,"in",CLES_INSTANCE,extrasInstance(),"Indiquez le libellé de l'instance avant d'ajouter.");
+  document.querySelectorAll("#corps .ins-com-b").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    ouvrirBulle(b,b.dataset.bulleT,Number(b.dataset.bulleR),b.dataset.bulleC,()=>rendreProjet());
+  });
   brancherProgrammation(p);
   brancherFiltresHisto();
   brancherSuppressionHisto();
@@ -17396,7 +17441,9 @@ function menuEditionsHtml(){
     (notifsPossibles()
       ? it("","voir-agent","🔒 Se connecter comme un autre agent","mot de passe")+
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
-    '<div class="ed-version">Version du 27/10/2026 · 14 h 57</div>';
+    (typeof autNbOccurrences==="function" && autNbOccurrences()
+      ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
+    '<div class="ed-version">Version du 28/10/2026 · 9 h 05</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17406,6 +17453,7 @@ async function lancerEdition(id){
   if(id==="analyse"){ $("#btn-ana-pf").click(); return; }
   if(id==="revues"){ ouvrirRevues(); return; }
   if(id==="demandes"){ demOuvrirAdmin(); return; }
+  if(id==="corr-auteur"){ autCorriger(); return; }
   if(id==="recap-notifs"){
     if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
     ouvrirRecapNotifs(); return;
@@ -18340,7 +18388,7 @@ async function anxEcrire(T,i,colId,val){
   await grist.docApi.applyUserActions([["UpdateRecord",T.tableId,T.data.id[i],{[colId]:val}]]);
   if(T.data[colId]) T.data[colId][i]=val;
 }
-function anxNomMoi(){ return S.moi || (typeof agentCourant==="function"?nomAgent(agentCourant()):"") || ""; }
+function anxNomMoi(){ return S.moi || nomDepuisCompte() || (typeof agentCourant==="function"?nomAgent(agentCourant()):"") || moiMemorise() || ""; }
 async function anxAjouterCom(T,f,i,texte){
   const ancien=txt(T.data[f.colId]?T.data[f.colId][i]:"");
   const nom=anxNomMoi();
@@ -20887,6 +20935,68 @@ async function p2aExcel(L,mil){
   a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
   a.download=("P2A_"+mil.lib).normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^\w\-]+/g,"_")+"_"+new Date().toISOString().slice(0,10)+".xlsx";
   document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },2000);
+}
+
+/* =======================================================================
+   Correction ponctuelle des commentaires restés avec le repère « AUTEUR »
+   (ancienne écriture en deux temps). L'auteur est retrouvé dans la table
+   d'historique : la ligne dont la nouvelle valeur contient le même texte.
+   ======================================================================= */
+const AUT_RE=/ — ⁣?AUTEUR⁣? : /g;
+function autTables(){
+  const c=S.cfg;
+  return [[c.tblMain,S.data.main],[c.tblTache,S.data.taches],[c.tblInstance,S.data.instances],
+          [c.tblJournal,S.data.journal],[c.tblNote,S.data.notes]].filter(([t,d])=>t&&d&&d.length);
+}
+/* liste des cellules concernées : {table, ligne, col, valeur} */
+function autCellules(){
+  const out=[];
+  autTables().forEach(([t,d])=>d.forEach(r=>Object.keys(r).forEach(k=>{
+    const v=r[k]; if(typeof v==="string" && v.indexOf("AUTEUR")>=0 && new RegExp(AUT_RE.source).test(v)) out.push({table:t,ligne:r,col:k,valeur:v});
+  })));
+  return out;
+}
+function autNbOccurrences(){ return autCellules().reduce((n,x)=>n+(x.valeur.match(AUT_RE)||[]).length,0); }
+/* auteur d'un ajout : ligne d'historique dont la nouvelle valeur contient le texte du commentaire */
+function autAuteurDe(texte){
+  const c=S.cfg, hm=S.data.hm||[];
+  if(!c.colHmNouveau || !c.colHmAuteur || !hm.length) return "";
+  const pli=v=>plierTexte(String(v||"")).replace(/\s+/g," ").trim();
+  const cible=pli(texte).slice(0,120); if(cible.length<3) return "";
+  const h=hm.filter(r=>txt(r[c.colHmAuteur]).trim() && pli(r[c.colHmNouveau]).indexOf(cible)>=0)
+            .sort((a,b)=>b.id-a.id)[0];
+  return h ? txt(lire(c.tblHm,h,c.colHmAuteur)||h[c.colHmAuteur]).trim() : "";
+}
+/* corrige une valeur : chaque entrée « date — AUTEUR : texte » reçoit son auteur ;
+   sans auteur retrouvé, le repère est retiré (« date — texte ») */
+function autCorrigerValeur(v,stats){
+  return v.split(/(\n\n)/).map(bloc=>{
+    if(!new RegExp(AUT_RE.source).test(bloc)) return bloc;
+    const texte=bloc.replace(/^.*? — ⁣?AUTEUR⁣? : /,"").split("\n")[0];
+    const nom=autAuteurDe(texte);
+    if(nom) stats.ok++; else stats.sans++;
+    return bloc.replace(new RegExp(AUT_RE.source),nom?" — "+nom+" : ":" — ");
+  }).join("");
+}
+async function autCorriger(){
+  if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
+  const cel=autCellules();
+  if(!cel.length){ toast("Aucun commentaire « AUTEUR » à corriger."); return; }
+  if(!await motDePasseValide("Mot de passe pour corriger les commentaires « AUTEUR » :")) return;
+  const stats={ok:0,sans:0}, maj=new Map();
+  cel.forEach(x=>{
+    const k=x.table+"|"+x.ligne.id;
+    if(!maj.has(k)) maj.set(k,{table:x.table,id:x.ligne.id,champs:{}});
+    maj.get(k).champs[x.col]=autCorrigerValeur(x.valeur,stats);
+  });
+  if(!confirm(stats.ok+stats.sans+" commentaire(s) « AUTEUR » trouvé(s) : "+stats.ok+" auteur(s) retrouvé(s) dans l'historique"+
+     (stats.sans?", "+stats.sans+" sans auteur retrouvé (le mot « AUTEUR » sera simplement retiré)":"")+".\n\nCorriger maintenant ?")) return;
+  try{
+    const acts=[...maj.values()].map(m=>["UpdateRecord",m.table,m.id,m.champs]);
+    for(let i=0;i<acts.length;i+=200) await grist.docApi.applyUserActions(acts.slice(i,i+200));
+    toast("Commentaires corrigés : "+stats.ok+" avec auteur"+(stats.sans?", "+stats.sans+" sans auteur":""));
+    await charger(); if(typeof rendreApp==="function") rendreApp();
+  }catch(e){ toast("Correction impossible : "+e.message,true); }
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
