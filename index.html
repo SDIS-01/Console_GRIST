@@ -3981,8 +3981,10 @@ function rendreOptionsMenu(id){
   const q=sansAccent(m.q||"").trim();
   const vus = q ? m.opts.filter(([v,l])=>sansAccent(l).includes(q)) : m.opts;
 
+  const tousVus=vus.length>0 && vus.every(([v])=>m.sel.includes(v));
   zone.innerHTML=
-    (q ? '' :
+    (q ? (vus.length?'<label class="msel-tout"><input type="checkbox" data-vus'+(tousVus?" checked":"")+'>'+
+      '<span class="msel-txt">Tout sélectionner ('+vus.length+' résultat'+(vus.length>1?"s":"")+')</span></label>':'') :
       '<label class="msel-tout"><input type="checkbox" data-tout'+(n===0?" checked":"")+'>'+
       '<span class="msel-txt">'+esc(m.tous)+'</span></label>')+
     (vus.length
@@ -3993,11 +3995,22 @@ function rendreOptionsMenu(id){
 
   zone.querySelectorAll("input").forEach(inp=>inp.onchange=()=>{
     if(inp.hasAttribute("data-tout")) m.sel=[];
+    else if(inp.hasAttribute("data-vus")){
+      const ids=vus.map(([v])=>v);
+      m.sel = inp.checked ? [...new Set(m.sel.concat(ids))] : m.sel.filter(x=>!ids.includes(x));
+    }
     else m.sel = inp.checked ? m.sel.concat([inp.value]) : m.sel.filter(x=>x!==inp.value);
-    /* on ne reconstruit que l'étiquette et la liste : le curseur reste dans la recherche */
+    /* la vue peut redessiner le menu (onglets de la fiche) : il est rouvert au même endroit */
+    const pan0=wrap.querySelector(".msel-pan"), haut=pan0?pan0.scrollTop:0, taille=pan0?[pan0.style.width,pan0.style.height]:["",""];
+    const rechActive=document.activeElement && document.activeElement.classList.contains("msel-q");
     majEtiquetteMenu(id);
     rendreOptionsMenu(id);
     (m.maj||rendreListe)();
+    const w2=$("#"+id); if(!w2) return;
+    if(w2!==wrap) rendreOptionsMenu(id);
+    const pan2=w2.querySelector(".msel-pan");
+    if(pan2){ pan2.hidden=false; if(w2!==wrap){ pan2.style.width=taille[0]; pan2.style.height=taille[1]; } pan2.scrollTop=haut; }
+    const q2=w2.querySelector(".msel-q"); if(q2 && rechActive){ q2.focus(); const k=q2.value.length; q2.setSelectionRange(k,k); }
   });
 }
 
@@ -17443,7 +17456,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 28/10/2026 · 9 h 05</div>';
+    '<div class="ed-version">Version du 02/11/2026 · 13 h 48</div>';
   return h;
 }
 async function lancerEdition(id){
