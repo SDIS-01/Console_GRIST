@@ -17465,7 +17465,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 02/11/2026 · 16 h 26</div>';
+    '<div class="ed-version">Version du 02/11/2026 · 16 h 40</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -32117,12 +32117,20 @@ function pageP2ARecap(doc, annee, b){
   image(doc, page, { x:2.5, y:4.6, w:3.1, h:3.1, base64:anneauAvancement(moyenneAv(L), null, true) });
 
   const cats = IDENT_P2A.filter(([k]) => ["CASDIS","NDS","Ajout"].includes(k) || L.some(l => l.ident === k));
-  const xCart = 7.7, ecart = 0.3, largeur = (MARGE + LARG - xCart - ecart * (cats.length - 1)) / cats.length;
-  cats.forEach(([k, coul], i) => {
-    const ls = L.filter(l => l.ident === k);
-    cartouche(doc, page, xCart + i * (largeur + ecart), largeur, ls.length,
-              k + (ls.length ? " · " + moyenneAv(ls) + " %" : ""), coul, null, "neutre", 5.5);
-  });
+  /* cartouches : total, puis PEPS et AV ; une action MEO compte avec la nature de son projet */
+  const natProjet = l => {
+    if(l.estProjet) return l.nature;
+    const pr = b.projets.get(l.idProjet);
+    return pr ? txt(pr[cfg.colNature]).toUpperCase() : "";
+  };
+  const peps = L.filter(l => natProjet(l) === "PEPS"), av = L.filter(l => natProjet(l) === "AV");
+  const meoPeps = peps.filter(l => !l.estProjet).length, meoAv = av.filter(l => !l.estProjet).length;
+  const xCart = 7.7, ecart = 0.3, largeur = (MARGE + LARG - xCart - ecart * 2) / 3;
+  cartouche(doc, page, xCart, largeur, L.length, "inscriptions · " + moyenneAv(L) + " %", "#7f6f6c", null, "neutre", 5.5);
+  cartouche(doc, page, xCart + largeur + ecart, largeur, peps.length,
+            "PEPS" + (meoPeps ? " · dont " + meoPeps + " MEO" : ""), "#C0504D", null, "neutre", 5.5);
+  cartouche(doc, page, xCart + 2 * (largeur + ecart), largeur, av.length,
+            "AV" + (meoAv ? " · dont " + meoAv + " MEO" : ""), "#4F81BD", null, "neutre", 5.5);
 
   const totaux = {}; ORDRE_STATUTS.forEach(k => totaux[k] = 0);
   const lignes = cats.map(([k]) => {
@@ -32142,40 +32150,52 @@ function pageP2ARecap(doc, annee, b){
     hauteurFixe:hLigne, titreSuite:null, lignes });
 }
 
-function pagesP2AListes(doc, annee, b){
-  const L = b.lignes;
-  if(!L.length) return;
-  const tri = (a, z) => rangIdent(a) - rangIdent(z) || a.groupement.localeCompare(z.groupement, "fr");
-  // --- terminés ---
-  const term = L.filter(l => statutDeLigne(l.avancement, l.interrompu) === "termine")
-    .sort((a, z) => tri(a, z) || a.libelle.localeCompare(z.libelle, "fr"));
-  const pT = nouvellePage(doc, "P2A " + annee + " — terminés", term.length +
-    (term.length > 1 ? " inscriptions terminées" : " inscription terminée") + " sur " + L.length);
-  if(!term.length) bloc(doc, pT, { x:MARGE, y:Y_CONTENU, w:LARG, h:1, taille:11, couleur:"#6F6862",
-                                   texte:"Aucune inscription terminée." });
-  else tableauPagine(doc, { page:pT, x:MARGE, y:Y_CONTENU, titreSuite:null, maxLignes:3,
-    largeurs:[2.6, 4.0, 9.6, 1.8, 4.2, 3.0],
-    entetes:["Identif.", "Groupement", "Libellé", "Priorité", "Porteur", "Fin"],
-    alignes:["start", "start", "start", "center", "start", "center"],
-    lignes:term.map(l => [{ texte:l.ident, gras:true }, l.groupement, libelleLigneP2A(l),
-      txt(l.priorite) || "—", l.porteur, l.echeance ? jjmmaaaa(l.echeance) : "—"]) });
-  // --- reste à réaliser ---
-  const reste = L.filter(l => statutDeLigne(l.avancement, l.interrompu) !== "termine")
-    .sort((a, z) => tri(a, z) || a.avancement - z.avancement || a.libelle.localeCompare(z.libelle, "fr"));
-  const pR = nouvellePage(doc, "P2A " + annee + " — reste à réaliser", reste.length +
-    (reste.length > 1 ? " inscriptions non terminées" : " inscription non terminée") + " sur " + L.length);
-  if(!reste.length) bloc(doc, pR, { x:MARGE, y:Y_CONTENU, w:LARG, h:1, taille:11, couleur:"#6F6862",
-                                    texte:"Tout est terminé." });
-  else tableauPagine(doc, { page:pR, x:MARGE, y:Y_CONTENU, titreSuite:null, maxLignes:3,
-    largeurs:[2.4, 3.8, 8.8, 1.8, 3.8, 2.4, 2.2],
-    entetes:["Identif.", "Groupement", "Libellé", "Priorité", "Porteur", "Échéance", "Avanct."],
-    alignes:["start", "start", "start", "center", "start", "center", "center"],
-    lignes:reste.map(l => {
-      const st = statutDeLigne(l.avancement, l.interrompu);
-      return [{ texte:l.ident, gras:true }, l.groupement, libelleLigneP2A(l), txt(l.priorite) || "—", l.porteur,
-        { texte:l.echeance ? jjmmaaaa(l.echeance) : "—", couleur:enRetard(l.echeance, st) ? "#C0504D" : null },
-        { texte:l.interrompu ? "Interrompu" : l.avancement + " %", gras:true, couleur:encreAvancement(l.avancement, l.interrompu) }];
-    }) });
+/* Terminés et reste à réaliser : même tableau, mêmes colonnes au même endroit.
+   Par groupement (ordre alphabétique), chaque projet puis ses actions MEO en retrait. */
+function pageP2ATableau(doc, titre, lignes, vide){
+  const page = nouvellePage(doc, titre, null);   // pas de sous-titre : le tableau monte sous le titre
+  if(!lignes.length){
+    bloc(doc, page, { x:MARGE, y:Y_CONTENU, w:LARG, h:1, taille:11, couleur:"#6F6862", texte:vide });
+    return;
+  }
+  const groupements = [...new Set(lignes.map(l => l.groupement))].sort((a, z) => a.localeCompare(z, "fr"));
+  const cellAv = l => ({ texte:l.interrompu ? "Interrompu" : l.avancement + " %", gras:true,
+                         couleur:encreAvancement(l.avancement, l.interrompu) });
+  const cellEch = l => { const st = statutDeLigne(l.avancement, l.interrompu);
+    return { texte:l.echeance ? jjmmaaaa(l.echeance) : "—", couleur:enRetard(l.echeance, st) ? "#C0504D" : null }; };
+  const detail = [];
+  groupements.forEach((g, iG) => {
+    if(iG) detail.push({ separateur:true, fond:"#EDD6D5", hauteur:0.28 });
+    const membres = lignes.filter(l => l.groupement === g);
+    const cleDe = l => l.idProjet || ("seul:" + l.libelle + "|" + l.nature);
+    const titres = new Map();
+    membres.forEach(l => {
+      const cle = cleDe(l);
+      if(l.estProjet) titres.set(cle, l.libelle || l.libelleProjet || cle);
+      else if(!titres.has(cle)) titres.set(cle, l.libelleProjet || l.libelle || cle);
+    });
+    const projets = [...new Set(membres.map(cleDe))]
+      .sort((a, z) => String(titres.get(a)).localeCompare(String(titres.get(z)), "fr", { numeric:true }));
+    let premier = true;
+    projets.forEach(id => {
+      const fratrie = membres.filter(l => cleDe(l) === id);
+      const projet = fratrie.find(l => l.estProjet);
+      const actions = fratrie.filter(l => !l.estProjet).sort((a, z) => a.libelle.localeCompare(z.libelle, "fr"));
+      const ajoute = ligne => { ligne.groupe = g; detail.push(ligne); };
+      if(projet) ajoute([{ texte:premier ? g : "", gras:true }, projet.libelle, projet.nature,
+        txt(projet.priorite) || "—", projet.porteur, cellEch(projet), cellAv(projet)]);
+      else ajoute([{ texte:premier ? g : "", gras:true },
+        { texte:fratrie[0].libelleProjet || "Projet non identifié", couleur:"#8a827c" }, "", "", "", "", ""]);
+      premier = false;
+      actions.forEach(a => ajoute(["", "— " + a.libelle, a.nature, txt(a.priorite) || "—",
+        a.porteur, cellEch(a), cellAv(a)]));
+    });
+  });
+  tableauPagine(doc, { page, x:MARGE, y:Y_CONTENU - 3.2, titreSuite:null, repriseGroupe:true, maxLignes:3,
+    largeurs:[3.8, 9.4, 2.0, 1.8, 3.6, 2.4, 2.2],
+    entetes:["Groupement", "Libellé", "Nature", "Priorité", "Porteur", "Échéance", "Avanct."],
+    alignes:["start", "start", "center", "center", "start", "center", "center"],
+    lignes:detail });
 }
 
 function pageP2A(doc, c, cComplet){
@@ -32183,9 +32203,12 @@ function pageP2A(doc, c, cComplet){
   const bAnnee = bilanP2AAnnee(c.annee, false);
   pageP2ARecap(doc, c.annee, bAnnee);
   if(filtrePrioriteActif()) pageP2ASynthese(doc, c, true);
-  pagesP2AListes(doc, c.annee, bAnnee);
-  // détail par groupement : présentation inchangée, sur le P2A de l'année
-  pagesP2ASuite(doc, Object.assign({}, c, { p2a:bilanP2AAnnee(c.annee, true) }), { sansTermines:true });
+  const L = bAnnee.lignes, fini = l => statutDeLigne(l.avancement, l.interrompu) === "termine";
+  if(L.length){
+    const t = L.filter(fini), r = L.filter(l => !fini(l));
+    pageP2ATableau(doc, "P2A " + c.annee + " — terminés (" + t.length + " sur " + L.length + ")", t, "Aucune inscription terminée.");
+    pageP2ATableau(doc, "P2A " + c.annee + " — reste à réaliser (" + r.length + " sur " + L.length + ")", r, "Tout est terminé.");
+  }
 }
 
 
