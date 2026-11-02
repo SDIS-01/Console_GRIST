@@ -17248,7 +17248,16 @@ function carteNotifs(ag,autre,nl,tous){
 function majBadgeTravail(){
   const b=$("#nav-badge-travail");
   if(!b) return;
-  const n=(notifsPossibles() && S.notifAgent) ? nonLues().length : 0;
+  /* même agent que la page « Mes notifications » ; s'il vient d'être reconnu, les notifications sont recalculées */
+  if(notifsPossibles() && !S.notifAgent && agentCourant()) calculerNotifs();
+  const ag=S.notifAgent;
+  let n=0;
+  if(notifsPossibles() && ag){
+    const nl=nonLues(), cles=new Set(nl.map(x=>x.cle));
+    /* les demandes reçues encore en attente comptent tant qu'elles ne sont pas traitées, même lues */
+    const att=(typeof jnlRecues==="function"?jnlRecues(ag):[]).filter(x=>x.statut==="attente" && !cles.has(x.cle));
+    n=nl.length+att.length;
+  }
   b.hidden=!n;
   b.textContent=n>99?"99+":String(n);
   const nav=b.closest("button");
@@ -17456,7 +17465,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 02/11/2026 · 13 h 48</div>';
+    '<div class="ed-version">Version du 02/11/2026 · 16 h 26</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -31968,15 +31977,17 @@ function pageP2ASynthese(doc, c, focus){
 }
 
 /* Pages « terminés » et « détail par groupement » sur le périmètre filtré. */
-function pagesP2ASuite(doc, c){
+function pagesP2ASuite(doc, c, o){
   const p = c.p2a;
   if(!p.lignes.length) return;
+  o = o || {};
   const groupements = [...new Set(p.lignes.map(l => l.groupement))]
     .sort((a, b) => a.localeCompare(b, "fr"));
   // --- focus sur les lignes terminées ---
   const termines = p.lignes.filter(l => statutDeLigne(l.avancement, l.interrompu) === "termine")
     .sort((a, b) => a.groupement.localeCompare(b.groupement, "fr") ||
                     a.libelle.localeCompare(b.libelle, "fr"));
+  if(!o.sansTermines){
   const pageTerm = nouvellePage(doc, "P2A — terminés", termines.length +
     (termines.length > 1 ? " lignes terminées" : " ligne terminée") + " sur " + p.lignes.length);
   if(!termines.length){
@@ -31989,6 +32000,7 @@ function pagesP2ASuite(doc, c){
       lignes:termines.map(l => [l.groupement,
         l.estProjet ? l.libelle : l.libelle + " (projet : " + (l.libelleProjet || "non identifié") + ")",
         l.nature, l.origine || "—", l.porteur]) });
+  }
   }
 
   // --- détail : par groupement, chaque MEO sous son projet ---
@@ -32056,11 +32068,124 @@ function pagesP2ASuite(doc, c){
     lignes:detail });
 }
 
+/* ---------- P2A de l'année de la revue (revue annuelle) ----------
+   Périmètre : les millésimes P2A de l'année (P2A_2026…), sans filtre ni sélection.
+   Identification : CASDIS / NDS / Ajout, lue sur le projet (une MEO prend celle de son projet). */
+const IDENT_P2A = [["CASDIS","#C0504D"],["NDS","#4F81BD"],["Ajout","#F79646"],["Autre","#7f6f6c"],["Non identifié","#9A948E"]];
+function millesimesAnnee(annee){
+  const a = String(annee), vus = new Set();
+  if(cfg.colP2A) recPEPS.forEach(l => versListe(l[cfg.colP2A]).forEach(m => {
+    const v = txt(m).trim(); if(/p2a/i.test(v) && v.indexOf(a) >= 0) vus.add(v); }));
+  return [...vus].sort();
+}
+function bilanP2AAnnee(annee, avecFiltres){
+  const sv = cfg.p2aChoisis, mils = millesimesAnnee(annee);
+  const fracP = detecteFraction(recPEPS, cfg.colAvancement);
+  cfg.p2aChoisis = mils;
+  try{
+    const b = avecFiltres ? bilanP2A(fracP) : sansFiltres(() => bilanP2A(fracP));
+    const parId = new Map(recPEPS.map(r => [r.id, r]));
+    b.lignes.forEach(l => {
+      const rec = parId.get(l.rowId) || {};
+      const proj = l.estProjet ? rec : (b.projets.get(l.idProjet) || null);
+      let v = cfg.colOrigine ? origineDe((proj || {})[cfg.colOrigine]) : "";
+      if(!v && cfg.colOrigine) v = origineDe(rec[cfg.colOrigine]);   // projet introuvable ou sans identification
+      l.identValeur = v;
+      l.ident = /^\s*casdis/i.test(v) ? "CASDIS" : /^\s*nds/i.test(v) ? "NDS" : /^\s*ajout/i.test(v) ? "Ajout" : v ? "Autre" : "Non identifié";
+    });
+    b.millesimesAnnee = mils;
+    return b;
+  }finally{ cfg.p2aChoisis = sv; }
+}
+const rangIdent = l => IDENT_P2A.findIndex(x => x[0] === l.ident);
+const moyenneAv = ls => ls.length ? Math.round(ls.reduce((s, l) => s + l.avancement, 0) / ls.length) : 0;
+function libelleLigneP2A(l){
+  return l.estProjet ? l.libelle : l.libelle + " (projet : " + (l.libelleProjet || "non identifié") + ")";
+}
+
+function pageP2ARecap(doc, annee, b){
+  const mils = b.millesimesAnnee.join(" · ") || "P2A_" + annee;
+  const L = b.lignes;
+  const page = nouvellePage(doc, "P2A " + annee + " — récapitulatif", L.length + " inscription" + (L.length > 1 ? "s" : "") +
+    " · projets et actions identifiés " + mils + " · au " + jjmmaaaa(new Date()));
+  if(!L.length){
+    bloc(doc, page, { x:MARGE, y:Y_CONTENU, w:LARG, h:1, taille:12, couleur:"#6F6862",
+                      texte:"Aucune ligne ne porte le millésime P2A " + annee + "." });
+    return;
+  }
+  bloc(doc, page, { x:2.5, y:3.9, w:5.0, h:0.6, texte:"Avancement global", taille:10, couleur:"#6F6862" });
+  image(doc, page, { x:2.5, y:4.6, w:3.1, h:3.1, base64:anneauAvancement(moyenneAv(L), null, true) });
+
+  const cats = IDENT_P2A.filter(([k]) => ["CASDIS","NDS","Ajout"].includes(k) || L.some(l => l.ident === k));
+  const xCart = 7.7, ecart = 0.3, largeur = (MARGE + LARG - xCart - ecart * (cats.length - 1)) / cats.length;
+  cats.forEach(([k, coul], i) => {
+    const ls = L.filter(l => l.ident === k);
+    cartouche(doc, page, xCart + i * (largeur + ecart), largeur, ls.length,
+              k + (ls.length ? " · " + moyenneAv(ls) + " %" : ""), coul, null, "neutre", 5.5);
+  });
+
+  const totaux = {}; ORDRE_STATUTS.forEach(k => totaux[k] = 0);
+  const lignes = cats.map(([k]) => {
+    const ls = L.filter(l => l.ident === k);
+    const cpt = {};
+    ORDRE_STATUTS.forEach(s => { cpt[s] = ls.filter(l => statutDeLigne(l.avancement, l.interrompu) === s).length; totaux[s] += cpt[s]; });
+    return [{ texte:k, gras:true }].concat(ORDRE_STATUTS.map(s =>
+      Object.assign({ texte: cpt[s] ? String(cpt[s]) : "—" }, TEINTES_STATUT[s])))
+      .concat([{ texte:String(ls.length), gras:true }, { texte:ls.length ? moyenneAv(ls) + " %" : "—", gras:true }]);
+  });
+  lignes.push([{ texte:"Total P2A " + annee, gras:true }].concat(ORDRE_STATUTS.map(s => ({ texte:String(totaux[s]), gras:true })))
+    .concat([{ texte:String(L.length), gras:true }, { texte:moyenneAv(L) + " %", gras:true }]));
+  const hLigne = Math.min(0.72, Math.max(0.5, (Y_MAX - 8.1 - 0.75) / Math.max(1, lignes.length)));
+  tableauPagine(doc, { page, x:MARGE, y:8.1, largeurs:[6.6, 3.0, 3.0, 3.0, 3.0, 3.0, 3.6],
+    entetes:["Identification du projet", "À engager", "En cours", "Terminé", "Interrompu", "Total", "Avancement"],
+    alignes:["start", "center", "center", "center", "center", "center", "center"],
+    hauteurFixe:hLigne, titreSuite:null, lignes });
+}
+
+function pagesP2AListes(doc, annee, b){
+  const L = b.lignes;
+  if(!L.length) return;
+  const tri = (a, z) => rangIdent(a) - rangIdent(z) || a.groupement.localeCompare(z.groupement, "fr");
+  // --- terminés ---
+  const term = L.filter(l => statutDeLigne(l.avancement, l.interrompu) === "termine")
+    .sort((a, z) => tri(a, z) || a.libelle.localeCompare(z.libelle, "fr"));
+  const pT = nouvellePage(doc, "P2A " + annee + " — terminés", term.length +
+    (term.length > 1 ? " inscriptions terminées" : " inscription terminée") + " sur " + L.length);
+  if(!term.length) bloc(doc, pT, { x:MARGE, y:Y_CONTENU, w:LARG, h:1, taille:11, couleur:"#6F6862",
+                                   texte:"Aucune inscription terminée." });
+  else tableauPagine(doc, { page:pT, x:MARGE, y:Y_CONTENU, titreSuite:null, maxLignes:3,
+    largeurs:[2.6, 4.0, 9.6, 1.8, 4.2, 3.0],
+    entetes:["Identif.", "Groupement", "Libellé", "Priorité", "Porteur", "Fin"],
+    alignes:["start", "start", "start", "center", "start", "center"],
+    lignes:term.map(l => [{ texte:l.ident, gras:true }, l.groupement, libelleLigneP2A(l),
+      txt(l.priorite) || "—", l.porteur, l.echeance ? jjmmaaaa(l.echeance) : "—"]) });
+  // --- reste à réaliser ---
+  const reste = L.filter(l => statutDeLigne(l.avancement, l.interrompu) !== "termine")
+    .sort((a, z) => tri(a, z) || a.avancement - z.avancement || a.libelle.localeCompare(z.libelle, "fr"));
+  const pR = nouvellePage(doc, "P2A " + annee + " — reste à réaliser", reste.length +
+    (reste.length > 1 ? " inscriptions non terminées" : " inscription non terminée") + " sur " + L.length);
+  if(!reste.length) bloc(doc, pR, { x:MARGE, y:Y_CONTENU, w:LARG, h:1, taille:11, couleur:"#6F6862",
+                                    texte:"Tout est terminé." });
+  else tableauPagine(doc, { page:pR, x:MARGE, y:Y_CONTENU, titreSuite:null, maxLignes:3,
+    largeurs:[2.4, 3.8, 8.8, 1.8, 3.8, 2.4, 2.2],
+    entetes:["Identif.", "Groupement", "Libellé", "Priorité", "Porteur", "Échéance", "Avanct."],
+    alignes:["start", "start", "start", "center", "start", "center", "center"],
+    lignes:reste.map(l => {
+      const st = statutDeLigne(l.avancement, l.interrompu);
+      return [{ texte:l.ident, gras:true }, l.groupement, libelleLigneP2A(l), txt(l.priorite) || "—", l.porteur,
+        { texte:l.echeance ? jjmmaaaa(l.echeance) : "—", couleur:enRetard(l.echeance, st) ? "#C0504D" : null },
+        { texte:l.interrompu ? "Interrompu" : l.avancement + " %", gras:true, couleur:encreAvancement(l.avancement, l.interrompu) }];
+    }) });
+}
+
 function pageP2A(doc, c, cComplet){
   pageIntercalaire(doc, "P2A");
-  pageP2ASynthese(doc, cComplet || c, false);
+  const bAnnee = bilanP2AAnnee(c.annee, false);
+  pageP2ARecap(doc, c.annee, bAnnee);
   if(filtrePrioriteActif()) pageP2ASynthese(doc, c, true);
-  pagesP2ASuite(doc, c);
+  pagesP2AListes(doc, c.annee, bAnnee);
+  // détail par groupement : présentation inchangée, sur le P2A de l'année
+  pagesP2ASuite(doc, Object.assign({}, c, { p2a:bilanP2AAnnee(c.annee, true) }), { sansTermines:true });
 }
 
 
