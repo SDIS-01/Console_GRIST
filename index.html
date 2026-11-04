@@ -2202,6 +2202,14 @@ button.ins-plus{border:0;background:none;padding:0 3px;font:inherit;font-size:11
 .ins-com-t{flex:1;white-space:pre-wrap;overflow-wrap:anywhere;}
 .ins-com .cel-vide{flex:1;}
 .ins-com-b{flex:none;padding:1px 5px;font-size:12px;}
+/* MEC 2023 / PAPRIPACT : pièces jointes */
+.anx-pj{display:flex;flex-wrap:wrap;gap:4px;}
+.anx-pj-chip{border:1px solid var(--trait);background:#fff;border-radius:12px;padding:2px 8px;font-size:11px;cursor:pointer;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--bleu);}
+.anx-pj-chip:hover{background:var(--bleu-clair);}
+.anx-pj-liste{margin:6px 0 8px;}
+.anx-pj-ajout{display:block;margin:6px 0;padding:8px 10px;border:1px dashed var(--bleu);border-radius:6px;color:var(--bleu);font-size:12.5px;cursor:pointer;text-align:center;}
+.anx-pj-ajout.envoi{opacity:.6;pointer-events:none;}
+.anx-td-pj{min-width:140px;}
 </style>
 </head>
 <body>
@@ -17456,7 +17464,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 04/11/2026 · 9 h 50</div>';
+    '<div class="ed-version">Version du 04/11/2026 · 9 h 55</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17595,7 +17603,7 @@ function imprimerOnglet(orientation){
   const titre=lire(c.tblMain,p,c.colLibelle)||"Projet";
   const meta=[lire(c.tblMain,p,c.colGroupement), lire(c.tblMain,p,c.colPorteur)?"Porteur : "+lire(c.tblMain,p,c.colPorteur):""].filter(Boolean).join(" · ");
   const doc='<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>'+esc(titre+" — "+lib)+'</title><style>'+styles+'</style><style>'+
-    '@page{size:A4 '+orientation+';margin:12mm 10mm}'+
+    '@page{size:A4 '+orientation+';margin:12mm 10mm}@page{@bottom-right{content:counter(page) " / " counter(pages);font-family:Tahoma,Verdana,sans-serif;font-size:8pt;color:#6f6862}}'+
     'html,body{background:#fff!important;height:auto!important;overflow:visible!important;font-family:Tahoma,Verdana,sans-serif!important;}'+
     'body{margin:0;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
     '.impr-t{border-bottom:2px solid #1c2f6b;padding-bottom:5px;margin-bottom:10px;}'+
@@ -17815,6 +17823,13 @@ async function anxTable(tableId){
   const T={tableId, tableRef:tb.id, colsByRef, sections, data, filtres:M.filtres,
     colsTable:M.cols.filter(c=>c.parentId===tb.id), t:Date.now()};
   ANX.tables[tableId]=T;
+  /* noms des pièces jointes encore inconnus de la console */
+  try{
+    const manque=new Set();
+    T.colsTable.filter(c=>String(c.type).split(":")[0]==="Attachments").forEach(c=>
+      (data[c.colId]||[]).forEach(v=>valListe(v).map(Number).filter(Boolean).forEach(id=>{ if(!(S.pj&&S.pj[id])) manque.add(id); })));
+    if(manque.size){ S.pj=S.pj||{}; await nommerPJ([...manque]); }
+  }catch(e){}
   return T;
 }
 function anxSection(T){
@@ -17862,6 +17877,15 @@ function anxChamps(T,sec,liste){
     const f=anxChamp(T, fv || {colRef:col.id, widgetOptions:"", rules:null, displayCol:0, width:role==="comm"?260:(role==="id"?240:110)});
     if(f){ f.label=lib; f.role=role||""; fs.push(f); }
   });
+  /* pièces jointes : la première colonne de type « Pièces jointes » de la table, en fin de tableau */
+  if(!liste){
+    const cpj=T.colsTable.find(c=>String(c.type).split(":")[0]==="Attachments" && !(c.isFormula && c.formula));
+    if(cpj){
+      const fv=champVue[cpj.id];
+      const f=anxChamp(T, fv || {colRef:cpj.id, widgetOptions:"", rules:null, displayCol:0, width:160});
+      if(f){ f.label="Pièces jointes"; f.role="pj"; fs.push(f); }
+    }
+  }
   return fs;
 }
 function anxValeur(T,f,i){
@@ -17890,6 +17914,7 @@ function anxTexte(T,f,i){
   const v=anxValeur(T,f,i);
   if(v===null||v===undefined||v==="") return "";
   if(anxErreur(v)) return "#ERREUR";
+  if(f.baseType==="Attachments") return anxPJ(T,f,i).map(nomPJ).join(", ");
   if(Array.isArray(v)) return (v[0]==="L"?v.slice(1):v).filter(x=>x!==null&&x!=="").join(", ");
   if(f.displayColId) return String(v);
   if((f.baseType==="Date"||f.baseType==="DateTime") && typeof v==="number") return dateVersFR(v);
@@ -17950,6 +17975,10 @@ function anxCellule(T,f,i,ctx){
     return '<span'+(retard?' class="app-ret"':'')+'>'+esc(t)+'</span>';
   }
   if(f.role==="comm") return t ? '<div class="anx-comm" title="'+esc(t)+'">'+esc(t)+'</div>' : "";
+  if(f.role==="pj"){
+    const ids=anxPJ(T,f,i);
+    return ids.length ? '<div class="anx-pj">'+ids.map(id=>'<button type="button" class="anx-pj-chip" data-anx-pj="'+id+'" title="Ouvrir « '+esc(nomPJ(id))+' »">📎 '+esc(nomPJ(id))+'</button>').join("")+'</div>' : "";
+  }
   if(f.role==="id") return '<b class="anx-id">'+esc(t)+'</b>';
   return esc(t);
 }
@@ -17960,7 +17989,7 @@ function anxTableHtml(T,sec,idx,fam){
   if(!idx.length) return '<div class="mt-vide anx-vide">Aucune ligne'+(F&&Object.keys(F.val).length?" ne correspond aux filtres du tableau":"")+'.</div>';
   const th=f=>{
     let h='<th class="anx-th-'+(f.role||"txt")+'">'+esc(f.label);
-    if(fam && f.role!=="comm"){
+    if(fam && f.role!=="comm" && f.role!=="pj"){
       const on=(F.val[f.colId]&&F.val[f.colId].length)||(F.tri&&F.tri.col===f.colId);
       h+='<button type="button" class="anx-f'+(on?" on":"")+'" data-fcol="'+esc(f.colId)+'" title="Filtrer / trier">'+(F.tri&&F.tri.col===f.colId?(F.tri.dir>0?"↑":"↓"):"▾")+'</button>';
     }
@@ -17971,8 +18000,8 @@ function anxTableHtml(T,sec,idx,fam){
       const ed=fam && anxEditable(T,f);
       const c=anxCellule(T,f,i,ctx);
       return '<td class="anx-td-'+(f.role||"txt")+(ed?' anx-ed':'')+'"'+
-        (ed?' data-anx-ed="'+f.role+'" data-anx-col="'+esc(f.colId)+'" data-anx-i="'+i+'" title="'+(f.role==="avct"?"Modifier l\'avancement":"Ajouter un commentaire")+'"':'')+'>'+
-        (ed&&!c?'<span class="anx-ed-vide">'+(f.role==="avct"?"＋ Avancement":"＋ Commenter")+'</span>':c)+'</td>'; }).join("")+'</tr>').join("")+'</tbody></table></div>';
+        (ed?' data-anx-ed="'+f.role+'" data-anx-col="'+esc(f.colId)+'" data-anx-i="'+i+'" title="'+({avct:"Modifier l\'avancement",pj:"Ajouter une pièce jointe"}[f.role]||"Ajouter un commentaire")+'"':'')+'>'+
+        (ed&&!c?'<span class="anx-ed-vide">'+({avct:"＋ Avancement",pj:"＋ Pièce jointe"}[f.role]||"＋ Commenter")+'</span>':c)+'</td>'; }).join("")+'</tr>').join("")+'</tbody></table></div>';
 }
 /* ---------- filtres et tri par colonne (comme dans Excel) ---------- */
 /* filtre par défaut : les lignes à 100 % d'avancement sont masquées (pastille retirable) */
@@ -18108,6 +18137,7 @@ function anxValeurExcel(T,f,i){
   const raw=anxValeur(T,f,i);
   if(raw===null||raw===undefined||raw==="") return null;
   if(anxErreur(raw)) return "#ERREUR";
+  if(f.baseType==="Attachments"){ const n=anxPJ(T,f,i).map(nomPJ); return n.length?n.join("\n"):null; }
   if(Array.isArray(raw)){ const it=(raw[0]==="L"?raw.slice(1):raw).map(x=>x==null?"":String(x).trim()).filter(Boolean); return it.length?it.join("\n"):null; }
   if(f.displayColId) return raw;
   if(f.baseType==="Date"||f.baseType==="DateTime") return anxDateExcel(raw,f.type);
@@ -18375,6 +18405,7 @@ async function exporterPepsAv(){
 function anxEditable(T,f){
   if(!f || f.formule || f.displayColId || /^Ref/.test(f.baseType)) return false;   // jamais une colonne formule
   if(f.role==="avct") return true;
+  if(f.role==="pj") return f.baseType==="Attachments";
   if(f.role==="comm") return /^(Text|Any)$/.test(f.baseType) && (anxFamDe(T)==="mec" || anxPli(f.colId)==="observationporteur");
   return false;
 }
@@ -18494,13 +18525,58 @@ function anxModifCom(ancre,T,f,i,apres){
   };
   if(!document.body.classList.contains("mob")) setTimeout(()=>ta.focus(),20);
 }
+/* ---------- pièces jointes des lignes MEC 2023 / PAPRIPACT ---------- */
+function anxPJ(T,f,i){ const v=T.data[f.colId]?T.data[f.colId][i]:null; return valListe(v).map(Number).filter(Boolean); }
+async function anxOuvrirPJ(id){
+  try{
+    const tk=await grist.docApi.getAccessToken({readOnly:true});
+    window.open(tk.baseUrl+"/attachments/"+id+"/download?auth="+encodeURIComponent(tk.token),"_blank","noopener");
+  }catch(e){ toast("Ouverture impossible : "+e.message,true); }
+}
+function anxBrancherPJ(racine){
+  racine.querySelectorAll("[data-anx-pj]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); anxOuvrirPJ(Number(b.dataset.anxPj)); });
+}
+async function anxEnvoyerPJ(T,f,i,fichiers){
+  const tk=await grist.docApi.getAccessToken({readOnly:false});
+  const nouveaux=[];
+  for(const fi of fichiers){
+    const fd=new FormData(); fd.append("upload",fi,fi.name);
+    const rep=await fetch(tk.baseUrl+"/attachments?auth="+encodeURIComponent(tk.token),
+      {method:"POST", body:fd, headers:{"X-Requested-With":"XMLHttpRequest"}});
+    if(!rep.ok){ const d=await rep.text().catch(()=>""); throw new Error(rep.status+" "+rep.statusText+(d?" — "+d.slice(0,160):"")); }
+    const res=await rep.json();
+    (Array.isArray(res)?res:[res]).forEach(x=>nouveaux.push(Number(x)));
+  }
+  await anxEcrire(T,i,f.colId,["L"].concat(anxPJ(T,f,i),nouveaux));
+  await nommerPJ(nouveaux,tk);
+  return nouveaux.length;
+}
+function anxModifPJ(ancre,T,f,i,apres){
+  const ids=anxPJ(T,f,i);
+  const m=anxMod(ancre,'<div class="anx-mod-tete"><b>Pièces jointes</b><button type="button" class="anx-mod-x">✕</button></div>'+
+    '<div class="anx-mod-sous">'+esc(anxTitreLigne(T,i))+'</div>'+
+    (ids.length?'<div class="anx-pj anx-pj-liste">'+ids.map(id=>'<button type="button" class="anx-pj-chip" data-anx-pj="'+id+'">📎 '+esc(nomPJ(id))+'</button>').join("")+'</div>'
+      :'<div class="anx-mod-vide">Aucune pièce jointe pour l\'instant.</div>')+
+    '<label class="anx-pj-ajout">＋ Ajouter un ou plusieurs fichiers<input type="file" multiple hidden></label>'+
+    '<div class="anx-mod-pied"><button type="button" class="btn-2 anx-mod-ann">Fermer</button></div>');
+  anxBrancherPJ(m);
+  m.querySelector(".anx-mod-ann").onclick=anxFermerMod;
+  const inp=m.querySelector("input[type=file]");
+  inp.onchange=async()=>{
+    if(!inp.files.length) return;
+    const lab=m.querySelector(".anx-pj-ajout"); lab.classList.add("envoi"); lab.firstChild.textContent="Envoi en cours…";
+    try{ const n=await anxEnvoyerPJ(T,f,i,[...inp.files]); toast(n>1?"Pièces jointes ajoutées":"Pièce jointe ajoutée"); anxFermerMod(); apres(); }
+    catch(e){ toast("Envoi impossible : "+e.message,true); lab.classList.remove("envoi"); lab.firstChild.textContent="＋ Ajouter un ou plusieurs fichiers"; inp.value=""; }
+  };
+}
 /* branche les cellules modifiables d'un tableau rendu par anxTableHtml */
 function anxBrancherEdition(racine,T,fs,apres){
   racine.querySelectorAll("td[data-anx-ed]").forEach(td=>{
     const f=fs.find(x=>x.colId===td.dataset.anxCol), i=Number(td.dataset.anxI);
     if(!f) return;
-    td.onclick=e=>{ e.stopPropagation(); (td.dataset.anxEd==="avct"?anxModifAvct:anxModifCom)(td,T,f,i,apres); };
+    td.onclick=e=>{ e.stopPropagation(); ({avct:anxModifAvct,pj:anxModifPJ}[td.dataset.anxEd]||anxModifCom)(td,T,f,i,apres); };
   });
+  anxBrancherPJ(racine);
 }
 
 /* =======================================================================
@@ -20733,7 +20809,7 @@ function etpHtml(p){
   const zoom=Math.min(1,718/totPx).toFixed(3);
   const cg='<colgroup>'+px.map(w=>'<col style="width:'+w+'px">').join("")+'</colgroup>';
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>'+esc(H.titre)+'</title><style>'+
-    '@page{size:A4 portrait;margin:12.7mm 10mm}*{box-sizing:border-box}body{margin:0;zoom:'+zoom+';font-family:Tahoma,Verdana,sans-serif;color:#'+ETP.texte+';-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    '@page{size:A4 portrait;margin:12.7mm 10mm}@page{@bottom-right{content:counter(page) " / " counter(pages);font-family:Tahoma,Verdana,sans-serif;font-size:8pt;color:#6f6862}}*{box-sizing:border-box}body{margin:0;zoom:'+zoom+';font-family:Tahoma,Verdana,sans-serif;color:#'+ETP.texte+';-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     'table{width:'+totPx+'px;border-collapse:collapse;table-layout:fixed;font-size:10pt;line-height:1.25}'+
     'td,th{padding:2px 3px;vertical-align:middle;border-bottom:1px solid #'+ETP.trait+';overflow-wrap:break-word}'+
     'thead{display:table-header-group}tr{page-break-inside:avoid}'+
@@ -25900,6 +25976,7 @@ window.planningPret = ()=>!!(lastView && lastView.units && lastView.units.length
   .rappel .c p{margin:5px 0 0;line-height:1.45;font-size:11.5px;}
   .rappel .c .ex{color:var(--attenue);font-style:italic;margin-top:3px;}
   @page{size:A4 portrait;margin:14mm 12mm;}
+  @page{@bottom-right{content:counter(page) " / " counter(pages);font-family:Tahoma,Verdana,sans-serif;font-size:8pt;color:#6f6862}}
   @media print{
     .barre,.reglages,.repli{display:none !important;}
     .contenu{padding:0;}
@@ -29239,7 +29316,7 @@ window.preparerEtatConsole = o => {
 function documentEtatConsole(contenu, titre){
   const styles = Array.from(document.querySelectorAll("style")).map(x => x.outerHTML).join("");
   return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + echapper(titre || "État") + "</title>" + styles
-    + "<style>@page{size:A4 portrait;margin:14mm 12mm}body{background:#fff}#contenu td,#contenu td *{font-weight:normal!important}#contenu td .pastille,#contenu td .etat-txt,#contenu td .prio-e{font-weight:bold!important}</style></head><body><div id=\"contenu\" class=\"contenu\">"
+    + "<style>@page{size:A4 portrait;margin:14mm 12mm}@page{@bottom-right{content:counter(page) ' / ' counter(pages);font-family:Tahoma,Verdana,sans-serif;font-size:8pt;color:#6f6862}}body{background:#fff}#contenu td,#contenu td *{font-weight:normal!important}#contenu td .pastille,#contenu td .etat-txt,#contenu td .prio-e{font-weight:bold!important}</style></head><body><div id=\"contenu\" class=\"contenu\">"
     + contenu + "</div></body></html>";
 }
 window.htmlEtatConsole = (o, tous) => {
@@ -29303,7 +29380,7 @@ window.htmlAnnexeConsole = (famille, groupements, sponsors) => {
   const styles = Array.from(document.querySelectorAll("style")).map(x => x.outerHTML).join("");
   const date = new Date().toLocaleDateString("fr-FR");
   return '<!DOCTYPE html><html lang="fr" class="integre"><head><meta charset="utf-8"><title>' + nom + " — " + echapper(e.titre) + "</title>" + styles
-    + "<style>@page{size:A4 portrait;margin:14mm 12mm}.annexes{break-before:auto!important;page-break-before:auto!important}"
+    + "<style>@page{size:A4 portrait;margin:14mm 12mm}@page{@bottom-right{content:counter(page) ' / ' counter(pages);font-family:Tahoma,Verdana,sans-serif;font-size:8pt;color:#6f6862}}.annexes{break-before:auto!important;page-break-before:auto!important}"
     + ".entete-impression{display:flex!important}body{background:#fff}#contenu td,#contenu td *{font-weight:normal!important}#contenu td .pastille,#contenu td .etat-txt,#contenu td .prio-e{font-weight:bold!important}</style></head><body><div id=\"contenu\" class=\"contenu\">"
     + '<div class="entete-impression">' + LOGO_HTML + '<div class="txt-ent"><div class="t">' + nom + " — " + echapper(e.titre)
     + '</div><div class="d">Édité le ' + date + " · " + lignes.length + " ligne" + (lignes.length > 1 ? "s" : "") + "</div></div></div>"
@@ -31254,6 +31331,17 @@ function bloc(doc, page, o){
     "<draw:text-box>" + paras + "</draw:text-box></draw:frame>");
 }
 
+/* Pagination du diaporama : « n / total » en bas à droite de chaque diapositive,
+   sauf la couverture ; les frames intercalées sont créées à la fin. */
+function numeroterDiapos(doc){
+  const total = doc.pages.length;
+  doc.pages.forEach((page, i) => {
+    if(page.type === "couverture") return;
+    bloc(doc, page, { x:24.6, y:20.25, w:2.6, h:0.55, texte:(i + 1) + " / " + total,
+                      taille:9, couleur:"#6F6862", fond:"#FFFFFF", align:"end" });
+  });
+}
+
 function image(doc, page, o){
   const nom = "Pictures/revue" + (doc.images.length + 1) + ".png";
   doc.images.push({ nom, base64:o.base64 });
@@ -32663,6 +32751,7 @@ async function genere(){
     pagesExergue(doc, c);
   }
   if(doc.pages.length < 2){ alerte("Aucune diapositive sélectionnée."); return; }
+  numeroterDiapos(doc);
 
   // On repart d'une copie du modèle : styles, masque et images de charte sont conservés.
   const zip = await JSZip.loadAsync(MODELE_OTP, { base64:true });
