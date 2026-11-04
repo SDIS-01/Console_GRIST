@@ -17456,7 +17456,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 04/11/2026 · 9 h 42</div>';
+    '<div class="ed-version">Version du 04/11/2026 · 9 h 50</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -19721,9 +19721,8 @@ function piCol(nom){
 }
 function piTexte(p){ const col=piCol("Post_it"); return col&&p ? txt(p[col]).trim() : ""; }
 function piActif(p){
-  const t=piTexte(p); if(!t) return false;
-  const cf=piCol("Post_it_Fin"), fin=cf?Number(p[cf])||null:null;
-  return !fin || fin>=aujourdHuiUTC();
+  /* plus de date de fin d'affichage : un post-it reste visible tant qu'il a un texte */
+  return !!piTexte(p);
 }
 function piCle(p){
   let h=5381; const t=piTexte(p);
@@ -19773,7 +19772,6 @@ function piAfficher(p){
     '<div class="pi-e">'+esc(der.texte)+(der.date||der.auteur?'<small>'+esc(der.date)+(der.auteur?' — '+esc(der.auteur):'')+'</small>':'')+'</div>'+
     (es.length>1?'<details class="pi-old"><summary>'+(es.length-1)+' message'+(es.length>2?"s":"")+' précédent'+(es.length>2?"s":"")+'</summary>'+
       es.slice(1).map(e=>'<div class="pi-e2">'+esc(e.texte)+'<small>'+esc(e.date)+(e.auteur?' — '+esc(e.auteur):'')+'</small></div>').join("")+'</details>':'')+
-    (cf?'<div class="pi-fin">Afficher jusqu\'au '+champDateFR('class="pi-fin-d"','',fin?dateVersFR(fin):'')+'</div>':'')+
     '<div class="pi-b"><button type="button" class="pi-c">+ Compléter</button>'+
       (lu?'<button type="button" class="pi-r">Replier</button>':'<button type="button" class="pi-l">✓ Lu</button>')+'</div>';
   ent.appendChild(d);
@@ -19951,7 +19949,6 @@ function mbPostit(p,ctx){
     (der?'<div class="mbp-pi"><b>Actuel :</b> '+esc(der.texte)+'<small>'+esc(der.date)+(der.auteur?' — '+esc(der.auteur):'')+
       (es.length>1?' · + '+(es.length-1)+' précédent'+(es.length>2?"s":""):'')+'</small></div>':'')+
     '<label>'+(der?"Ajouter un message":"Message")+'</label><textarea id="mbpi-texte" placeholder="Votre message…">'+esc(code?code+" – ":"")+'</textarea>'+
-    (cf?'<label>Afficher jusqu\'au (facultatif)</label>'+champDateFR('id="mbpi-fin"','',fin?dateVersFR(fin):''):'')+
     '<button class="btn" id="mbpi-ok">Publier le post-it</button>'+
     '<button class="btn-2 mb-chip mbp-ann">Annuler</button>');
   v.querySelector(".mbp-ann").onclick=()=>v.remove();
@@ -19963,7 +19960,7 @@ function mbPostit(p,ctx){
     if(fv===undefined){ toast("Date invalide : jj/mm/aaaa.",true); return; }
     const ok=await ajouterCommentaire(c.tblMain,p.id,col,t,jnlMoiNom());
     if(!ok) return;
-    if(cf && fv!==fin){ try{ await grist.docApi.applyUserActions([["UpdateRecord",c.tblMain,p.id,{[cf]:fv}]]); }catch(e){} }
+    if(cf && fe && fv!==fin){ try{ await grist.docApi.applyUserActions([["UpdateRecord",c.tblMain,p.id,{[cf]:fv}]]); }catch(e){} }
     v.remove(); await charger();
     const np=S.data.main.find(r=>r.id===p.id); if(np){ S.projetSel=np; piMarquerLu(np); }
     rendreMobile();
