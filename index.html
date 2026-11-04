@@ -16951,10 +16951,18 @@ function rendreListeApp(){
   let nbA=0, nbT=0; const rep={rouge:0,orange:0,vert:0,gris:0};
   const classe=(a,inter)=>inter?"gris":a>=100?"vert":a>0?"orange":"rouge";
   const tachesP=p=>{ try{ return tachesDe(p).concat(...actionsDe(p).map(a=>tachesDe(a))); }catch(e){ return []; } };
+  /* répartition : projets et actions de l'année en cours, c'est-à-dire les inscriptions au P2A de l'année
+     (un projet compte une fois ; si des actions MEO sont inscrites, ce sont elles qui comptent, pas le projet) */
+  const anRep=String(new Date().getFullYear());
+  const inscritRep=x=>millesimesDe(x).some(m=>String(m).indexOf(anRep)>=0);
   ps.forEach(p=>{
-    rep[classe(pct(p[c.colAvancement]),interrompu(p))]++;
-    actionsDe(p).forEach(a=>{ nbA++; rep[classe(pct(a[c.colAvancement]),interrompu(a))]++; });
-    tachesP(p).forEach(t=>{ nbT++; rep[classe(pct(t[c.colTacheAvancement]),statutInterrompu(c.tblTache,t,c.colTacheStatut))]++; });
+    if(c.colMillesime){
+      const as=actionsDe(p).filter(inscritRep);
+      (as.length?as:(inscritRep(p)?[p]:[])).forEach(x=>{ rep[classe(pct(x[c.colAvancement]),interrompu(x))]++; });
+    }else{
+      rep[classe(pct(p[c.colAvancement]),interrompu(p))]++;
+      actionsDe(p).forEach(a=>{ rep[classe(pct(a[c.colAvancement]),interrompu(a))]++; });
+    }
   });
   rendreKpi(ps);
   const cle={
@@ -17027,7 +17035,7 @@ function rendreListeApp(){
       '<button type="button" class="anx-pdf" id="et-plus" title="Autres éditions du portefeuille">⋯</button></div>'+
     (tot ? '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([kk])=>rep[kk]).map(([kk,col])=>'<i style="flex:'+rep[kk]+';background:'+col+'"></i>').join("")+'</div>'+
       '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([kk])=>rep[kk]).map(([kk,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[kk]).join("")+
-      ' <span class="app-mut">(projets, actions et tâches)</span></div>' : '')+
+      ' <span class="app-mut">('+(c.colMillesime?'projets et actions inscrits au P2A '+new Date().getFullYear():'projets et actions')+')</span></div>' : '')+
     (liste.length ? '<table class="app-table"><thead><tr>'+th("nom","Projet")+th("ins","Instances")+th("grp","Groupement")+th("por","Porteur")+
       th("pri","Priorité")+'<th>Statut</th>'+th("av","Avancement")+th("ech","Échéance")+'<th></th></tr></thead><tbody>'+corps+'</tbody></table>'
       : '<div class="app-vide">Aucun projet ne correspond aux filtres.</div>');
@@ -17469,7 +17477,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 04/11/2026 · 10 h 16</div>';
+    '<div class="ed-version">Version du 04/11/2026 · 11 h 49</div>';
   return h;
 }
 async function lancerEdition(id){
