@@ -14165,6 +14165,10 @@ function rendreReglages(){
       'display:flex;align-items:center;gap:7px;font-size:12px">'+
       '<input type="checkbox" id="mdp-retirer"> Retirer le mot de passe</label></div>'+
   '</div></div>'+
+  '<div class="bloc-reglage"><h3>Administrateurs</h3>'+
+  '<p>Adresses e-mail des comptes Grist qui reçoivent les demandes « Contacter l\'admin ». Elles seules voient la pastille des demandes nouvelles. Séparez les adresses par un point-virgule.</p>'+
+  '<div class="grille"><div class="champ" style="grid-column:1/-1"><label>E-mails des administrateurs</label>'+
+    '<input type="text" data-cfg="adminEmail" value="'+esc(c.adminEmail||"")+'" placeholder="prenom.nom@sdis01.fr; autre.admin@sdis01.fr"></div></div></div>'+
   '<div class="bloc-reglage"><h3>Boutons de la barre supérieure</h3>'+
   '<p>Trois raccourcis libres, à gauche du bouton Diaporama. Un bouton dont le '+
   'nom ou l\'adresse est vide ne s\'affiche pas.</p>'+
@@ -14261,6 +14265,7 @@ async function enregistrerReglages(){
   if($("#mdp-retirer") && $("#mdp-retirer").checked){ S.cfg.mdpHash=""; S.deverrouille=false; }
   else if(nouveau){ S.cfg.mdpHash=await empreinte(nouveau); S.deverrouille=false; }
   normaliserReglages();
+  if(typeof majBadgeAdmin==="function") majBadgeAdmin();
   await reprendreBaseNotifs();
   try{ await grist.widgetApi.setOptions(paquetOptions()); }catch(e){}
   $("#voile").classList.remove("ouvert");
@@ -17464,7 +17469,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 04/11/2026 · 9 h 55</div>';
+    '<div class="ed-version">Version du 04/11/2026 · 10 h 16</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -17525,7 +17530,11 @@ function installerBarreFiltres(){
   fil.after(bar);
 }
 function brancherApp(){
-  const bc=$("#nav-contact"); if(bc) bc.onclick=()=>demOuvrirFormulaire();
+  /* administrateur avec des demandes nouvelles : l'onglet ouvre les demandes reçues */
+  const bc=$("#nav-contact"); if(bc) bc.onclick=()=>{
+    const nouv=(typeof demEstAdmin==="function" && demEstAdmin() && DEM.ok) ? DEM.lignes.filter(r=>demTxt(r,"Statut")==="Nouvelle").length : 0;
+    if(nouv) demOuvrirAdmin(); else demOuvrirFormulaire();
+  };
   setTimeout(()=>demCharger(true).then(()=>{ if(APP.vue==="travail") rendreTravail(); }),1500);
   setInterval(()=>demCharger(true),300000);
   installerBarreFiltres();
@@ -18839,7 +18848,9 @@ function demCol(nom){
 }
 const demV=(r,nom)=>r ? r[demCol(nom)] : null;
 function demTxt(r,nom){ const v=demV(r,nom); return v==null?"":String(v); }
-function demEstAdmin(){ return !!(S.moiEmail && S.cfg.adminEmail && S.moiEmail.toLowerCase()===String(S.cfg.adminEmail).toLowerCase()); }
+/* administrateurs : une ou plusieurs adresses (séparées par ; ou ,) dans les réglages */
+function demAdmins(){ return String(S.cfg.adminEmail||"").split(/[;,\s]+/).map(x=>x.trim().toLowerCase()).filter(x=>x.includes("@")); }
+function demEstAdmin(){ return !!(S.moiEmail && demAdmins().includes(S.moiEmail.toLowerCase())); }
 function demMiennes(){ return S.moiEmail ? DEM.lignes.filter(r=>demTxt(r,"Auteur_Email").toLowerCase()===S.moiEmail.toLowerCase()) : []; }
 function demATraiter(){ return DEM.lignes.filter(r=>demTxt(r,"Statut")!=="Traitée"); }
 function demProjetLib(r){
@@ -18869,12 +18880,16 @@ async function demCharger(force){
   return DEM.enCours;
 }
 function majBadgeAdmin(){
-  const b=$("#btn-editions"); if(!b) return;
-  let s=b.querySelector(".nav-badge");
   const n=demEstAdmin()?DEM.lignes.filter(r=>demTxt(r,"Statut")==="Nouvelle").length:0;
-  if(!s){ s=document.createElement("span"); s.className="nav-badge"; b.appendChild(s); }
-  s.hidden=!n; s.textContent=n;
-  b.title=n?n+" demande"+(n>1?"s":"")+" nouvelle"+(n>1?"s":""):"";
+  /* pastille sur le bouton Admin et sur l'onglet « Contacter l'admin » */
+  ["#btn-editions","#nav-contact"].forEach(sel=>{
+    const b=$(sel); if(!b) return;
+    let s=b.querySelector(".nav-badge");
+    if(!s){ s=document.createElement("span"); s.className="nav-badge"; b.appendChild(s); }
+    s.hidden=!n; s.textContent=n;
+    if(sel==="#nav-contact") b.title=n?n+" demande"+(n>1?"s":"")+" nouvelle"+(n>1?"s":"")+" reçue"+(n>1?"s":"")+" — clic : les traiter":"Envoyer une question ou une demande à l'administrateur";
+    else b.title=n?n+" demande"+(n>1?"s":"")+" nouvelle"+(n>1?"s":""):"";
+  });
 }
 
 /* ---------- formulaire « Contacter l'admin » ---------- */
@@ -19049,9 +19064,9 @@ async function demOuvrirAdmin(focusId){
   const rendre=()=>{
     const l=DEM.lignes.filter(r=>DEM.filtre==="toutes"||(DEM.filtre==="traitees"?demTxt(r,"Statut")==="Traitée":demTxt(r,"Statut")!=="Traitée"))
       .sort((a,b)=>(Number(demV(b,"Date_Demande"))||0)-(Number(demV(a,"Date_Demande"))||0));
-    const moi=S.moiEmail||"", dest=S.cfg.adminEmail||"";
+    const moi=S.moiEmail||"", dest=demAdmins().join(", ");
     const v=demFenetre('<h3>Demandes reçues</h3>'+
-      '<div class="dem-dest">Destinataire : <b>'+esc(dest||"non défini")+'</b>'+(moi&&moi!==dest?' <button type="button" class="fil-lien" id="dem-moi">Recevoir les demandes sur mon compte ('+esc(moi)+')</button>':'')+
+      '<div class="dem-dest">Destinataire : <b>'+esc(dest||"non défini")+'</b>'+(moi&&!demEstAdmin()?' <button type="button" class="fil-lien" id="dem-moi">Recevoir aussi les demandes sur mon compte ('+esc(moi)+')</button>':'')+
         (!moi?' <span class="app-mut">(votre compte n\'est pas encore identifié : envoyez-vous une demande de test)</span>':'')+'</div>'+
       '<div class="mt-notif-outils">'+[["atraiter","À traiter"],["traitees","Traitées"],["toutes","Toutes"]].map(([k,t])=>'<button type="button" class="mt-chip'+(DEM.filtre===k?" on":"")+'" data-demf="'+k+'">'+t+'</button>').join("")+'</div>'+
       '<div class="dem-liste">'+(l.length?l.map(r=>{
@@ -19065,7 +19080,7 @@ async function demOuvrirAdmin(focusId){
           '<button type="button" class="btn" data-save>Enregistrer</button></div></div>'; }).join(""):'<div class="mt-vide">Aucune demande.</div>')+'</div>'+
       '<div class="anx-btns"><button class="btn-2" id="dem-fermer">Fermer</button></div>');
     v.querySelector("#dem-fermer").onclick=()=>v.remove();
-    const bm=v.querySelector("#dem-moi"); if(bm) bm.onclick=()=>{ S.cfg.adminEmail=moi; sauverAuto(); majBadgeAdmin(); rendre(); toast("Les demandes arrivent maintenant sur "+moi+"."); };
+    const bm=v.querySelector("#dem-moi"); if(bm) bm.onclick=()=>{ S.cfg.adminEmail=demAdmins().concat([moi.toLowerCase()]).join("; "); sauverAuto(); majBadgeAdmin(); rendre(); toast("Les demandes arrivent maintenant sur "+moi+"."); };
     v.querySelectorAll("[data-demf]").forEach(b=>b.onclick=()=>{ DEM.filtre=b.dataset.demf; rendre(); });
     v.querySelectorAll("[data-demp]").forEach(b=>b.onclick=()=>{ v.remove(); ouvrirFiche(S.data.main.find(x=>x.id===Number(b.dataset.demp))); });
     v.querySelectorAll(".dem-carte").forEach(cd=>{
