@@ -16862,38 +16862,29 @@ function projetsHorsEtat(){
   }
 }
 function rendreKpi(ps, detail){
-  /* en cours (affichés), PEPS et actions hors PEPS avec les terminés de l'année,
-     P2A de l'année : affichés / total du millésime */
+  /* PEPS, actions hors PEPS et inscriptions au P2A de l'année, avec leurs terminés */
   const c=S.cfg, an=String(new Date().getFullYear());
   const nat=p=>natureDe(p);
   const auP2A=p=>[...millesimesProjet(p)].some(m=>String(m).indexOf(an)>=0);
-  const p2a=0;   /* remplacé plus bas : inscriptions non terminées */
   let tous=[]; try{ tous=projetsHorsEtat(); }catch(e){ tous=ps; }
-  const termineAn=p=>{
-    if(etatDe(p)!=="termine") return false;
-    const f=Number(c.colFin?p[c.colFin]:0)||0;
-    return !!f && new Date(f*1000).getUTCFullYear()===Number(an);
-  };
-  const nPepsT=tous.filter(p=>nat(p)==="PEPS" && termineAn(p)).length;
-  const nAvT=tous.filter(p=>nat(p)!=="PEPS" && termineAn(p)).length;
   /* inscriptions au P2A : un projet compte une fois ; si des actions MEO sont inscrites
      elles-mêmes, ce sont elles qui comptent, et plus leur projet (même règle que la revue) */
   const inscrit=x=>millesimesDe(x).some(m=>String(m).indexOf(an)>=0);
   const inscriptions=l=>l.reduce((acc,p)=>{ const as=actionsDe(p).filter(inscrit); return acc.concat(as.length?as:(inscrit(p)?[p]:[])); },[]);
   const insT=inscriptions(tous);
-  const totP2A=insT.length;
   const nP2AT=insT.filter(x=>etatDe(x)==="termine").length;
-  const nPeps=ps.filter(p=>nat(p)==="PEPS").length, nAv=ps.filter(p=>nat(p)!=="PEPS").length;
-  const sur=n=>' <i class="kpi-sur">/ '+n+'</i>';
+  /* PEPS et actions hors PEPS de l'année : projets au P2A de l'année (par eux-mêmes ou par
+     leurs actions MEO), chaque projet ne comptant qu'une fois */
+  const peps=tous.filter(p=>nat(p)==="PEPS" && auP2A(p)), av=tous.filter(p=>nat(p)!=="PEPS" && auP2A(p));
+  const fin=l=>l.filter(p=>etatDe(p)==="termine").length;
+  const nPepsT=fin(peps), nAvT=fin(av);
   const sous=t=>'<small class="kpi-sous">'+t+'</small>';
   $("#kpi-app").innerHTML=
-    '<div><b>'+ps.length+'</b><span>projets + actions en cours</span></div>'+
-    '<div><b>'+nPeps+(c.colFin?sur(nPeps+nPepsT):'')+'</b><span>projets inscrits au PEPS</span>'+
-      (c.colFin?sous(nPepsT+' terminé'+(nPepsT>1?'s':'')+' en '+an):'')+'</div>'+
-    '<div><b>'+nAv+(c.colFin?sur(nAv+nAvT):'')+'</b><span>actions (hors PEPS)</span>'+
-      (c.colFin?sous(nAvT+' terminée'+(nAvT>1?'s':'')+' en '+an):'')+'</div>'+
-    (c.colMillesime ? '<div><b>'+(totP2A-nP2AT)+sur(totP2A)+'</b><span>actions au P2A '+an+'</span>'+
-      (c.colFin?sous(nP2AT+' terminée'+(nP2AT>1?'s':'')+' en '+an):'')+'</div>' : '')+
+    (c.colMillesime
+      ? '<div><b>'+peps.length+'</b><span>projets inscrits au PEPS '+an+'</span>'+sous(nPepsT+' terminé'+(nPepsT>1?'s':'')+' en '+an)+'</div>'+
+        '<div><b>'+av.length+'</b><span>actions (hors PEPS) '+an+'</span>'+sous(nAvT+' terminée'+(nAvT>1?'s':'')+' en '+an)+'</div>'+
+        '<div><b>'+insT.length+'</b><span>inscriptions au P2A '+an+'</span>'+sous(nP2AT+' terminée'+(nP2AT>1?'s':'')+' en '+an)+'</div>'
+      : '<div><b>'+ps.length+'</b><span>projets + actions en cours</span></div>')+
     (detail ? '<div><b>'+detail.actions+'</b><span>actions MEO</span></div><div><b>'+detail.taches+'</b><span>tâches</span></div>' : '');
 }
 
@@ -17465,7 +17456,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 02/11/2026 · 16 h 53</div>';
+    '<div class="ed-version">Version du 04/11/2026 · 9 h 42</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -32174,13 +32165,20 @@ function pageP2ATableau(doc, titre, lignes, vide){
       if(l.estProjet) titres.set(cle, l.libelle || l.libelleProjet || cle);
       else if(!titres.has(cle)) titres.set(cle, l.libelleProjet || l.libelle || cle);
     });
+    const prioL = l => txt(l.priorite) || SANS_PRIORITE;
+    const prioProjet = cle => {
+      const fr = membres.filter(l => cleDe(l) === cle), pj = fr.find(l => l.estProjet);
+      return pj ? prioL(pj) : fr.map(prioL).sort(comparePriorites)[0];
+    };
     const projets = [...new Set(membres.map(cleDe))]
-      .sort((a, z) => String(titres.get(a)).localeCompare(String(titres.get(z)), "fr", { numeric:true }));
+      .sort((a, z) => comparePriorites(prioProjet(a), prioProjet(z)) ||
+                      String(titres.get(a)).localeCompare(String(titres.get(z)), "fr", { numeric:true }));
     let premier = true;
     projets.forEach(id => {
       const fratrie = membres.filter(l => cleDe(l) === id);
       const projet = fratrie.find(l => l.estProjet);
-      const actions = fratrie.filter(l => !l.estProjet).sort((a, z) => a.libelle.localeCompare(z.libelle, "fr"));
+      const actions = fratrie.filter(l => !l.estProjet)
+        .sort((a, z) => comparePriorites(prioL(a), prioL(z)) || a.libelle.localeCompare(z.libelle, "fr"));
       const ajoute = ligne => { ligne.groupe = g; detail.push(ligne); };
       if(projet) ajoute([{ texte:premier ? g : "", gras:true }, projet.libelle, projet.nature,
         txt(projet.priorite) || "—", projet.porteur, cellEch(projet), cellAv(projet)]);
