@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 16 h 01</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 16 h 46</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -21176,7 +21176,15 @@ async function p2aExcel(L,mil){
       lire(c.tblMain,a.p,c.colLibelle).localeCompare(lire(c.tblMain,b.p,c.colLibelle),"fr",{numeric:true}) ||
       (a.estAction?lire(c.tblMain,a.x,c.colLibelle):"").localeCompare(b.estAction?lire(c.tblMain,b.x,c.colLibelle):"","fr",{numeric:true});
   });
+  /* ligne de rappel du projet avant ses actions MEO inscrites (non comptée comme inscription) */
+  let projetRappele=null;
+  const lignes=[];
   tri.forEach(l=>{
+    if(l.estAction && projetRappele!==l.p.id){ projetRappele=l.p.id; lignes.push({p:l.p,x:l.p,estAction:false,rappel:true}); }
+    else if(!l.estAction) projetRappele=null;
+    lignes.push(l);
+  });
+  lignes.forEach(l=>{
     const x=l.x, av=pct(x[c.colAvancement]), e=Number(x[c.colEch])||null;
     const prio=lire(c.tblMain,x,c.colPriorite)||"", statut=lire(c.tblMain,x,c.colStatut)||"", inter=interrompu(x);
     const row=ws.addRow([lire(c.tblMain,l.p,c.colLibelle), l.estAction?lire(c.tblMain,x,c.colLibelle):"", natureDe(x),
@@ -21191,6 +21199,12 @@ async function p2aExcel(L,mil){
     if(P2A_COUL_PRIO[prio]) cp.font={name:"Calibri",size:11,bold:true,color:{argb:P2A_COUL_PRIO[prio]}};
     const fond=p2aFondAvct(av,inter); if(fond) ca.fill={type:"pattern",pattern:"solid",fgColor:{argb:fond}};
     ca.numFmt='0\\ %';
+    if(l.rappel){                                   // projet rappelé : gras, fond beige (l'avancement garde sa couleur)
+      row.eachCell({includeEmpty:true},(cl,k)=>{
+        cl.font=Object.assign({},cl.font,{bold:true});
+        if(k!==8) cl.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF2EFEA"}};
+      });
+    }
   });
   ws.getColumn(7).numFmt="dd/mm/yyyy";
   ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"K1"};
