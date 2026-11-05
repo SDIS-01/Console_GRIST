@@ -17534,7 +17534,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 15 h 02</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 15 h 34</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -21131,21 +21131,67 @@ function rendreP2A(){
     else ouvrirFiche(p);
   });
 }
+/* couleurs communes avec l'extraction PEPS / AV */
+const P2A_COUL_STATUT={"Terminé":"FF069A2E","Interrompu":"FF2A6099","A engager":"FFF10D0C","À engager":"FFF10D0C"};
+const P2A_COUL_PRIO={P1:"FFFF0000",P2:"FFED4C05",P3:"FF2A6099",Poursuite:"FF780373"};
+function p2aFondAvct(n,inter){ return n==null?null : inter?"FFEEEEEE" : n>=76?"FF98FD90" : n>=26?"FFFEF47A" : n>=1?"FFFECC81" : "FFFD8182"; }
+/* instances : toutes celles du projet ; pour une action MEO, celles qui la concernent */
+function p2aInstancesTexte(l){
+  if(typeof instancesDe!=="function") return "";
+  let xs=instancesDe(l.p);
+  if(l.estAction){ const lib=pliColonne(libelleAction(l.x)); xs=xs.filter(j=>j.action && pliColonne(j.action).indexOf(lib)>=0); }
+  return xs.map(x=>x.aProgrammer ? "À programmer — "+((x.periode&&x.periode.libelle)||"")+(x.type?" ("+x.type+")":"")
+    : (x.date?dateVersFR(x.date)+" ":"")+String(x.type||x.libelleSaisi||x.libelle||"Instance").replace(/\s*[—-]?\s*\d{2}\/\d{2}\/\d{4}\s*/,"")).join("\n");
+}
+/* « Budget » si des informations budgétaires sont consultables dans la console */
+function p2aABudget(l){
+  const c=S.cfg;
+  try{
+    if(l.estAction){
+      if(typeof bdgTotalDe!=="function") return false;
+      if(bdgTotalDe("A:"+l.x.id,l.p)) return true;
+      return tachesDe(l.x).some(t=>bdgTotalDe("T:"+t.id,l.p));
+    }
+    return !!(c.colBudget && !budgetVide(nettoyerBudget(txt(l.p[c.colBudget]))));
+  }catch(e){ return false; }
+}
 async function p2aExcel(L,mil){
   await anxChargerExcelJs();
   const c=S.cfg, wb=new ExcelJS.Workbook(), ws=wb.addWorksheet("P2A");
   ws.columns=[{header:"Projet",width:46},{header:"Action MEO",width:46},{header:"Nature",width:9},{header:"Priorité",width:11},
-    {header:"Groupement",width:22},{header:"Porteur",width:24},{header:"Échéance",width:12},{header:"Avancement",width:12},{header:"Statut",width:14}];
+    {header:"Groupement",width:14},{header:"Porteur",width:24},{header:"Échéance",width:12},{header:"Avancement",width:12},{header:"Statut",width:14},
+    {header:"Instance",width:28},{header:"Budget",width:10}];
   ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};
-  ws.getRow(1).eachCell(cl=>cl.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF8C8070"}});
-  L.forEach(l=>{
-    const x=l.x, av=pct(x[c.colAvancement]), e=Number(x[c.colEch])||null;
-    ws.addRow([lire(c.tblMain,l.p,c.colLibelle), l.estAction?lire(c.tblMain,x,c.colLibelle):"", natureDe(x),
-      lire(c.tblMain,x,c.colPriorite)||"", lire(c.tblMain,l.p,c.colGroupement), lire(c.tblMain,x,c.colPorteur),
-      e?new Date(e*1000):null, av==null?null:av/100, lire(c.tblMain,x,c.colStatut)||""]);
+  ws.getRow(1).eachCell(cl=>{ cl.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF8C8070"}}; cl.alignment={vertical:"middle",horizontal:"center",wrapText:true}; });
+  /* tri : groupement (vides à la fin), puis PEPS, actions MEO (sous leur projet), AV ; puis par identifiant */
+  const rangN={PEPS:0,MEO:1,AV:2};
+  const grp=l=>lire(c.tblMain,l.p,c.colGroupement)||"";
+  const tri=L.slice().sort((a,b)=>{
+    const ga=grp(a), gb=grp(b);
+    if(!ga!==!gb) return ga?-1:1;
+    return ga.localeCompare(gb,"fr",{sensitivity:"base"}) ||
+      ((rangN[natureDe(a.x)]??3)-(rangN[natureDe(b.x)]??3)) ||
+      lire(c.tblMain,a.p,c.colLibelle).localeCompare(lire(c.tblMain,b.p,c.colLibelle),"fr",{numeric:true}) ||
+      (a.estAction?lire(c.tblMain,a.x,c.colLibelle):"").localeCompare(b.estAction?lire(c.tblMain,b.x,c.colLibelle):"","fr",{numeric:true});
   });
-  ws.getColumn(7).numFmt="dd/mm/yyyy"; ws.getColumn(8).numFmt="0 %";
-  ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"I1"};
+  tri.forEach(l=>{
+    const x=l.x, av=pct(x[c.colAvancement]), e=Number(x[c.colEch])||null;
+    const prio=lire(c.tblMain,x,c.colPriorite)||"", statut=lire(c.tblMain,x,c.colStatut)||"", inter=interrompu(x);
+    const row=ws.addRow([lire(c.tblMain,l.p,c.colLibelle), l.estAction?lire(c.tblMain,x,c.colLibelle):"", natureDe(x),
+      prio, grp(l), lire(c.tblMain,x,c.colPorteur), e?new Date(e*1000):null, av==null?null:av/100, statut,
+      p2aInstancesTexte(l)||null, p2aABudget(l)?"Budget":null]);
+    row.eachCell({includeEmpty:true},(cl,k)=>{
+      cl.font={name:"Calibri",size:11};
+      cl.alignment={vertical:"middle",horizontal:[3,4,5,7,8,9,11].includes(k)?"center":"left",wrapText:[1,2,10].includes(k)};
+    });
+    const cs=row.getCell(9), cp=row.getCell(4), ca=row.getCell(8);
+    if(P2A_COUL_STATUT[statut]) cs.font={name:"Calibri",size:11,color:{argb:P2A_COUL_STATUT[statut]}};
+    if(P2A_COUL_PRIO[prio]) cp.font={name:"Calibri",size:11,bold:true,color:{argb:P2A_COUL_PRIO[prio]}};
+    const fond=p2aFondAvct(av,inter); if(fond) ca.fill={type:"pattern",pattern:"solid",fgColor:{argb:fond}};
+    ca.numFmt='0\\ %';
+  });
+  ws.getColumn(7).numFmt="dd/mm/yyyy";
+  ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"K1"};
   const buf=await wb.xlsx.writeBuffer(), a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
   a.download=("P2A_"+mil.lib).normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^\w\-]+/g,"_")+"_"+new Date().toISOString().slice(0,10)+".xlsx";
