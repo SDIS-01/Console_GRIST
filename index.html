@@ -16904,7 +16904,14 @@ function rendreKpi(ps, detail){
   const nP2AT=insT.filter(x=>etatDe(x)==="termine").length;
   /* PEPS et actions hors PEPS de l'année : projets au P2A de l'année (par eux-mêmes ou par
      leurs actions MEO), chaque projet ne comptant qu'une fois */
-  const peps=tous.filter(p=>nat(p)==="PEPS" && auP2A(p)), av=tous.filter(p=>nat(p)!=="PEPS" && auP2A(p));
+  /* PEPS de l'année : d'après la colonne Millesime_PEPS du projet (si elle existe), indépendamment
+     du filtre Millésime P2A ; à défaut, d'après le P2A comme avant */
+  const colMP=["Millesime_PEPS","Millésime_PEPS"].find(k=>infoCol(c.tblMain,k));
+  let tousSansMil=tous;
+  if(colMP){ const svM=MENUS["m-millesime"].sel; try{ MENUS["m-millesime"].sel=[]; tousSansMil=projetsHorsEtat(); }catch(e){} finally{ MENUS["m-millesime"].sel=svM; } }
+  const auPEPS=p=>{ const v=String(lire(c.tblMain,p,colMP)||""); return ans.some(y=>v.indexOf(y)>=0); };
+  const peps=colMP ? tousSansMil.filter(p=>nat(p)==="PEPS" && auPEPS(p)) : tous.filter(p=>nat(p)==="PEPS" && auP2A(p));
+  const av=tous.filter(p=>nat(p)!=="PEPS" && auP2A(p));
   const fin=l=>l.filter(p=>etatDe(p)==="termine").length;
   const nPepsT=fin(peps), nAvT=fin(av);
   const sous=t=>'<small class="kpi-sous">'+t+'</small>';
@@ -17493,7 +17500,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 11 h 18</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 11 h 34</div>';
   return h;
 }
 async function lancerEdition(id){
