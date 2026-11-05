@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 17 h 24</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 17 h 55</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -21160,11 +21160,18 @@ function p2aABudget(l){
 async function p2aExcel(L,mil){
   await anxChargerExcelJs();
   const c=S.cfg, wb=new ExcelJS.Workbook(), ws=wb.addWorksheet("P2A");
-  ws.columns=[{header:"Projet",width:46},{header:"Action MEO",width:46},{header:"Nature",width:9},{header:"Priorité",width:11},
-    {header:"Groupement",width:14},{header:"Porteur",width:24},{header:"Échéance",width:12},{header:"Avancement",width:12},{header:"Statut",width:14},
-    {header:"Instance",width:28},{header:"Budget",width:10}];
-  ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};
-  ws.getRow(1).eachCell(cl=>{ cl.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF8C8070"}}; cl.alignment={vertical:"middle",horizontal:"center",wrapText:true}; });
+  /* présentation du modèle P2A_2027_05.11.2026.ods (largeurs en cm converties en caractères Excel) */
+  const cm=v=>Math.round(((v/2.54*96)-5)/7*100)/100;
+  ws.columns=[{header:"Projet",width:cm(9.006)},{header:"Action MEO",width:cm(9.006)},{header:"Nature",width:cm(1.699)},{header:"Priorité",width:cm(2.154)},
+    {header:"Groupement",width:cm(2.741)},{header:"Porteur",width:cm(4.699)},{header:"Échéance",width:cm(2.35)},{header:"Avct",width:cm(2.35)},{header:"Statut",width:cm(2.741)},
+    {header:"Instance",width:cm(5.482)},{header:"Budget",width:cm(1.958)}];
+  ws.getRow(1).eachCell(cl=>{ cl.font={name:"Cambria",size:11,bold:true,color:{argb:"FFFFFFFF"}};
+    cl.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF8C8070"}}; cl.alignment={vertical:"middle",horizontal:"center",wrapText:true}; });
+  /* impression : A3 paysage, une page en largeur, ligne d'en-tête répétée, en-tête « P2A 2027 - 05.11.2026 » */
+  const d=new Date(), dj=String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0")+"."+d.getFullYear();
+  ws.pageSetup={paperSize:8,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,pageOrder:"downThenOver",
+    margins:{left:0.7,right:0.7,top:0.75,bottom:0.75,header:0.2,footer:0.2},printTitlesRow:"1:1"};
+  ws.headerFooter={oddHeader:"&C"+String(mil.lib).replace(/_/g," ")+" - "+dj};
   /* tri : groupement (vides à la fin), puis PEPS, actions MEO (sous leur projet), AV ; puis par identifiant */
   const rangN={PEPS:0,MEO:1,AV:2};
   const grp=l=>lire(c.tblMain,l.p,c.colGroupement)||"";
@@ -21192,16 +21199,16 @@ async function p2aExcel(L,mil){
       p2aInstancesTexte(l)||null, p2aABudget(l)?"Budget":null]);
     row.eachCell({includeEmpty:true},(cl,k)=>{
       cl.font={name:"Calibri",size:11};
-      cl.alignment={vertical:"middle",horizontal:[3,4,5,7,8,9,11].includes(k)?"center":"left",wrapText:[1,2,10].includes(k)};
+      cl.alignment={vertical:"middle",horizontal:[3,4,5,7,8,9,11].includes(k)?"center":"left",wrapText:[1,2,10].includes(k)};   // Porteur : à gauche, sans renvoi
     });
     const cs=row.getCell(9), cp=row.getCell(4), ca=row.getCell(8);
     if(P2A_COUL_STATUT[statut]) cs.font={name:"Calibri",size:11,color:{argb:P2A_COUL_STATUT[statut]}};
     if(P2A_COUL_PRIO[prio]) cp.font={name:"Calibri",size:11,bold:true,color:{argb:P2A_COUL_PRIO[prio]}};
     const fond=p2aFondAvct(av,inter); if(fond) ca.fill={type:"pattern",pattern:"solid",fgColor:{argb:fond}};
     ca.numFmt='0\\ %';
-    if(l.rappel){                                   // projet rappelé : gras, fond beige (l'avancement garde sa couleur)
+    if(l.rappel){                                   // projet rappelé : fond beige, libellés en gras (l'avancement garde sa couleur)
       row.eachCell({includeEmpty:true},(cl,k)=>{
-        cl.font=Object.assign({},cl.font,{bold:true});
+        if(k<=2) cl.font=Object.assign({},cl.font,{bold:true});
         if(k!==8) cl.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF2EFEA"}};
       });
     }
