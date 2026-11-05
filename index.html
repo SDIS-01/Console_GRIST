@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 17 h 07</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 17 h 24</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -21208,8 +21208,14 @@ async function p2aExcel(L,mil){
   });
   ws.getColumn(7).numFmt="dd/mm/yyyy";
   /* quadrillage gris fin sur tout le tableau */
-  const trait={style:"thin",color:{argb:"FFBFBFBF"}};
-  ws.eachRow({includeEmpty:false},row=>{ for(let k=1;k<=11;k++) row.getCell(k).border={top:trait,left:trait,bottom:trait,right:trait}; });
+  const trait={style:"thin",color:{argb:"FFBFBFBF"}}, fin={style:"hair",color:{argb:"FFD0D0D0"}};
+  /* bloc projet + actions MEO : traits horizontaux fins à l'intérieur, trait normal autour */
+  const blocs=lignes.map(l=>(l.rappel||l.estAction)?l.p.id:null);
+  ws.eachRow({includeEmpty:false},(row,n)=>{
+    const i=n-2, dedans=(j)=>j>=0 && j<blocs.length && blocs[i]!=null && blocs[j]===blocs[i];
+    const haut=i>=0 && dedans(i-1) ? fin : trait, bas=i>=0 && dedans(i+1) ? fin : trait;
+    for(let k=1;k<=11;k++) row.getCell(k).border={top:haut,left:trait,bottom:bas,right:trait};
+  });
   ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"K1"};
   const buf=await wb.xlsx.writeBuffer(), a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
