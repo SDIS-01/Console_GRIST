@@ -2283,6 +2283,10 @@ button.ins-plus{border:0;background:none;padding:0 3px;font:inherit;font-size:11
           <button type="button" class="msel-btn"></button>
           <div class="msel-pan" hidden></div>
         </div>
+        <div class="msel" id="m-nature">
+          <button type="button" class="msel-btn"></button>
+          <div class="msel-pan" hidden></div>
+        </div>
         <div class="msel" id="m-origine" hidden>
           <button type="button" class="msel-btn"></button>
           <div class="msel-pan" hidden></div>
@@ -3929,6 +3933,7 @@ const MENUS={
   "m-priorite":{tous:"Toutes priorités", sel:[], opts:[]},
   "m-millesime":{tous:"Millésimes P2A", sel:[], opts:[]},
   "m-origine":{tous:"Toutes origines", sel:[], opts:[]},
+  "m-nature":{tous:"Toutes natures", sel:[], opts:[["PEPS","Projet PEPS"],["AV","Action AV"]]},
   "m-service":{tous:"Tous services", sel:[], opts:[]},
   "m-etat":{tous:"Tous états", sel:[], opts:[
     ["encours","En cours"],["termine","Terminés"],["afaire","À engager"],["interrompu","Interrompus"]]},
@@ -3957,7 +3962,7 @@ function majEtiquetteMenu(id){
   else btn.textContent=court+" ▾";
 }
 const MENUS_COURTS={"m-groupement":"Groupement","m-sponsor":"Sponsor CODIR","m-porteur":"Porteur","m-priorite":"Priorité",
-  "m-etat":"État","m-millesime":"Millésime P2A","m-avct":"Avancement","m-origine":"Origine","m-service":"Service"};
+  "m-etat":"État","m-millesime":"Millésime P2A","m-avct":"Avancement","m-origine":"Origine","m-service":"Service","m-nature":"Nature"};
 
 function rendreMenu(id){
   const m=MENUS[id], wrap=$("#"+id);
@@ -4207,6 +4212,8 @@ function projetsFiltres(){
       if(!mi.some(v=>ms.has(v))) return false;
     }
     if(et.length && !et.includes(etatDe(p))) return false;
+    const fn=MENUS["m-nature"].sel;
+    if(fn.length && !fn.includes(natureDe(p))) return false;
     const fo=MENUS["m-origine"].sel, fsv=MENUS["m-service"].sel;
     if(fo.length && !fo.includes(lire(c.tblMain,p,colOrigineApp()))) return false;
     if(fsv.length && !servicesProjetApp(p).some(v=>fsv.includes(v))) return false;
@@ -17015,7 +17022,7 @@ function rendreListeApp(){
       '<td>'+esc(lire(c.tblMain,p,c.colGroupement))+'</td><td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>'+
       '<td>'+pastillePriorite(lire(c.tblMain,p,c.colPriorite))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
       '<td class="'+(e&&e<auj&&etatDe(p)!=="termine"?"app-ret":"")+'">'+(e?dateVersFR(e):"—")+'</td>'+
-      '<td>'+(()=>{ const n=natureDe(p), t=n==="PEPS"?"Projet":n==="AV"?"Action":""; return t?'<span class="app-nat app-nat-'+(n==="PEPS"?"p":"a")+'">'+t+'</span>':''; })()+'</td></tr>';
+      '<td>'+(()=>{ const n=natureDe(p), t=n==="PEPS"?"Projet PEPS":n==="AV"?"Action AV":""; return t?'<span class="app-nat app-nat-'+(n==="PEPS"?"p":"a")+'">'+t+'</span>':''; })()+'</td></tr>';
   };
   const ligneAction=(a,p)=>{
     const av=pct(a[c.colAvancement]), inter=interrompu(a), e=Number(a[c.colEch])||null;
@@ -17506,7 +17513,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 14 h 26</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 14 h 46</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -18190,7 +18197,7 @@ function anxValeurExcel(T,f,i){
   if(f.baseType==="Bool") return !!raw;
   return raw;
 }
-async function anxExporter(T,sec,idx,titre,fsImpose,nomFichier){
+async function anxExporter(T,sec,idx,titre,fsImpose,nomFichier,perso){
   await anxChargerExcelJs();
   const fs=fsImpose||anxChamps(T,sec);
   const wb=new ExcelJS.Workbook(); wb.creator="Console projets — SDIS de l'Ain";
@@ -18198,6 +18205,7 @@ async function anxExporter(T,sec,idx,titre,fsImpose,nomFichier){
   const h=ws.addRow(fs.map(f=>f.label));
   h.eachCell(c=>{ c.font={bold:true,color:{argb:"FFFFFFFF"}}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F5673"}};
     c.alignment={vertical:"middle",horizontal:"center",wrapText:true}; c.border={bottom:{style:"thin",color:{argb:"FFB8C2CC"}}}; });
+  if(perso&&perso.entete) h.eachCell((cl,k)=>perso.entete(cl,fs[k-1]));
   h.height=24;
   ws.views=[{state:"frozen",ySplit:1,xSplit:0}];
   /* impression : A4 paysage, toutes les colonnes sur la largeur, en-tête répété */
@@ -18205,9 +18213,10 @@ async function anxExporter(T,sec,idx,titre,fsImpose,nomFichier){
     margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.3,footer:0.3},printTitlesRow:"1:1"};
   ws.autoFilter={from:{row:1,column:1},to:{row:1,column:fs.length}};
   /* largeurs lisibles : textes longs plus larges et renvoyés à la ligne */
-  fs.forEach((f,k)=>{ ws.getColumn(k+1).width = f.role==="comm" ? 50 : f.role==="id" ? 45 : f.role==="avct" ? 13 : f.role==="ech" ? 13 : Math.max(14,Math.min(30,Math.round(f.width/7))); });
+  fs.forEach((f,k)=>{ ws.getColumn(k+1).width = (perso&&perso.largeur&&perso.largeur(f)) || (f.role==="comm" ? 50 : f.role==="id" ? 45 : f.role==="avct" ? 13 : f.role==="ech" ? 13 : Math.max(14,Math.min(30,Math.round(f.width/7)))); });
   idx.forEach(r=>{
     const row=ws.addRow(fs.map(f=>{
+      if(f.valeur) return f.valeur(r);              // colonne calculée par la console (ex. instances)
       /* avancement : vrai pourcentage Excel quand la valeur est numérique (0,95 ou 95) */
       if(f.role==="avct"){ const n=anxNombre(T,f,r); if(n!==null) return n<=1 ? n : n/100; }
       return anxValeurExcel(T,f,r);
@@ -18244,6 +18253,7 @@ async function anxExporter(T,sec,idx,titre,fsImpose,nomFichier){
       if(["statut","avct","ech"].includes(f.role) && !(cell.alignment&&cell.alignment.horizontal)) al.horizontal="center";
       cell.alignment=Object.assign({},cell.alignment||{},al);
       cell.border={bottom:{style:"thin",color:{argb:"FFE2E6EA"}}};
+      if(perso&&perso.cellule) perso.cellule(cell,f,r);
     });
   });
   const buf=await wb.xlsx.writeBuffer();
@@ -18433,15 +18443,61 @@ async function exporterPepsAv(){
       Date_Fin:c.colFin,Statut:c.colStatut,Avancement:c.colAvancement,Commentaire:c.colCommentaire,"Priorité":c.colPriorite,Sponsor_CODIR:c.colSponsor}[id];
     return [alias&&infoCol(c.tblMain,alias)?alias:id, lib, role];
   });
-  const fs=anxChamps(T,sec,liste);
+  EXTRACT_T=T;
+  const fs=anxChamps(T,sec,liste).filter(f=>f.label!=="Instance");
+  /* Instance : les instances du projet, lues dans la table des instances (comme la colonne de la Liste) */
+  const parId=new Map(S.data.main.map(p=>[p.id,p]));
+  const fIns={colId:"__instances", label:"Instance", role:"ins", baseType:"Text", opts:{}, regles:[], width:200, displayColId:null,
+    valeur:r=>{ const p=parId.get(T.data.id[r]); if(!p||typeof instancesDe!=="function") return null;
+      const xs=instancesDe(p).map(x=>x.aProgrammer ? "À programmer — "+((x.periode&&x.periode.libelle)||"")+(x.type?" ("+x.type+")":"")
+        : (x.date?dateVersFR(x.date)+" ":"")+(x.type||x.libelleSaisi||x.libelle||"Instance").replace(/\s*[—-]?\s*\d{2}\/\d{2}\/\d{4}\s*/,""));
+      return xs.length?xs.join("\n"):null; }};
+  const iPri=fs.findIndex(f=>f.label==="Priorité");
+  fs.splice(iPri>=0?iPri+1:fs.length,0,fIns);
   const ids=projetsFiltres().map(p=>p.id);
   const fG=fs.find(f=>f.label==="Groupement"), fI=fs.find(f=>f.role==="id");
   const idx=anxOrdre(T,sec,ids).sort((a,b)=>{
     const g=(fG?anxTexte(T,fG,a):"").localeCompare(fG?anxTexte(T,fG,b):"","fr");
     return g || (fI?anxTexte(T,fI,a):"").localeCompare(fI?anxTexte(T,fI,b):"","fr",{numeric:true});
   });
-  await anxExporter(T,sec,idx,"Extract_PEPS_AV",fs,"Extract_PEPS_AV");
+  await anxExporter(T,sec,idx,"Extract_PEPS_AV",fs,"Extract_PEPS_AV",EXTRACT_STYLE);
 }
+/* présentation de l'extraction PEPS / AV (modèle validé le 05/11/2026) */
+const EXTRACT_STYLE={
+  largeur:f=>({Groupement:14,ID_Projet_Action_AV:45,Nature:14,"Date_Début":13,Ech_Prev:13,Date_Fin:13,Statut:14,Avancement:13,Commentaire:50,
+    "Priorité":14,Instance:28,Journal_bord_Commentaire:50,MEC_2023:30,CASDIS_N:15.5,Sponsor_CODIR:26})[f.label],
+  entete:cl=>{ cl.font={name:"Cambria",size:11,bold:true,color:{argb:"FFFFFFFF"}}; },
+  cellule:(cl,f,r)=>{
+    const v=cl.value, txtv=typeof v==="string"?v.trim():"";
+    cl.font=Object.assign({name:"Calibri",size:11},cl.font||{}, {name:"Calibri",size:11});
+    const centre=["Groupement","Nature","Date_Début","Ech_Prev","Date_Fin","Statut","Avancement","Priorité"].includes(f.label);
+    const enrouler=["ID_Projet_Action_AV","Commentaire","Journal_bord_Commentaire","MEC_2023","Instance"].includes(f.label) && v!=null;
+    cl.alignment={vertical:"center",horizontal:centre?"center":"left",wrapText:!!enrouler};
+    if(f.label==="Statut"){
+      const coul={"Terminé":"FF069A2E","Interrompu":"FF2A6099","A engager":"FFF10D0C","À engager":"FFF10D0C"}[txtv];
+      cl.font=Object.assign({},cl.font,coul?{color:{argb:coul}}:{color:{argb:"FF000000"}},{bold:false});
+      cl.fill={type:"pattern",pattern:"none"};
+    }
+    if(f.label==="Priorité"){
+      const coul={P1:"FFFF0000",P2:"FFED4C05",P3:"FF2A6099",Poursuite:"FF780373"}[txtv];
+      cl.font=Object.assign({},cl.font,coul?{bold:true,color:{argb:coul}}:{bold:false,color:{argb:"FF000000"}});
+      cl.fill={type:"pattern",pattern:"none"};
+    }
+    if(f.label==="Avancement"){
+      const p=parId0(T0(),r);
+      const inter=p && typeof interrompu==="function" && interrompu(p);
+      const n=typeof v==="number"?Math.round(v*100):null;
+      const fond=n===null?null : inter?"FFEEEEEE" : n>=76?"FF98FD90" : n>=26?"FFFEF47A" : n>=1?"FFFECC81" : "FFFD8182";
+      cl.fill=fond?{type:"pattern",pattern:"solid",fgColor:{argb:fond}}:{type:"pattern",pattern:"none"};
+      cl.font=Object.assign({},cl.font,{bold:false,color:{argb:"FF000000"}});
+      if(typeof v==="number") cl.numFmt='0\\ %';      // 0,95 → « 95 % »
+    }
+  }
+};
+/* ligne Grist d'origine d'une ligne exportée (pour l'état interrompu) */
+let EXTRACT_T=null;
+function T0(){ return EXTRACT_T; }
+function parId0(T,r){ if(!T) return null; const id=T.data.id[r]; return S.data.main.find(p=>p.id===id)||null; }
 
 /* =======================================================================
    MEC 2023 / PAPRIPACT : modification de l'avancement et du commentaire
