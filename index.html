@@ -4141,6 +4141,8 @@ function remplirFiltres(){
   /* millésimes P2A : ceux des projets et de leurs actions */
   MENUS["m-millesime"].opts=trierMillesimes([...new Set(ps.flatMap(p=>[...millesimesProjet(p)]))]).map(v=>[v,v]);
   MENUS["m-millesime"].sel=MENUS["m-millesime"].sel.filter(v=>MENUS["m-millesime"].opts.some(o=>o[0]===v));
+  /* à l'ouverture : le P2A de l'année en cours est sélectionné d'office */
+  if(!S.millesimeInit && c.colMillesime && MENUS["m-millesime"].opts.length){ S.millesimeInit=true; MENUS["m-millesime"].sel=millesimesDefaut(); }
   const wm=$("#m-millesime"); if(wm) wm.hidden=!c.colMillesime;
   /* Origine : celle du projet ; Service : celui du projet ou de ses actions */
   const co=colOrigineApp(), cs=colServiceApp();
@@ -4224,9 +4226,18 @@ function projetsFiltres(){
 function anxFiltresActifs(){
   return typeof ANX!=="undefined" && !!ANX.fc && Object.values(ANX.fc).some(F=>Object.keys(F.val).length || F.tri || !F.sans100);
 }
+/* millésimes par défaut : ceux du P2A de l'année en cours (P2A_2026…) */
+function millesimesDefaut(){
+  const an=String(new Date().getFullYear());
+  return ((MENUS["m-millesime"]||{}).opts||[]).map(o=>o[0]).filter(v=>/p2a/i.test(v) && String(v).indexOf(an)>=0);
+}
+function millesimeParDefaut(){
+  const s=[...((MENUS["m-millesime"]||{}).sel||[])].sort().join("|");
+  return s===millesimesDefaut().sort().join("|");
+}
 function filtresActifs(){
   return !!$("#q").value.trim() || DATES_FILTRE.some(s=>$(s).value) || anxFiltresActifs()
-    || S.voirArchives || Object.keys(MENUS).some(id=>MENUS[id].sel.length);
+    || S.voirArchives || Object.keys(MENUS).some(id=>id==="m-millesime" ? !millesimeParDefaut() : MENUS[id].sel.length);
 }
 
 function reinitialiserFiltres(){
@@ -4234,7 +4245,7 @@ function reinitialiserFiltres(){
   DATES_FILTRE.forEach(s=>$(s).value="");
   S.voirArchives=false;
   const cba=$("#f-archives"); if(cba) cba.checked=false;
-  Object.keys(MENUS).forEach(id=>{ MENUS[id].sel=[]; rendreMenu(id); });
+  Object.keys(MENUS).forEach(id=>{ MENUS[id].sel=id==="m-millesime"?millesimesDefaut():[]; rendreMenu(id); });
   /* filtres de colonnes MEC 2023 / PAPRIPACT : retour aux valeurs par défaut (100 % masqués) */
   if(typeof ANX!=="undefined" && ANX.fc) Object.keys(ANX.fc).forEach(k=>{ ANX.fc[k]={val:{},tri:null,sans100:true}; });
   document.querySelectorAll(".anx-pop,.msel-pan").forEach(x=>{ if(x.classList.contains("anx-pop")) x.remove(); else x.hidden=true; });
@@ -16876,13 +16887,18 @@ function projetsHorsEtat(){
 }
 function rendreKpi(ps, detail){
   /* PEPS, actions hors PEPS et inscriptions au P2A de l'année, avec leurs terminés */
-  const c=S.cfg, an=String(new Date().getFullYear());
+  /* millésimes retenus : ceux du filtre Millésime P2A s'il est posé, sinon l'année en cours */
+  const c=S.cfg, selM=((MENUS["m-millesime"]||{}).sel||[]).map(String);
+  const anCourant=String(new Date().getFullYear());
+  const retenu=m=>selM.length ? selM.includes(String(m)) : String(m).indexOf(anCourant)>=0;
+  const ans=selM.length ? [...new Set(selM.map(m=>(String(m).match(/\d{4}/)||[m])[0]))].sort() : [anCourant];
+  const an=ans.join(", ");
   const nat=p=>natureDe(p);
-  const auP2A=p=>[...millesimesProjet(p)].some(m=>String(m).indexOf(an)>=0);
+  const auP2A=p=>[...millesimesProjet(p)].some(retenu);
   let tous=[]; try{ tous=projetsHorsEtat(); }catch(e){ tous=ps; }
   /* inscriptions au P2A : un projet compte une fois ; si des actions MEO sont inscrites
      elles-mêmes, ce sont elles qui comptent, et plus leur projet (même règle que la revue) */
-  const inscrit=x=>millesimesDe(x).some(m=>String(m).indexOf(an)>=0);
+  const inscrit=x=>millesimesDe(x).some(retenu);
   const inscriptions=l=>l.reduce((acc,p)=>{ const as=actionsDe(p).filter(inscrit); return acc.concat(as.length?as:(inscrit(p)?[p]:[])); },[]);
   const insT=inscriptions(tous);
   const nP2AT=insT.filter(x=>etatDe(x)==="termine").length;
@@ -16953,8 +16969,8 @@ function rendreListeApp(){
   const tachesP=p=>{ try{ return tachesDe(p).concat(...actionsDe(p).map(a=>tachesDe(a))); }catch(e){ return []; } };
   /* répartition : projets et actions de l'année en cours, c'est-à-dire les inscriptions au P2A de l'année
      (un projet compte une fois ; si des actions MEO sont inscrites, ce sont elles qui comptent, pas le projet) */
-  const anRep=String(new Date().getFullYear());
-  const inscritRep=x=>millesimesDe(x).some(m=>String(m).indexOf(anRep)>=0);
+  const selRep=((MENUS["m-millesime"]||{}).sel||[]).map(String), anRep=String(new Date().getFullYear());
+  const inscritRep=x=>millesimesDe(x).some(m=>selRep.length ? selRep.includes(String(m)) : String(m).indexOf(anRep)>=0);
   ps.forEach(p=>{
     if(c.colMillesime){
       const as=actionsDe(p).filter(inscritRep);
@@ -17035,7 +17051,7 @@ function rendreListeApp(){
       '<button type="button" class="anx-pdf" id="et-plus" title="Autres éditions du portefeuille">⋯</button></div>'+
     (tot ? '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([kk])=>rep[kk]).map(([kk,col])=>'<i style="flex:'+rep[kk]+';background:'+col+'"></i>').join("")+'</div>'+
       '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([kk])=>rep[kk]).map(([kk,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[kk]).join("")+
-      ' <span class="app-mut">('+(c.colMillesime?'projets et actions inscrits au P2A '+new Date().getFullYear():'projets et actions')+')</span></div>' : '')+
+      ' <span class="app-mut">('+(c.colMillesime?'projets et actions inscrits au '+(selRep.length?selRep.join(", "):'P2A '+anRep):'projets et actions')+')</span></div>' : '')+
     (liste.length ? '<table class="app-table"><thead><tr>'+th("nom","Projet")+th("ins","Instances")+th("grp","Groupement")+th("por","Porteur")+
       th("pri","Priorité")+'<th>Statut</th>'+th("av","Avancement")+th("ech","Échéance")+'<th></th></tr></thead><tbody>'+corps+'</tbody></table>'
       : '<div class="app-vide">Aucun projet ne correspond aux filtres.</div>');
@@ -17477,7 +17493,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 04/11/2026 · 11 h 49</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 11 h 18</div>';
   return h;
 }
 async function lancerEdition(id){
