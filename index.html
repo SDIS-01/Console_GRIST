@@ -2210,6 +2210,10 @@ button.ins-plus{border:0;background:none;padding:0 3px;font:inherit;font-size:11
 .anx-pj-ajout{display:block;margin:6px 0;padding:8px 10px;border:1px dashed var(--bleu);border-radius:6px;color:var(--bleu);font-size:12.5px;cursor:pointer;text-align:center;}
 .anx-pj-ajout.envoi{opacity:.6;pointer-events:none;}
 .anx-td-pj{min-width:140px;}
+/* Liste : nature à la place de « en retard » */
+.app-nat{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+.app-nat-p{background:#F2DCDB;color:#963634;}
+.app-nat-a{background:#DCE6F2;color:#1F497D;}
 </style>
 </head>
 <body>
@@ -16978,7 +16982,9 @@ function rendreListeApp(){
      (un projet compte une fois ; si des actions MEO sont inscrites, ce sont elles qui comptent, pas le projet) */
   const selRep=((MENUS["m-millesime"]||{}).sel||[]).map(String), anRep=String(new Date().getFullYear());
   const inscritRep=x=>millesimesDe(x).some(m=>selRep.length ? selRep.includes(String(m)) : String(m).indexOf(anRep)>=0);
-  ps.forEach(p=>{
+  /* même ensemble que les chiffres-clés : archives comprises, sans les filtres État, Avancement, Échéance */
+  let baseRep=ps; try{ baseRep=projetsHorsEtat(); }catch(e){}
+  baseRep.forEach(p=>{
     if(c.colMillesime){
       const as=actionsDe(p).filter(inscritRep);
       (as.length?as:(inscritRep(p)?[p]:[])).forEach(x=>{ rep[classe(pct(x[c.colAvancement]),interrompu(x))]++; });
@@ -17009,7 +17015,7 @@ function rendreListeApp(){
       '<td>'+esc(lire(c.tblMain,p,c.colGroupement))+'</td><td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>'+
       '<td>'+pastillePriorite(lire(c.tblMain,p,c.colPriorite))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
       '<td class="'+(e&&e<auj&&etatDe(p)!=="termine"?"app-ret":"")+'">'+(e?dateVersFR(e):"—")+'</td>'+
-      '<td>'+(ret?'<span class="app-alerte">'+(al.retard>1?al.retard+" retards":"en retard")+'</span>':'')+'</td></tr>';
+      '<td>'+(()=>{ const n=natureDe(p), t=n==="PEPS"?"Projet":n==="AV"?"Action":""; return t?'<span class="app-nat app-nat-'+(n==="PEPS"?"p":"a")+'">'+t+'</span>':''; })()+'</td></tr>';
   };
   const ligneAction=(a,p)=>{
     const av=pct(a[c.colAvancement]), inter=interrompu(a), e=Number(a[c.colEch])||null;
@@ -17060,7 +17066,7 @@ function rendreListeApp(){
       '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([kk])=>rep[kk]).map(([kk,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[kk]).join("")+
       ' <span class="app-mut">('+(c.colMillesime?'projets et actions inscrits au '+(selRep.length?selRep.join(", "):'P2A '+anRep):'projets et actions')+')</span></div>' : '')+
     (liste.length ? '<table class="app-table"><thead><tr>'+th("nom","Projet")+th("ins","Instances")+th("grp","Groupement")+th("por","Porteur")+
-      th("pri","Priorité")+'<th>Statut</th>'+th("av","Avancement")+th("ech","Échéance")+'<th></th></tr></thead><tbody>'+corps+'</tbody></table>'
+      th("pri","Priorité")+'<th>Statut</th>'+th("av","Avancement")+th("ech","Échéance")+'<th>Nature</th></tr></thead><tbody>'+corps+'</tbody></table>'
       : '<div class="app-vide">Aucun projet ne correspond aux filtres.</div>');
   const z=$("#zone-liste");
   z.querySelectorAll("[data-tri]").forEach(t=>t.onclick=()=>{
@@ -17500,7 +17506,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 11 h 34</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 14 h 26</div>';
   return h;
 }
 async function lancerEdition(id){
