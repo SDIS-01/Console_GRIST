@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 16 h 46</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 17 h 07</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -21207,6 +21207,9 @@ async function p2aExcel(L,mil){
     }
   });
   ws.getColumn(7).numFmt="dd/mm/yyyy";
+  /* quadrillage gris fin sur tout le tableau */
+  const trait={style:"thin",color:{argb:"FFBFBFBF"}};
+  ws.eachRow({includeEmpty:false},row=>{ for(let k=1;k<=11;k++) row.getCell(k).border={top:trait,left:trait,bottom:trait,right:trait}; });
   ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"K1"};
   const buf=await wb.xlsx.writeBuffer(), a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
