@@ -2214,6 +2214,22 @@ button.ins-plus{border:0;background:none;padding:0 3px;font:inherit;font-size:11
 .app-nat{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11.5px;font-weight:600;white-space:nowrap;}
 .app-nat-p{background:#F2DCDB;color:#963634;}
 .app-nat-a{background:#DCE6F2;color:#1F497D;}
+/* Documents */
+body.app-documents .app-filtres{display:none;}
+.doc-outils{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;}
+.doc-outils strong{font-size:15px;margin-right:6px;}
+.doc-outils select,.doc-outils input{font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--trait);border-radius:6px;background:#fff;}
+.doc-table td{vertical-align:middle;}
+.doc-titre{font-weight:600;}
+.doc-tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+.doc-r{background:#F2DCDB;color:#963634}.doc-e{background:#DCE6F2;color:#1F497D}.doc-a{background:#EEECE1;color:#5a4f2a}
+.voile-doc{position:fixed;inset:0;background:rgba(20,28,45,.35);display:flex;align-items:center;justify-content:center;z-index:60;}
+.doc-fen{background:#fff;border-radius:10px;padding:18px 20px;width:min(520px,calc(100vw - 30px));display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.2);}
+.doc-fen h3{margin:0 0 4px;font-size:16px;}
+.doc-fen label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#3c4a6b;}
+.doc-fen input,.doc-fen select{font:inherit;font-weight:400;font-size:13px;padding:7px 8px;border:1px solid var(--trait);border-radius:6px;}
+.doc-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.doc-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
 </style>
 </head>
 <body>
@@ -2228,6 +2244,7 @@ button.ins-plus{border:0;background:none;padding:0 3px;font:inherit;font-size:11
     <button type="button" data-vue="portefeuille">Portefeuille SDIS 01</button>
     <button type="button" data-vue="monpf">Mon portefeuille</button>
     <button type="button" data-vue="travail">Mes notifications<span class="nav-badge" id="nav-badge-travail" hidden></span></button>
+    <button type="button" data-vue="documents">📁 Documents</button>
     <button type="button" id="nav-contact" class="nav-contact" title="Envoyer une question ou une demande à l'administrateur">✉ Contacter l'admin</button>
   </nav>
   <button class="btn-top btn-notif" id="btn-notif" hidden aria-expanded="false" aria-controls="notif-pan"
@@ -2329,6 +2346,7 @@ button.ins-plus{border:0;background:none;padding:0 3px;font:inherit;font-size:11
       <div id="zone-liste" class="zone-app" hidden></div>
       <div id="zone-travail" class="zone-app" hidden></div>
       <div id="zone-monpf" class="zone-app" hidden></div>
+      <div id="zone-documents" class="zone-app" hidden></div>
       <div id="zone-planning" class="zone-mod" hidden></div>
       <div id="zone-etats" class="zone-mod" hidden></div>
       <div id="zone-annexes" class="zone-app" hidden></div>
@@ -16732,7 +16750,7 @@ function vueInitiale(){
 function rendreApp(){
   if(enMobile()) return;
   const b=document.body;
-  ["portefeuille","travail","fiche","revues","monpf"].forEach(v=>b.classList.toggle("app-"+v,APP.vue===v));
+  ["portefeuille","travail","fiche","revues","monpf","documents"].forEach(v=>b.classList.toggle("app-"+v,APP.vue===v));
   const ficheModule = APP.vue==="fiche" && APP.ficheSous!=="fiche";
   b.classList.toggle("app-hors-fiche",APP.vue!=="fiche" || ficheModule);
   b.classList.toggle("app-ctx-projet",APP.vue==="fiche");
@@ -16751,7 +16769,7 @@ function rendreApp(){
     }
     /* planning ou état du seul projet ouvert */
     va.hidden=false;
-    ["liste","travail","monpf","planning","etats","etats-app","annexes","p2a","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
+    ["liste","travail","monpf","documents","planning","etats","etats-app","annexes","p2a","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
     $("#kpi-app").hidden=true;
     if(APP.ficheSous==="planning"){ $("#zone-planning").hidden=false; chargerModule("planning"); }
     else { $("#zone-etats").hidden=false; chargerModule("etat"); }
@@ -16760,10 +16778,11 @@ function rendreApp(){
     return;
   }
   va.hidden=false;
-  ["liste","travail","monpf","planning","etats","etats-app","annexes","p2a","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
+  ["liste","travail","monpf","documents","planning","etats","etats-app","annexes","p2a","revues"].forEach(z=>{ const e=$("#zone-"+z); if(e) e.hidden=true; });
   $("#kpi-app").hidden=true;
   if(APP.vue==="travail") $("#zone-travail").hidden=false;
   else if(APP.vue==="monpf") $("#zone-monpf").hidden=false;
+  else if(APP.vue==="documents") $("#zone-documents").hidden=false;
   else if(APP.vue==="revues") $("#zone-revues").hidden=false;
   else if(APP.sous==="liste"){ $("#kpi-app").hidden=false; $("#zone-liste").hidden=false; }
   else if(APP.sous==="planning"){ $("#kpi-app").hidden=false; $("#zone-planning").hidden=false; chargerModule("planning"); }
@@ -16815,6 +16834,7 @@ function rendreFil(){
     f.querySelectorAll("[data-fsous]").forEach(x=>x.onclick=()=>{ APP.ficheSous=x.dataset.fsous; rendreApp(); });
     return;
   }
+  if(APP.vue==="documents"){ f.innerHTML='<b>Documents</b><span class="fil-chemin">revues, états et comptes rendus enregistrés</span>'; return; }
   if(APP.vue==="travail"){
     const moi=S.notifAgent||agentCourant(), vu=APP.agentVu;
     const agents=(S.data.agents||[]).filter(a=>nomAgent(a)).sort((a,b)=>nomAgent(a).localeCompare(nomAgent(b),"fr"));
@@ -17475,6 +17495,7 @@ function rafraichirVueApp(){
     else if(APP.sous==="planning") rendreKpi(projetsFiltres());
   } else if(APP.vue==="travail") rendreTravail();
   else if(APP.vue==="monpf") rendreMonPf();
+  else if(APP.vue==="documents") rendreDocuments();
   notifierModules();   // planning et état déjà chargés suivent les filtres, même masqués
 }
 
@@ -17513,7 +17534,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 14 h 46</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 15 h 02</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -21191,6 +21212,150 @@ async function autCorriger(){
     toast("Commentaires corrigés : "+stats.ok+" avec auteur"+(stats.sans?", "+stats.sans+" sans auteur":""));
     await charger(); if(typeof rendreApp==="function") rendreApp();
   }catch(e){ toast("Correction impossible : "+e.message,true); }
+}
+
+/* =======================================================================
+   Documents : revues, états, comptes rendus… déposés par les administrateurs
+   (adresses du réglage « E-mails des administrateurs »), consultables et
+   téléchargeables par tous. Table Grist « Documents » :
+   Titre, Type, Annee, Projet (facultatif), Groupement (facultatif),
+   Fichier (pièces jointes), Date_depot, Depose_par.
+   Les droits réels se règlent dans les règles d'accès de Grist.
+   ======================================================================= */
+const DOCS={table:"Documents", lignes:[], ok:false, erreur:"", t:0, f:{type:"",annee:"",q:""}};
+const DOC_TYPES_DEFAUT=["Revue","État","Compte rendu","Autre"];
+/* colonne réelle d'un rôle, en tolérant accents et variantes */
+function docCol(role){
+  const cand={titre:["Titre"],type:["Type"],annee:["Annee","Année"],projet:["Projet"],groupement:["Groupement"],
+    fichier:["Fichier","Fichiers","Pieces_jointes"],date:["Date_depot","Date_dépôt","Date"],auteur:["Depose_par","Déposé_par","Auteur"]}[role]||[role];
+  for(const k of cand){ const i=infoCol(DOCS.table,k); if(i) return i.colId||k; }
+  const cols=(typeof colonnesDe==="function"?colonnesDe(DOCS.table):[])||[];
+  const pl=x=>String(x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const c=cols.find(c=>cand.some(k=>pl(c.colId)===pl(k)));
+  return c?c.colId:null;
+}
+function docV(r,role){ const c=docCol(role); return c?r[c]:null; }
+function docTxt(r,role){
+  const c=docCol(role); if(!c) return "";
+  const i=infoCol(DOCS.table,c);
+  if(role==="projet" && i && /^Ref:/.test(i.type)){      // référence vers les projets : leur libellé
+    const p=S.data.main.find(x=>x.id===Number(r[c])); return p?txt(lire(S.cfg.tblMain,p,S.cfg.colLibelle)):"";
+  }
+  return txt(lire(DOCS.table,r,c));
+}
+function docPJ(r){ return valListe(docV(r,"fichier")).map(Number).filter(Boolean); }
+function docEstAdmin(){ return typeof demEstAdmin==="function" && demEstAdmin(); }
+async function docCharger(force){
+  if(!force && DOCS.ok && Date.now()-DOCS.t<60000) return;
+  try{
+    const t=await grist.docApi.fetchTable(DOCS.table);
+    DOCS.lignes=enLignes(t); DOCS.ok=true; DOCS.erreur="";
+    const manque=[]; DOCS.lignes.forEach(r=>docPJ(r).forEach(id=>{ if(!(S.pj&&S.pj[id])) manque.push(id); }));
+    if(manque.length){ S.pj=S.pj||{}; await nommerPJ(manque); }
+  }catch(e){ DOCS.ok=false; DOCS.erreur=e.message; DOCS.lignes=[]; }
+  DOCS.t=Date.now();
+}
+function docTypes(){
+  const i=infoCol(DOCS.table,docCol("type")||"Type");
+  let ch=[]; try{ ch=(JSON.parse(i&&i.widgetOptions||"{}").choices)||[]; }catch(e){}
+  if(i && Array.isArray(i.choices)) ch=i.choices;
+  return ch.length?ch:DOC_TYPES_DEFAUT;
+}
+async function docOuvrir(id){
+  try{
+    const tk=await grist.docApi.getAccessToken({readOnly:true});
+    window.open(tk.baseUrl+"/attachments/"+id+"/download?auth="+encodeURIComponent(tk.token),"_blank","noopener");
+  }catch(e){ toast("Ouverture impossible : "+e.message,true); }
+}
+async function rendreDocuments(){
+  const z=$("#zone-documents"); if(!z) return;
+  if(!DOCS.ok && !DOCS.t) z.innerHTML='<div class="app-vide">Chargement des documents…</div>';
+  await docCharger();
+  if(!DOCS.ok){
+    z.innerHTML='<div class="app-vide">La table « '+esc(DOCS.table)+' » est introuvable ou inaccessible'+(DOCS.erreur?' ('+esc(DOCS.erreur)+')':'')+
+      '.<br>Créez-la dans Grist avec les colonnes Titre, Type, Annee, Projet, Groupement, Fichier (pièces jointes), Date_depot et Depose_par.</div>';
+    return;
+  }
+  const F=DOCS.f, admin=docEstAdmin();
+  const annees=[...new Set(DOCS.lignes.map(r=>docTxt(r,"annee")).filter(Boolean))].sort().reverse();
+  const types=[...new Set(docTypes().concat(DOCS.lignes.map(r=>docTxt(r,"type")).filter(Boolean)))];
+  const q=plierTexte(F.q||"");
+  const dateDe=r=>Number(docV(r,"date"))||0;
+  const L=DOCS.lignes.filter(r=>(!F.type||docTxt(r,"type")===F.type) && (!F.annee||docTxt(r,"annee")===F.annee) &&
+      (!q || plierTexte([docTxt(r,"titre"),docTxt(r,"projet"),docTxt(r,"groupement"),docPJ(r).map(nomPJ).join(" ")].join(" ")).includes(q)))
+    .sort((a,b)=>dateDe(b)-dateDe(a)||b.id-a.id);
+  const tag=t=>{ const k=plierTexte(t); const cl=k.startsWith("revue")?"r":k.startsWith("etat")?"e":"a"; return t?'<span class="doc-tag doc-'+cl+'">'+esc(t)+'</span>':''; };
+  z.innerHTML='<div class="doc-outils"><strong>Documents</strong>'+
+      '<select id="doc-type"><option value="">Tous les types</option>'+types.map(t=>'<option'+(F.type===t?" selected":"")+'>'+esc(t)+'</option>').join("")+'</select>'+
+      '<select id="doc-annee"><option value="">Toutes les années</option>'+annees.map(a=>'<option'+(F.annee===a?" selected":"")+'>'+esc(a)+'</option>').join("")+'</select>'+
+      '<input type="search" id="doc-q" placeholder="Rechercher…" value="'+esc(F.q||"")+'">'+
+      '<span class="fil-esp"></span>'+
+      (admin?'<button type="button" class="btn" id="doc-ajout">＋ Ajouter un document</button>':'')+'</div>'+
+    (L.length ? '<table class="app-table doc-table"><thead><tr><th>Date</th><th>Type</th><th>Titre</th><th>Année</th><th>Projet / groupement</th><th>Déposé par</th><th>Fichier</th>'+(admin?'<th></th>':'')+'</tr></thead><tbody>'+
+      L.map(r=>'<tr><td>'+(dateDe(r)?dateVersFR(dateDe(r)):"—")+'</td><td>'+tag(docTxt(r,"type"))+'</td><td class="doc-titre">'+esc(docTxt(r,"titre")||"(sans titre)")+'</td>'+
+        '<td>'+esc(docTxt(r,"annee"))+'</td><td>'+esc(docTxt(r,"projet")||docTxt(r,"groupement")||"—")+'</td><td>'+esc(docTxt(r,"auteur"))+'</td>'+
+        '<td>'+(docPJ(r).map(id=>'<button type="button" class="anx-pj-chip" data-doc-pj="'+id+'" title="Ouvrir / télécharger">📎 '+esc(nomPJ(id))+'</button>').join(" ")||'<span class="app-mut">—</span>')+'</td>'+
+        (admin?'<td><button type="button" class="btn-sup" data-doc-sup="'+r.id+'" title="Supprimer ce document">✕</button></td>':'')+'</tr>').join("")+'</tbody></table>'
+      : '<div class="app-vide">'+(DOCS.lignes.length?'Aucun document ne correspond aux filtres.':'Aucun document pour l\'instant.'+(admin?' Utilisez « Ajouter un document ».':''))+'</div>');
+  $("#doc-type").onchange=e=>{ F.type=e.target.value; rendreDocuments(); };
+  $("#doc-annee").onchange=e=>{ F.annee=e.target.value; rendreDocuments(); };
+  const dq=$("#doc-q"); dq.oninput=()=>{ F.q=dq.value; clearTimeout(DOCS.tq); DOCS.tq=setTimeout(()=>{ rendreDocuments().then(()=>{ const n=$("#doc-q"); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } }); },250); };
+  z.querySelectorAll("[data-doc-pj]").forEach(b=>b.onclick=()=>docOuvrir(Number(b.dataset.docPj)));
+  z.querySelectorAll("[data-doc-sup]").forEach(b=>b.onclick=async()=>{
+    if(!confirm("Supprimer ce document de la console ?")) return;
+    try{ await grist.docApi.applyUserActions([["RemoveRecord",DOCS.table,Number(b.dataset.docSup)]]); toast("Document supprimé"); await docCharger(true); rendreDocuments(); }
+    catch(e){ toast("Suppression impossible : "+e.message,true); }
+  });
+  const ba=$("#doc-ajout"); if(ba) ba.onclick=docFormulaire;
+}
+function docFormulaire(){
+  const c=S.cfg, an=String(new Date().getFullYear());
+  const projets=S.data.main.filter(estProjet).sort((a,b)=>lire(c.tblMain,a,c.colLibelle).localeCompare(lire(c.tblMain,b,c.colLibelle),"fr",{numeric:true}));
+  const grps=[...new Set(S.data.main.map(p=>lire(c.tblMain,p,c.colGroupement)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr"));
+  const v=document.createElement("div"); v.className="voile-doc";
+  v.innerHTML='<div class="doc-fen" role="dialog" aria-label="Ajouter un document"><h3>Ajouter un document</h3>'+
+    '<label>Titre<input type="text" id="docf-titre" placeholder="Ex. Revue annuelle complète '+an+'"></label>'+
+    '<div class="doc-2"><label>Type<select id="docf-type">'+docTypes().map(t=>'<option>'+esc(t)+'</option>').join("")+'</select></label>'+
+    '<label>Année<input type="text" id="docf-annee" value="'+an+'"></label></div>'+
+    (docCol("projet")?'<label>Projet (facultatif)<select id="docf-projet"><option value="">—</option>'+projets.map(p=>'<option value="'+p.id+'">'+esc(lire(c.tblMain,p,c.colLibelle))+'</option>').join("")+'</select></label>':'')+
+    (docCol("groupement")?'<label>Groupement (facultatif)<select id="docf-grp"><option value="">—</option>'+grps.map(g=>'<option>'+esc(g)+'</option>').join("")+'</select></label>':'')+
+    '<label class="doc-fichier">Fichier<input type="file" id="docf-fichier"></label>'+
+    '<div class="doc-btns"><button type="button" class="btn-2" id="docf-ann">Annuler</button><button type="button" class="btn" id="docf-ok">Enregistrer</button></div></div>';
+  document.body.appendChild(v);
+  const fermer=()=>v.remove();
+  v.querySelector("#docf-ann").onclick=fermer;
+  v.onclick=e=>{ if(e.target===v) fermer(); };
+  const inp=v.querySelector("#docf-fichier"), ti=v.querySelector("#docf-titre");
+  inp.onchange=()=>{ if(inp.files[0] && !ti.value.trim()) ti.value=inp.files[0].name.replace(/\.[^.]+$/,"").replace(/_/g," "); };
+  v.querySelector("#docf-ok").onclick=async e=>{
+    const f=inp.files[0];
+    if(!f){ toast("Choisissez un fichier.",true); return; }
+    if(!ti.value.trim()){ toast("Indiquez un titre.",true); ti.focus(); return; }
+    e.target.disabled=true; e.target.textContent="Envoi…";
+    try{
+      const tk=await grist.docApi.getAccessToken({readOnly:false});
+      const fd=new FormData(); fd.append("upload",f,f.name);
+      const rep=await fetch(tk.baseUrl+"/attachments?auth="+encodeURIComponent(tk.token),{method:"POST",body:fd,headers:{"X-Requested-With":"XMLHttpRequest"}});
+      if(!rep.ok){ const d=await rep.text().catch(()=>""); throw new Error(rep.status+" "+rep.statusText+(d?" — "+d.slice(0,160):"")); }
+      const res=await rep.json(), ids=(Array.isArray(res)?res:[res]).map(Number);
+      const champs={};
+      const met=(role,val)=>{ const col=docCol(role); if(col && val!==null && val!==undefined && val!=="") champs[col]=val; };
+      met("titre",ti.value.trim()); met("type",v.querySelector("#docf-type").value);
+      const ai=infoCol(DOCS.table,docCol("annee")||""), anv=v.querySelector("#docf-annee").value.trim();
+      met("annee", ai && /^(Int|Numeric)$/.test(ai.type) ? Number(anv)||null : anv);
+      const pj=v.querySelector("#docf-projet"); if(pj && pj.value){
+        const pi=infoCol(DOCS.table,docCol("projet")), p=S.data.main.find(x=>x.id===Number(pj.value));
+        met("projet", pi && /^Ref:/.test(pi.type) ? Number(pj.value) : (p?lire(c.tblMain,p,c.colLibelle):null)); }
+      const gp=v.querySelector("#docf-grp"); if(gp && gp.value) met("groupement",gp.value);
+      met("fichier",["L"].concat(ids));
+      const di=infoCol(DOCS.table,docCol("date")||""); if(di && !di.formule) met("date",Math.floor(Date.now()/1000));
+      const ui=infoCol(DOCS.table,docCol("auteur")||""); if(ui && !ui.formule) met("auteur",S.moi||nomDepuisCompte()||"");
+      await grist.docApi.applyUserActions([["AddRecord",DOCS.table,null,champs]]);
+      S.pj=S.pj||{}; S.pj[ids[0]]={nom:f.name};
+      toast("Document enregistré"); fermer(); await docCharger(true); rendreDocuments();
+    }catch(err){ e.target.disabled=false; e.target.textContent="Enregistrer"; toast("Enregistrement impossible : "+err.message,true); }
+  };
+  setTimeout(()=>ti.focus(),30);
 }
 
 /* Widget neuf (options vides) : on reprend les réglages complets d'une console
