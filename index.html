@@ -16942,7 +16942,9 @@ function rendreKpi(ps, detail){
   if(colMP){ const svM=MENUS["m-millesime"].sel; try{ MENUS["m-millesime"].sel=[]; tousSansMil=projetsHorsEtat(); }catch(e){} finally{ MENUS["m-millesime"].sel=svM; } }
   const auPEPS=p=>{ const v=String(lire(c.tblMain,p,colMP)||""); return ans.some(y=>v.indexOf(y)>=0); };
   const peps=colMP ? tousSansMil.filter(p=>nat(p)==="PEPS" && auPEPS(p)) : tous.filter(p=>nat(p)==="PEPS" && auP2A(p));
-  const av=tous.filter(p=>nat(p)!=="PEPS" && auP2A(p));
+  /* actions (hors PEPS) : lignes projet (jamais les MEO) inscrites au P2A de l'année et non caractérisées
+     au Millésime PEPS de cette année ; sans colonne Millesime_PEPS, nature autre que PEPS */
+  const av=colMP ? tous.filter(p=>auP2A(p) && !auPEPS(p)) : tous.filter(p=>nat(p)!=="PEPS" && auP2A(p));
   const fin=l=>l.filter(p=>etatDe(p)==="termine").length;
   const nPepsT=fin(peps), nAvT=fin(av);
   const sous=t=>'<small class="kpi-sous">'+t+'</small>';
@@ -17534,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 15 h 34</div>';
+    '<div class="ed-version">Version du 05/11/2026 · 16 h 01</div>';
   return h;
 }
 async function lancerEdition(id){
