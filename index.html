@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 06/11/2026 · 14 h 30</div>';
+    '<div class="ed-version">Version du 06/11/2026 · 14 h 48</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -32703,26 +32703,19 @@ function sommaireP2A(doc, r, annee, L, diapos){
   const ligneDe = (lib, ls, total) => {
     const av = moyenneAv(ls);
     return [{ texte:lib, gras:true }, { texte:String(ls.length), gras:total },
-      { texte:"", pile:ORDRE_STATUTS.map(k => ({ valeur:ls.filter(l => etat(l) === k).length, couleur:COUL_ETAT_P2A[k] })) },
-      { texte:av + " %", barre:av, largBarre:3.4, gras:total, couleur:av > 0 ? "#26221F" : "#C0504D", align:"end", reserve:0 },
-      { texte:total ? "" : String(diapos.get(lib) || ""), gras:true, couleur:"#7f6f6c" }];
+    ].concat(ORDRE_STATUTS.map(k => { const n = ls.filter(l => etat(l) === k).length;
+        return Object.assign({ texte:n || total ? String(n) : "—", gras:total }, total ? {} : TEINTES_STATUT[k]); })).concat([
+      { texte:av + " %", barre:av, largBarre:2.8, gras:total, couleur:av > 0 ? "#26221F" : "#C0504D", align:"end", reserve:0 },
+      { texte:total ? "" : String(diapos.get(lib) || ""), gras:true, couleur:"#7f6f6c" }]);
   };
   const lignes = trierGroupements(L).map(g => ligneDe(g, L.filter(l => grpP2A(l) === g), false));
   lignes.push(ligneDe("Total P2A " + annee, L, true));
   const hLigne = Math.min(0.66, Math.max(0.46, (Y_MAX - r.y - 1.4) / Math.max(1, lignes.length + 1)));
   const fin = tableauPagine(doc, { page:r.page, x:MARGE, y:r.y, yMax:20.0, titreSuite:null, taille:10, hauteurFixe:hLigne,
     sansAlternance:true, lignesFines:true,
-    largeurs:[6.2, 2.8, 8.4, 5.6, 2.2],
-    entetes:["Groupement", "Inscriptions", "Répartition par état", "Avancement moyen", "Diapo"],
-    alignes:["start", "center", "start", "end", "center"], lignes });
-  /* légende des états */
-  let xl = MARGE;
-  const yl = Math.min(fin.y + 0.2, 20.25);
-  [["a engager", "À engager"], ["en cours", "En cours"], ["termine", "Terminé"], ["interrompu", "Interrompu"]].forEach(([k, lib]) => {
-    bloc(doc, r.page, { x:xl, y:yl + 0.15, w:0.3, h:0.3, fond:COUL_ETAT_P2A[k], texte:"", trait:null });
-    bloc(doc, r.page, { x:xl + 0.35, y:yl, w:3.0, h:0.55, texte:lib, taille:9, couleur:"#6F6862" });
-    xl += 3.0;
-  });
+    largeurs:[4.4, 2.6, 2.6, 2.6, 2.6, 2.6, 5.8, 2.0],
+    entetes:["Groupement", "Inscriptions", "À engager", "En cours", "Terminé", "Interrompu", "Avancement moyen", "Diapo"],
+    alignes:["start", "center", "center", "center", "center", "center", "end", "center"], lignes });
 }
 
 /* Terminés et reste à réaliser : même tableau, mêmes colonnes au même endroit.
