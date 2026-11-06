@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 06/11/2026 · 10 h 44</div>';
+    '<div class="ed-version">Version du 06/11/2026 · 10 h 52</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -33532,7 +33532,7 @@ function legendePdf(doc, x, y, entrees, largeur){
   return ligne;
 }
 
-function donut(segments, total){
+function donut(segments, total, centre){
   const taille = 480, canvas = document.createElement("canvas");
   canvas.width = canvas.height = taille;
   const ctx = canvas.getContext("2d");
@@ -33552,7 +33552,7 @@ function donut(segments, total){
   ctx.fillStyle = "rgb(26,26,24)";
   ctx.font = "500 62px Tahoma, Verdana, sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(String(total), cx, cy + 2);
+  ctx.fillText(String(centre != null ? centre : total), cx, cy + 2);
   return canvas.toDataURL("image/png");
 }
 
@@ -33613,7 +33613,9 @@ function pageSynthesePdf(doc, ctx, jeu){
   const haut = y + 64, milieu = 105;
   const repartition = jeu.donut || jeu.categories.map(c =>
     ({ cle:c.cle, libelle:c.libelle, couleur:c.couleur, valeur:jeu.parCategorie[c.cle] || 0 }));
-  const totalRepartition = repartition.reduce((a, b) => a + b.valeur, 0) || jeu.total;
+  /* segment ajouté à l'anneau sans ligne de légende (actions MEO du P2A, signalées par la note) */
+  const segRepartition = jeu.donutPlus ? repartition.concat([jeu.donutPlus]) : repartition;
+  const totalRepartition = segRepartition.reduce((a, b) => a + b.valeur, 0) || jeu.total;
 
   doc.setFontSize(8.5); doc.setTextColor(...ENCRE_P);
   doc.text("Répartition par statut", MARGE_P, haut);
@@ -33622,7 +33624,7 @@ function pageSynthesePdf(doc, ctx, jeu){
   const segStatut = STATUTS_P.map(s => ({ valeur:jeu.parStatut[s.cle] || 0, couleur:s.couleur }));
   if(jeu.total){
     doc.addImage(donut(segStatut, jeu.total), "PNG", 41.5, haut + 4, 28, 28);
-    doc.addImage(donut(repartition, totalRepartition), "PNG", 140.5, haut + 4, 28, 28);
+    doc.addImage(donut(segRepartition, totalRepartition, jeu.donutCentre), "PNG", 140.5, haut + 4, 28, 28);
   }
 
   legendePdf(doc, MARGE_P, haut + 42, STATUTS_P.map(s => ({
@@ -33641,7 +33643,9 @@ function pageSynthesePdf(doc, ctx, jeu){
   }
   if(jeu.noteDonut){
     doc.setFontSize(7.5); doc.setTextColor(61, 61, 58);
-    doc.splitTextToSize(jeu.noteDonut, 87).forEach((t, k) => doc.text(t, milieu + 6, finLeg + 1 + k * 3.6));
+    const carre = jeu.donutPlus ? 5 : 0;
+    if(carre){ doc.setFillColor(...jeu.donutPlus.couleur); doc.rect(milieu + 6, finLeg + 1 - 2.6, 3, 3, "F"); }
+    doc.splitTextToSize(jeu.noteDonut, 87 - carre).forEach((t, k) => doc.text(t, milieu + 6 + carre, finLeg + 1 + k * 3.6));
   }
 
   doc.line(MARGE_P, haut + 74, droite, haut + 74);
@@ -34294,6 +34298,9 @@ function jeuP2A(c, nature){
   jeu.donutSous = "projets et actions";
   const meo = lignes.filter(l => l.nature === "MEO");
   const nbProjMeo = new Set(meo.map(l => l.projetRattache)).size;
+  /* au centre : le nombre d'inscriptions au P2A (une action MEO remplace son projet) */
+  if(meo.length) jeu.donutCentre = lignes.length;
+  if(meo.length) jeu.donutPlus = { cle:"MEO", libelle:"Action de mise en œuvre (MEO)", couleur:couleurNature.MEO, valeur:meo.length };
   if(meo.length) jeu.noteDonut = meo.length + " action" + (meo.length > 1 ? "s" : "") + " de mise en œuvre (MEO) identifiée" +
     (meo.length > 1 ? "s" : "") + " au P2A " + anP2A + ", rattachée" + (meo.length > 1 ? "s" : "") + " à " + nbProjMeo + (nbProjMeo > 1 ? " projets et actions" : " projet ou action") + ".";
 
