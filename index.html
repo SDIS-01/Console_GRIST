@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 06/11/2026 · 10 h 52</div>';
+    '<div class="ed-version">Version du 06/11/2026 · 10 h 59</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -32811,8 +32811,8 @@ function pagesP2AParGroupement(doc, annee, b){
     kp.forEach(([v, lib, coul], i) => {
       const x = MARGE + i * (lk + 0.3);
       bloc(doc, page, { x, y:yk, w:lk, h:1.05, fond:coul, texte:"", trait:null });
-      bloc(doc, page, { x:x + 0.3, y:yk + 0.12, w:2.6, h:0.8, texte:String(v), taille:20, gras:true, couleur:"#FFFFFF" });
-      bloc(doc, page, { x:x + 2.9, y:yk + 0.3, w:lk - 3.1, h:0.6, texte:lib, taille:11, couleur:"#FFFFFF" });
+      bloc(doc, page, { x:x + 0.3, y:yk + 0.12, w:3.2, h:0.8, texte:String(v), taille:20, gras:true, couleur:"#FFFFFF", sansRetour:true });
+      bloc(doc, page, { x:x + 3.4, y:yk + 0.15, w:lk - 3.5, h:0.75, texte:lib, taille:11, couleur:"#FFFFFF" });
     });
     /* tableau : reste à réaliser, puis terminées ; chaque projet avec ses actions MEO en retrait */
     const lignes = [];
@@ -32833,7 +32833,7 @@ function pagesP2AParGroupement(doc, annee, b){
                       m && m.code ? { prefixe:m.code, largPrefixe:1.6 } : {}),
         Object.assign(celPrio(o.masquerPrio ? "" : pr, gris), { fond }),
         { texte:abregePorteur(l.porteur) || "—", couleur:gris, fond },
-        { texte:l.echeance ? jjmmaaaa(l.echeance) : "—", couleur:enRetard(l.echeance, st) ? "#C0504D" : gris, gras:enRetard(l.echeance, st), fond, align:"center" },
+        { texte:l.echeance ? jjmmaaaa(l.echeance) : "—", couleur:enRetard(l.echeance, st) ? "#C0504D" : gris, fond, align:"center" },
         l.interrompu ? { texte:"Interrompu", couleur:"#666660", fond, align:"end" }
                      : { texte:l.avancement + " %", barre:l.avancement, couleur:l.avancement > 0 ? (gris || "#26221F") : "#C0504D", fond, align:"end" }
       ]);
@@ -32846,8 +32846,14 @@ function pagesP2AParGroupement(doc, annee, b){
         if(l.estProjet){ titres.set(k, l.libelle); prios.set(k, prioL(l)); }
         else { if(!titres.has(k)) titres.set(k, l.libelleProjet || l.libelle);
                const pr = prios.get(k); if(!pr || comparePriorites(prioL(l), pr) < 0) prios.set(k, prioL(l)); } });
+      const natGroupe = new Map();
+      membres.forEach(l => { const k = cleDe(l);
+        const rec = l.estProjet ? null : b.projets.get(l.idProjet);
+        const n = l.estProjet ? natDe(l) : (rec && idsPeps.has(rec.id) ? "peps" : "hors");
+        if(l.estProjet || !natGroupe.has(k)) natGroupe.set(k, n); });
+      const rangNat = k => natGroupe.get(k) === "peps" ? 0 : 1;
       [...new Set(membres.map(cleDe))]
-        .sort((a, z) => comparePriorites(prios.get(a), prios.get(z)) || String(titres.get(a)).localeCompare(String(titres.get(z)), "fr", { numeric:true }))
+        .sort((a, z) => rangNat(a) - rangNat(z) || comparePriorites(prios.get(a), prios.get(z)) || String(titres.get(a)).localeCompare(String(titres.get(z)), "fr", { numeric:true }))
         .forEach(k => {
           const fr = membres.filter(l => cleDe(l) === k), pj = fr.find(l => l.estProjet);
           const acts = fr.filter(l => !l.estProjet).sort((a, z) => comparePriorites(prioL(a), prioL(z)) || a.libelle.localeCompare(z.libelle, "fr", { numeric:true }));
@@ -32871,7 +32877,7 @@ function pagesP2AParGroupement(doc, annee, b){
     if(ls.some(fini)){ section("TERMINÉES"); bloquer(fini); }
     tableauPagine(doc, { page, x:MARGE, y:Y_CONTENU - 1.9, titreSuite:null, maxLignes:2, taille:10,
       hauteurFixe:0.62, sansAlternance:true, lignesFines:true,
-      largeurs:[0.2, 13.9, 1.9, 3.6, 2.4, 3.2],
+      largeurs:[0.1, 13.5, 2.4, 3.6, 2.4, 3.2],
       entetes:["", "Libellé", "Priorité", "Porteur", "Échéance", "Avancement"],
       alignes:["start", "start", "center", "start", "center", "end"], lignes });
     /* légende */
