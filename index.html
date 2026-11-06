@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 06/11/2026 · 9 h 30</div>';
+    '<div class="ed-version">Version du 06/11/2026 · 10 h 14</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -31118,6 +31118,13 @@ function sauve(){
    AV (actions hors PEPS) = lignes projet (jamais les MEO) inscrites au P2A de l'année,
    par elles-mêmes ou par leurs actions MEO, et non caractérisées au Millésime PEPS de l'année.
    Sans colonne Millesime_PEPS : nature PEPS ou AV inscrite au P2A de l'année. */
+/* Lien avec la MEC 2023 : colonne MEC_2023 de la table des projets et actions renseignée */
+const ETOILE_MEC = " \u2605";
+function lieMEC(l){
+  if(!l) return false;
+  const col = ["MEC_2023", "MEC", "Lien_MEC"].find(k => k in l);
+  return !!col && versListe(l[col]).some(v => txt(v).trim() !== "");
+}
 function perimetreAnnee(nature, annee){
   const an = String(annee);
   const colMP = ["Millesime_PEPS", "Millésime_PEPS"].find(k => recPEPS.some(l => k in l));
@@ -31169,7 +31176,7 @@ function bilanNature(nature, jan1, finAnnee, fraction){
   })).sort((a, b) => (dateArret(a) || 0) - (dateArret(b) || 0));
 
   const decrit = l => ({
-    libelle: txt(l[cfg.colLibelle]),
+    libelle: txt(l[cfg.colLibelle]) + (lieMEC(l) ? ETOILE_MEC : ""),
     porteur: txt(l[cfg.colPorteur]),
     groupement: txt(l[cfg.colGroupement]),
     priorite: prioriteEffective(l) || "—",
@@ -31277,6 +31284,7 @@ function bilanP2A(fraction){
       idProjet: idParent,
       idAction: cfg.colIdAction ? txt(l[cfg.colIdAction]) : "",
       libelleProjet: projet ? txt(projet[cfg.colLibelle]) : "",
+      mec: lieMEC(l), mecProjet: lieMEC(projet),
       estProjet: nature === "PEPS" || nature === "AV",
       debut: cfg.colDebut ? versDate(l[cfg.colDebut]) : null,
       // Échéance : la date de fin si elle existe, sinon l'échéance prévisionnelle.
@@ -32014,7 +32022,7 @@ function tableauPagine(doc, o){
   let page = o.page, y = o.y;
   let yMax = o.yMax || (page.titre ? Y_MAX : Y_MAX_SUITE);
   const taille = o.taille || 10;
-  const maxLignes = o.maxLignes || 2;
+  const maxLignes = o.maxLignes || 30;   // libellés et motifs imprimés en entier
 
   const alignes = o.alignes || [];
   let debutTable = true;   // vrai tant qu'aucune ligne de données n'a été tracée sur la page
@@ -32134,7 +32142,8 @@ function pageActualites(doc, c){
 function pageNature(doc, c, b, titre, cle){
   const e = ecarts ? ecarts[cle] : null;
   pageIntercalaire(doc, titre);
-  let page = nouvellePage(doc, titre, sousTitreComparaison());
+  const avecEtoile = b.termines.concat(b.interrompus).some(t => /\u2605$/.test(t.libelle));
+  let page = nouvellePage(doc, titre, [sousTitreComparaison(), avecEtoile ? "\u2605 relié à la MEC 2023" : null].filter(Boolean).join(" — ") || null);
   const largeur = (LARG - 0.8) / 3;
 
   cartouche(doc, page, MARGE, largeur, b.stock,
@@ -32182,7 +32191,7 @@ function pageNature(doc, c, b, titre, cle){
     y = section(doc, page, y, "Interrompus dans l'année");
     tableauPagine(doc, { page, x:MARGE, y, titreSuite:null,
       titreSection:"Interrompus dans l'année",
-      largeurs:[6.6, 2.4, 3.2, 3.4, 6.6, 3.0], maxLignes:3,
+      largeurs:[6.6, 2.4, 3.2, 3.4, 6.6, 3.0], maxLignes:30,
       entetes:["Libellé", "Priorité", "Origine", "Porteur", "Motif", "Date"],
       lignes:b.interrompus.map(t => [t.libelle, t.priorite, t.origine, t.porteur, t.motif, t.date]) });
   }
@@ -32276,8 +32285,7 @@ function libelleCategorie(v, n){
 
 function rangCategorie(cat){
   const famille = (cfg.familles && cfg.familles[cat]) || "reco";
-  return (/majeur|principal/.test(String(cat).toLowerCase()) ? 0 : 2) +
-         (famille === "rappel" ? 1 : 0);
+  return (famille === "rappel" ? 0 : 2) + (/majeur|principal/.test(String(cat).toLowerCase()) ? 0 : 1);
 }
 
 /* ---------- MEC 2023 ---------- */
@@ -32360,10 +32368,10 @@ function pageMECSynthese(doc, c, jeu, focus){
 function pageMECListe(doc, c){
   const m = c.mec;
   if(!m.resteListe.length) return;
-  // Recommandation majeure, recommandation, rappel au droit principal, rappel au droit.
+  // Rappel au droit principal, rappel au droit, recommandation majeure, recommandation.
   const rangListe = r => {
     const famille = (cfg.familles && cfg.familles[r.type]) || "reco";
-    return (famille === "rappel" ? 2 : 0) +
+    return (famille === "rappel" ? 0 : 2) +
            (/majeur|principal/.test(String(r.type).toLowerCase()) ? 0 : 1);
   };
   const parGroupement = cfg.triListeMEC === "groupement";
@@ -32608,46 +32616,66 @@ function libelleLigneP2A(l){
 function pageP2ARecap(doc, annee, b){
   const mils = b.millesimesAnnee.join(" · ") || "P2A_" + annee;
   const L = b.lignes;
-  const page = nouvellePage(doc, "P2A " + annee + " — récapitulatif", L.length + " inscription" + (L.length > 1 ? "s" : "") +
-    " · projets et actions identifiés " + mils + " · au " + jjmmaaaa(new Date()));
+  const page = nouvellePage(doc, "P2A " + annee + " — récapitulatif",
+    "Projets et actions identifiés " + mils + " · au " + jjmmaaaa(new Date()));
   if(!L.length){
     bloc(doc, page, { x:MARGE, y:Y_CONTENU, w:LARG, h:1, taille:12, couleur:"#6F6862",
                       texte:"Aucune ligne ne porte le millésime P2A " + annee + "." });
     return;
   }
-  bloc(doc, page, { x:2.5, y:3.9, w:5.0, h:0.6, texte:"Avancement global", taille:10, couleur:"#6F6862" });
-  image(doc, page, { x:2.5, y:4.6, w:3.1, h:3.1, base64:anneauAvancement(moyenneAv(L), null, true) });
-
-  const cats = IDENT_P2A.filter(([k]) => ["CASDIS","NDS","Ajout"].includes(k) || L.some(l => l.ident === k));
-  /* cartouches : total, puis PEPS et AV ; une action MEO compte avec la nature de son projet */
-  const natProjet = l => {
-    if(l.estProjet) return l.nature;
-    const pr = b.projets.get(l.idProjet);
-    return pr ? txt(pr[cfg.colNature]).toUpperCase() : "";
+  const frac = detecteFraction(recPEPS, cfg.colAvancement);
+  const fini = l => !interrompuPEPS(l) && versPourcent(l[cfg.colAvancement], frac) >= 100;
+  /* mêmes chiffres que l'accueil de la console */
+  const peps = sansFiltres(() => perimetreAnnee("PEPS", annee)), hors = sansFiltres(() => perimetreAnnee("AV", annee));
+  const idsPeps = new Set(peps.map(l => l.id)), idsHors = new Set(hors.map(l => l.id));
+  const nT = L.filter(l => statutDeLigne(l.avancement, l.interrompu) === "termine").length;
+  const pl = (n, s1, s2) => n + " " + (n > 1 ? s2 : s1);
+  const largeur = (LARG - 0.8) / 3;
+  cartouche(doc, page, MARGE, largeur, L.length,
+            "inscriptions au P2A " + annee + " · " + pl(nT, "terminée", "terminées"), "#7f6f6c", null, "neutre", Y_KPI);
+  cartouche(doc, page, MARGE + largeur + 0.4, largeur, peps.length,
+            "projets PEPS · " + pl(peps.filter(fini).length, "terminé", "terminés"), "#C0504D", null, "neutre", Y_KPI);
+  cartouche(doc, page, MARGE + 2 * (largeur + 0.4), largeur, hors.length,
+            "actions hors PEPS · " + pl(hors.filter(fini).length, "terminée", "terminées"), "#8064A2", null, "neutre", Y_KPI);
+  /* actions MEO signalées à part */
+  const meo = L.filter(l => !l.estProjet), nbProj = new Set(meo.map(l => l.idProjet || l.libelleProjet)).size;
+  let y = Y_KPI + H_KPI + 0.25;
+  if(meo.length){
+    bloc(doc, page, { x:MARGE, y, w:LARG, h:0.55, taille:10, couleur:"#3D3D3A",
+      texte:pl(meo.length, "action de mise en œuvre (MEO) identifiée", "actions de mise en œuvre (MEO) identifiées") +
+            " au P2A " + annee + ", rattachée" + (meo.length > 1 ? "s" : "") + " à " + pl(nbProj, "projet", "projets") + "." });
+    y += 0.75;
+  }
+  /* barre de répartition par état, comme au-dessus de la liste de la console */
+  const cpt = {}; ORDRE_STATUTS.forEach(k => cpt[k] = L.filter(l => statutDeLigne(l.avancement, l.interrompu) === k).length);
+  const coulEtat = { "a engager":"#C0504D", "en cours":"#F79646", "termine":"#9BBB59", "interrompu":"#9A948E" };
+  const libEtat = { "a engager":"À engager", "en cours":"En cours", "termine":"Terminé", "interrompu":"Interrompu" };
+  const lBarre = LARG - 6.2;
+  let x = MARGE;
+  ORDRE_STATUTS.forEach(k => { if(!cpt[k]) return;
+    const w = lBarre * cpt[k] / L.length;
+    bloc(doc, page, { x, y, w, h:0.55, texte:"", fond:coulEtat[k], trait:null }); x += w; });
+  bloc(doc, page, { x:MARGE + lBarre + 0.3, y:y - 0.2, w:5.9, h:0.95, texte:"Avancement global " + moyenneAv(L) + " %",
+                    taille:12, gras:true, couleur:"#3D3D3A", align:"end" });
+  y += 0.7;
+  bloc(doc, page, { x:MARGE, y, w:lBarre, h:0.5, taille:9, couleur:"#6F6862",
+    texte:ORDRE_STATUTS.filter(k => cpt[k]).map(k => libEtat[k] + " : " + cpt[k]).join("     ") });
+  y += 0.85;
+  /* d'où viennent les inscriptions : identification × nature */
+  const natDe = l => !l.estProjet ? "meo" : idsPeps.has(l.rowId) ? "peps" : "hors";
+  const cats = IDENT_P2A.filter(([k]) => ["CASDIS", "NDS", "Ajout"].includes(k) || L.some(l => l.ident === k));
+  const ligneDe = (lib, ls, gras) => {
+    const n = k => ls.filter(l => natDe(l) === k).length;
+    const v = n => ({ texte:n ? String(n) : "—", gras });
+    return [{ texte:lib, gras:true }, v(n("peps")), v(n("hors")), v(n("meo")), { texte:String(ls.length), gras:true },
+      v(ls.filter(l => statutDeLigne(l.avancement, l.interrompu) === "termine").length),
+      { texte:ls.length ? moyenneAv(ls) + " %" : "—", gras:true }];
   };
-  const peps = L.filter(l => natProjet(l) === "PEPS"), av = L.filter(l => natProjet(l) === "AV");
-  const meoPeps = peps.filter(l => !l.estProjet).length, meoAv = av.filter(l => !l.estProjet).length;
-  const xCart = 7.7, ecart = 0.3, largeur = (MARGE + LARG - xCart - ecart * 2) / 3;
-  cartouche(doc, page, xCart, largeur, L.length, "inscriptions · " + moyenneAv(L) + " %", "#7f6f6c", null, "neutre", 5.5);
-  cartouche(doc, page, xCart + largeur + ecart, largeur, peps.length,
-            "PEPS" + (meoPeps ? " · dont " + meoPeps + " MEO" : ""), "#C0504D", null, "neutre", 5.5);
-  cartouche(doc, page, xCart + 2 * (largeur + ecart), largeur, av.length,
-            "AV" + (meoAv ? " · dont " + meoAv + " MEO" : ""), "#4F81BD", null, "neutre", 5.5);
-
-  const totaux = {}; ORDRE_STATUTS.forEach(k => totaux[k] = 0);
-  const lignes = cats.map(([k]) => {
-    const ls = L.filter(l => l.ident === k);
-    const cpt = {};
-    ORDRE_STATUTS.forEach(s => { cpt[s] = ls.filter(l => statutDeLigne(l.avancement, l.interrompu) === s).length; totaux[s] += cpt[s]; });
-    return [{ texte:k, gras:true }].concat(ORDRE_STATUTS.map(s =>
-      Object.assign({ texte: cpt[s] ? String(cpt[s]) : "—" }, TEINTES_STATUT[s])))
-      .concat([{ texte:String(ls.length), gras:true }, { texte:ls.length ? moyenneAv(ls) + " %" : "—", gras:true }]);
-  });
-  lignes.push([{ texte:"Total P2A " + annee, gras:true }].concat(ORDRE_STATUTS.map(s => ({ texte:String(totaux[s]), gras:true })))
-    .concat([{ texte:String(L.length), gras:true }, { texte:moyenneAv(L) + " %", gras:true }]));
-  const hLigne = Math.min(0.72, Math.max(0.5, (Y_MAX - 8.1 - 0.75) / Math.max(1, lignes.length)));
-  tableauPagine(doc, { page, x:MARGE, y:8.1, largeurs:[6.6, 3.0, 3.0, 3.0, 3.0, 3.0, 3.6],
-    entetes:["Identification du projet", "À engager", "En cours", "Terminé", "Interrompu", "Total", "Avancement"],
+  const lignes = cats.map(([k]) => ligneDe(k, L.filter(l => l.ident === k), false));
+  lignes.push(ligneDe("Total P2A " + annee, L, true));
+  const hLigne = Math.min(0.72, Math.max(0.5, (Y_MAX - y - 0.75) / Math.max(1, lignes.length)));
+  tableauPagine(doc, { page, x:MARGE, y, largeurs:[6.0, 3.4, 3.6, 3.0, 2.8, 3.0, 3.4],
+    entetes:["Identification", "Projets PEPS", "Actions hors PEPS", "MEO", "Total", "Terminées", "Avancement"],
     alignes:["start", "center", "center", "center", "center", "center", "center"],
     hauteurFixe:hLigne, titreSuite:null, lignes });
 }
@@ -32656,6 +32684,9 @@ function pageP2ARecap(doc, annee, b){
    Par groupement (ordre alphabétique), chaque projet puis ses actions MEO en retrait. */
 function pageP2ATableau(doc, titre, lignes, vide){
   const page = nouvellePage(doc, titre, null);   // pas de sous-titre : le tableau monte sous le titre
+  if(lignes.some(l => l.mec || l.mecProjet))
+    bloc(doc, page, { x:MARGE, y:20.25, w:8, h:0.55, texte:"\u2605 relié à la MEC 2023",
+                      taille:9, couleur:"#6F6862", fond:"#FFFFFF" });
   if(!lignes.length){
     bloc(doc, page, { x:MARGE, y:Y_CONTENU, w:LARG, h:1, taille:11, couleur:"#6F6862", texte:vide });
     return;
@@ -32691,20 +32722,121 @@ function pageP2ATableau(doc, titre, lignes, vide){
       const actions = fratrie.filter(l => !l.estProjet)
         .sort((a, z) => comparePriorites(prioL(a), prioL(z)) || a.libelle.localeCompare(z.libelle, "fr"));
       const ajoute = ligne => { ligne.groupe = g; detail.push(ligne); };
-      if(projet) ajoute([{ texte:premier ? g : "", gras:true }, projet.libelle, projet.nature,
+      if(projet) ajoute([{ texte:premier ? g : "", gras:true }, projet.libelle + (projet.mec ? ETOILE_MEC : ""), projet.nature,
         txt(projet.priorite) || "—", projet.porteur, cellEch(projet), cellAv(projet)]);
       else ajoute([{ texte:premier ? g : "", gras:true },
-        { texte:fratrie[0].libelleProjet || "Projet non identifié", couleur:"#8a827c" }, "", "", "", "", ""]);
+        { texte:(fratrie[0].libelleProjet || "Projet non identifié") + (fratrie[0].mecProjet ? ETOILE_MEC : ""), couleur:"#8a827c" }, "", "", "", "", ""]);
       premier = false;
-      actions.forEach(a => ajoute(["", "— " + a.libelle, a.nature, txt(a.priorite) || "—",
+      actions.forEach(a => ajoute(["", "— " + a.libelle + (a.mec ? ETOILE_MEC : ""), a.nature, txt(a.priorite) || "—",
         a.porteur, cellEch(a), cellAv(a)]));
     });
   });
-  tableauPagine(doc, { page, x:MARGE, y:Y_CONTENU - 3.2, titreSuite:null, repriseGroupe:true, maxLignes:3,
+  tableauPagine(doc, { page, x:MARGE, y:Y_CONTENU - 3.2, titreSuite:null, repriseGroupe:true, maxLignes:30,
     largeurs:[3.8, 8.6, 1.8, 2.6, 3.6, 2.4, 2.2],
     entetes:["Groupement", "Libellé", "Nature", "Priorité", "Porteur", "Échéance", "Avanct."],
     alignes:["start", "start", "center", "center", "start", "center", "center"],
     lignes:detail });
+}
+
+/* ---------- P2A : synthèse par groupement, puis une diapositive par groupement ---------- */
+const COUL_NAT_P2A = { peps:"#C0504D", hors:"#8064A2", meo:"#F79646" };
+const COUL_PRIO_P2A = { P1:"#FF0000", P2:"#ED4C05", P3:"#2A6099", Poursuite:"#780373" };
+function fondAvctP2A(n, inter){ return inter ? "#EEEEEE" : n >= 76 ? "#98FD90" : n >= 26 ? "#FEF47A" : n >= 1 ? "#FECC81" : "#FD8182"; }
+function grpP2A(l){ return l.groupement && l.groupement !== "Non renseigné" ? l.groupement : "Non renseigné"; }
+function trierGroupements(L){
+  return [...new Set(L.map(grpP2A))].sort((a, z) => (a === "Non renseigné") - (z === "Non renseigné") || a.localeCompare(z, "fr"));
+}
+function pageP2ASyntheseGroupements(doc, annee, L){
+  const page = nouvellePage(doc, "P2A " + annee + " — synthèse par groupement", null);
+  const lignes = trierGroupements(L).map(g => {
+    const ls = L.filter(l => grpP2A(l) === g), n = k => ls.filter(l => statutDeLigne(l.avancement, l.interrompu) === k).length;
+    return [{ texte:g, gras:true }].concat(ORDRE_STATUTS.map(k => Object.assign({ texte:n(k) ? String(n(k)) : "—" }, TEINTES_STATUT[k])))
+      .concat([{ texte:String(ls.length), gras:true }, { texte:moyenneAv(ls) + " %", gras:true, fond:fondAvctP2A(moyenneAv(ls), false) }]);
+  });
+  const tot = k => L.filter(l => statutDeLigne(l.avancement, l.interrompu) === k).length;
+  lignes.push([{ texte:"Total P2A " + annee, gras:true }].concat(ORDRE_STATUTS.map(k => ({ texte:String(tot(k)), gras:true })))
+    .concat([{ texte:String(L.length), gras:true }, { texte:moyenneAv(L) + " %", gras:true, fond:fondAvctP2A(moyenneAv(L), false) }]));
+  tableauPagine(doc, { page, x:MARGE, y:Y_CONTENU - 3.2, titreSuite:null, taille:11,
+    largeurs:[6.6, 3.0, 3.0, 3.0, 3.0, 3.0, 3.6],
+    entetes:["Groupement", "À engager", "En cours", "Terminé", "Interrompu", "Total", "Avancement"],
+    alignes:["start", "center", "center", "center", "center", "center", "center"], lignes });
+}
+function pagesP2AParGroupement(doc, annee, b){
+  const L = b.lignes;
+  const idsPeps = new Set(sansFiltres(() => perimetreAnnee("PEPS", annee)).map(l => l.id));
+  const natDe = l => !l.estProjet ? "meo" : idsPeps.has(l.rowId) ? "peps" : "hors";
+  const prioL = l => txt(l.priorite) || SANS_PRIORITE;
+  trierGroupements(L).forEach(g => {
+    const ls = L.filter(l => grpP2A(l) === g);
+    const n = k => ls.filter(l => statutDeLigne(l.avancement, l.interrompu) === k).length;
+    const page = nouvellePage(doc, "P2A " + annee + " — " + g + " · " + ls.length + " inscription" + (ls.length > 1 ? "s" : ""), null);
+    /* quatre chiffres */
+    const kp = [[n("a engager"), "à engager", "#C0504D"], [n("en cours"), "en cours", "#F79646"],
+                [n("termine"), "terminée" + (n("termine") > 1 ? "s" : ""), "#9BBB59"], [moyenneAv(ls) + " %", "avancement moyen", "#7f6f6c"]];
+    const lk = (LARG - 0.9) / 4, yk = Y_CONTENU - 3.25;
+    kp.forEach(([v, lib, coul], i) => {
+      const x = MARGE + i * (lk + 0.3);
+      bloc(doc, page, { x, y:yk, w:lk, h:1.05, fond:coul, texte:"", trait:null });
+      bloc(doc, page, { x:x + 0.3, y:yk + 0.12, w:2.6, h:0.8, texte:String(v), taille:20, gras:true, couleur:"#FFFFFF" });
+      bloc(doc, page, { x:x + 2.9, y:yk + 0.3, w:lk - 3.1, h:0.6, texte:lib, taille:11, couleur:"#FFFFFF" });
+    });
+    /* tableau : reste à réaliser, puis terminées ; chaque projet avec ses actions MEO en retrait */
+    const lignes = [];
+    const section = titre => lignes.push([{ texte:"", fond:"#FFFFFF" }, { texte:titre, gras:true, couleur:"#6F6862", fond:"#FFFFFF" },
+      { texte:"", fond:"#FFFFFF" }, { texte:"", fond:"#FFFFFF" }, { texte:"", fond:"#FFFFFF" }, { texte:"", fond:"#FFFFFF" }]);
+    const ligne = (l, o) => {
+      const st = statutDeLigne(l.avancement, l.interrompu), fini = st === "termine";
+      const gris = fini ? "#8A827C" : null, beige = o.entete ? "#F2EFEA" : null;
+      const lib = (o.retrait ? "\u2014 " : "") + (fini ? "\u2713 " : "") + l.libelle + (l.mec ? ETOILE_MEC : "");
+      lignes.push([
+        { texte:"", fond:COUL_NAT_P2A[natDe(l)] },
+        { texte:lib, gras:!!o.entete, couleur:gris, fond:beige },
+        { texte:txt(l.priorite) || "—", gras:!!COUL_PRIO_P2A[txt(l.priorite)], couleur:gris || COUL_PRIO_P2A[txt(l.priorite)] || null, fond:beige, align:"center" },
+        { texte:l.porteur || "—", couleur:gris, fond:beige },
+        { texte:l.echeance ? jjmmaaaa(l.echeance) : "—", couleur:enRetard(l.echeance, st) ? "#C0504D" : gris, gras:enRetard(l.echeance, st), fond:beige, align:"center" },
+        { texte:l.interrompu ? "Interrompu" : l.avancement + " %", gras:true, fond:fondAvctP2A(l.avancement, l.interrompu), align:"center" }
+      ]);
+    };
+    const bloquer = sel => {
+      const cleDe = l => l.idProjet || ("seul:" + l.libelle);
+      const membres = ls.filter(sel);
+      const titres = new Map(), prios = new Map();
+      membres.forEach(l => { const k = cleDe(l);
+        if(l.estProjet){ titres.set(k, l.libelle); prios.set(k, prioL(l)); }
+        else { if(!titres.has(k)) titres.set(k, l.libelleProjet || l.libelle);
+               const pr = prios.get(k); if(!pr || comparePriorites(prioL(l), pr) < 0) prios.set(k, prioL(l)); } });
+      [...new Set(membres.map(cleDe))]
+        .sort((a, z) => comparePriorites(prios.get(a), prios.get(z)) || String(titres.get(a)).localeCompare(String(titres.get(z)), "fr", { numeric:true }))
+        .forEach(k => {
+          const fr = membres.filter(l => cleDe(l) === k), pj = fr.find(l => l.estProjet);
+          const acts = fr.filter(l => !l.estProjet).sort((a, z) => comparePriorites(prioL(a), prioL(z)) || a.libelle.localeCompare(z.libelle, "fr", { numeric:true }));
+          if(pj) ligne(pj, { entete:acts.length > 0 });
+          else if(acts.length){
+            const p0 = acts[0], rec = b.projets.get(p0.idProjet);
+            lignes.push([{ texte:"", fond:COUL_NAT_P2A[rec && idsPeps.has(rec.id) ? "peps" : "hors"] },
+              { texte:(p0.libelleProjet || "Projet non identifié") + (p0.mecProjet ? ETOILE_MEC : ""), gras:true, fond:"#F2EFEA" },
+              { texte:"", fond:"#F2EFEA" }, { texte:"", fond:"#F2EFEA" }, { texte:"", fond:"#F2EFEA" }, { texte:"", fond:"#F2EFEA" }]);
+          }
+          acts.forEach(a => ligne(a, { retrait:true }));
+        });
+    };
+    const fini = l => statutDeLigne(l.avancement, l.interrompu) === "termine";
+    if(ls.some(l => !fini(l))){ section("RESTE À RÉALISER"); bloquer(l => !fini(l)); }
+    if(ls.some(fini)){ section("TERMINÉES"); bloquer(fini); }
+    tableauPagine(doc, { page, x:MARGE, y:Y_CONTENU - 1.9, titreSuite:null, maxLignes:30, taille:10,
+      largeurs:[0.35, 12.85, 2.4, 4.4, 2.6, 2.6],
+      entetes:["", "Libellé", "Priorité", "Porteur", "Échéance", "Avancement"],
+      alignes:["start", "start", "center", "start", "center", "center"], lignes });
+    /* légende */
+    let xl = MARGE;
+    [["peps", "Projet PEPS"], ["hors", "Action hors PEPS"], ["meo", "Action de mise en œuvre (MEO)"]].forEach(([k, lib]) => {
+      bloc(doc, page, { x:xl, y:20.4, w:0.3, h:0.3, fond:COUL_NAT_P2A[k], texte:"", trait:null });
+      bloc(doc, page, { x:xl + 0.35, y:20.25, w:5.6, h:0.55, texte:lib, taille:9, couleur:"#6F6862" });
+      xl += lib.length * 0.17 + 1.2;
+    });
+    bloc(doc, page, { x:xl, y:20.25, w:5.2, h:0.55, texte:"\u2605 relié à la MEC 2023", taille:9, couleur:"#6F6862" });
+    bloc(doc, page, { x:xl + 4.6, y:20.25, w:4.4, h:0.55, texte:"Échéance dépassée", taille:9, couleur:"#C0504D" });
+  });
 }
 
 function pageP2A(doc, c, cComplet){
@@ -32712,11 +32844,9 @@ function pageP2A(doc, c, cComplet){
   const bAnnee = bilanP2AAnnee(c.annee, false);
   pageP2ARecap(doc, c.annee, bAnnee);
   if(filtrePrioriteActif()) pageP2ASynthese(doc, c, true);
-  const L = bAnnee.lignes, fini = l => statutDeLigne(l.avancement, l.interrompu) === "termine";
-  if(L.length){
-    const t = L.filter(fini), r = L.filter(l => !fini(l));
-    pageP2ATableau(doc, "P2A " + c.annee + " — terminés (" + t.length + " sur " + L.length + ")", t, "Aucune inscription terminée.");
-    pageP2ATableau(doc, "P2A " + c.annee + " — reste à réaliser (" + r.length + " sur " + L.length + ")", r, "Tout est terminé.");
+  if(bAnnee.lignes.length){
+    pageP2ASyntheseGroupements(doc, c.annee, bAnnee.lignes);
+    pagesP2AParGroupement(doc, c.annee, bAnnee);
   }
 }
 
@@ -33173,8 +33303,7 @@ async function genere(){
   if(inclus.includes("d4")) pageMEC(doc, c, calculComplet);
   if(inclus.includes("d5")){
     pageP2A(doc, c, calculComplet);
-    pagesPlanningP2A(doc, c);
-    pagesExergue(doc, c);
+    // plannings supprimés de la revue (demande du 06/11/2026)
   }
   if(doc.pages.length < 2){ alerte("Aucune diapositive sélectionnée."); return; }
   numeroterDiapos(doc);
@@ -33457,9 +33586,17 @@ function pageSynthesePdf(doc, ctx, jeu){
   doc.setDrawColor(...TRAIT_P);
   doc.line(milieu, haut - 6, milieu, haut + 68);
 
-  legendePdf(doc, milieu + 6, haut + 42, repartition.map(c => ({
+  const finLeg = legendePdf(doc, milieu + 6, haut + 42, repartition.map(c => ({
     libelle:c.libelle, couleur:c.couleur, valeur:String(c.valeur)
   })), 87);
+  if(jeu.donutSous && jeu.total){
+    doc.setFontSize(7); doc.setTextColor(...GRIS_P);
+    doc.text(jeu.donutSous, 154.5, haut + 36, { align:"center" });
+  }
+  if(jeu.noteDonut){
+    doc.setFontSize(7.5); doc.setTextColor(61, 61, 58);
+    doc.splitTextToSize(jeu.noteDonut, 87).forEach((t, k) => doc.text(t, milieu + 6, finLeg + 1 + k * 3.6));
+  }
 
   doc.line(MARGE_P, haut + 74, droite, haut + 74);
   return blocFocusPdf(doc, ctx, haut + 84, jeu);   // { y, zones }
@@ -33690,8 +33827,13 @@ function pageDetailPdf(doc, ctx, jeu){
   }
   /* jamais au-delà de la marge droite : si les mots les plus longs ne tiennent pas tous,
      toutes les colonnes sont réduites dans la même proportion */
+  const fixe = i => ["echeance", "avancement"].includes(champs[i].cle);
   const sommeL = largeurs.reduce((a, b) => a + b, 0);
-  if(sommeL > total) largeurs = largeurs.map(l => l * total / sommeL);
+  if(sommeL > total){
+    const fixes = largeurs.reduce((a, l, i) => a + (fixe(i) ? l : 0), 0);
+    const k = (total - fixes) / Math.max(1, sommeL - fixes);
+    largeurs = largeurs.map((l, i) => fixe(i) ? l : l * k);
+  }
   let curseur = MARGE_P;
   const colonnes = champs.map((c, i) => {
     const l = largeurs[i];
@@ -33762,6 +33904,7 @@ function pageDetailPdf(doc, ctx, jeu){
         const cellules = colonnes.map(c => c.cle === "avancement" ? [""]
           : c.cle === "echeance" ? [r.echeance ? jjmmaaaa(r.echeance) : "—"]
           : c.cle === "libelle" ? lignesCellule(doc, r.libelleSeul || r.libelle, c.l - retraitD, 99)
+          : c.cle === "origine" ? lignesCellule(doc, String(r.origine || "").replace(/_(\d{4})\b/g, "_\n$1"), c.l, 6)
           : lignesCellule(doc, r[c.cle], c.l, c.cle === "commentaire" ? 12 : 6));
         const hauteur = Math.max(6, Math.max(...cellules.map(t => t.length)) * 3.4 + 3);
         if(y + hauteur > bas) y = enteteGroupe(nouvelleFeuillePdf(doc, ctx), true);
@@ -34027,6 +34170,7 @@ function jeuMEC(c){
 /* P2A : le focus croise groupement et nature, le camembert porte sur la nature,
    et le bloc du haut rappelle les effectifs par millésime. Une ligne portant
    plusieurs millésimes n'apparaît qu'une fois dans le détail. */
+const LIB_NATURE_P2A = { PEPS:"Projet PEPS", AV:"Action hors PEPS", MEO:"Action de mise en œuvre (MEO)" };
 function jeuP2A(c, nature){
   const rangNature = n => (n === "PEPS" ? 0 : (n === "AV" ? 1 : 2));
   const choix = nature || "tous";
@@ -34063,7 +34207,8 @@ function jeuP2A(c, nature){
       const [ga, na] = a.split(" · "), [gb, nb] = b.split(" · ");
       return ga.localeCompare(gb, "fr") || rangNature(na) - rangNature(nb);
     })
-    .map(v => ({ cle:v, libelle:v, couleur:teinte[v.split(" · ")[0]] || CAT_COULEURS[0] }));
+    .map(v => ({ cle:v, libelle:v.split(" · ")[0] + " · " + (LIB_NATURE_P2A[v.split(" · ")[1]] || v.split(" · ")[1]),
+                 couleur:teinte[v.split(" · ")[0]] || CAT_COULEURS[0] }));
 
   const jeu = agrege({
     axe: "groupement et nature",
@@ -34091,11 +34236,20 @@ function jeuP2A(c, nature){
   const naturesVues = [...new Set(lignes.map(l => l.nature))]
     .sort((a, b) => rangNature(a) - rangNature(b));
   const couleurNature = { PEPS:[192,80,77], AV:[128,100,162], MEO:[247,150,70] };
-  jeu.donut = naturesVues.map((n, i) => ({
-    cle:n, libelle:n,
-    couleur: couleurNature[n] || CAT_COULEURS[i % CAT_COULEURS.length],
-    valeur: lignes.filter(l => l.nature === n).length
-  }));
+  /* Projets PEPS et actions hors PEPS de l'année, comptés comme sur l'accueil de la console ;
+     les actions MEO inscrites sont signalées à part, sous la légende */
+  const anP2A = Number(((cfg.p2aChoisis || [])[0] || "").match(/\d{4}/)?.[0]) || c.annee;
+  const nPeps = sansFiltres(() => perimetreAnnee("PEPS", anP2A)).length;
+  const nHors = sansFiltres(() => perimetreAnnee("AV", anP2A)).length;
+  jeu.donut = [
+    { cle:"PEPS", libelle:"Projet PEPS", couleur:couleurNature.PEPS, valeur:nPeps },
+    { cle:"AV", libelle:"Action hors PEPS", couleur:couleurNature.AV, valeur:nHors }
+  ];
+  jeu.donutSous = "projets et actions";
+  const meo = lignes.filter(l => l.nature === "MEO");
+  const nbProjMeo = new Set(meo.map(l => l.projetRattache)).size;
+  if(meo.length) jeu.noteDonut = meo.length + " action" + (meo.length > 1 ? "s" : "") + " de mise en œuvre (MEO) identifiée" +
+    (meo.length > 1 ? "s" : "") + " au P2A " + anP2A + ", rattachée" + (meo.length > 1 ? "s" : "") + " à " + nbProjMeo + " projet" + (nbProjMeo > 1 ? "s" : "") + ".";
 
   // Bloc du haut : effectifs par millésime, une ligne comptant dans chacun des siens.
   const choisis = [...(cfg.p2aChoisis || [])].sort();
