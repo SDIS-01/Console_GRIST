@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 06/11/2026 · 10 h 59</div>';
+    '<div class="ed-version">Version du 06/11/2026 · 11 h 03</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -31787,13 +31787,13 @@ function image(doc, page, o){
     'xlink:actuate="onLoad" draw:mime-type="image/png"><text:p/></draw:image></draw:frame>');
 }
 
-function nouvellePage(doc, titre, sousTitre){
+function nouvellePage(doc, titre, sousTitre, tailleTitre){
   const page = { type:"contenu", titre, sousTitre, frames:[] };
   doc.pages.push(page);
   if(titre){
     // Le bandeau doit rester dans l'image d'en-tête : on réduit le corps
     // plutôt que de laisser le texte déborder du cadre.
-    const taille = titre.length > 46 ? 15 : (titre.length > 32 ? 18 : 22);
+    const taille = tailleTitre || (titre.length > 46 ? 15 : (titre.length > 32 ? 18 : 22));
     bloc(doc, page, { x:X_TITRE, y:Y_TITRE, w:W_TITRE, h:H_TITRE, texte:titre,
                       taille, gras:true, couleur:COULEUR_TITRE, fond:"#FFFFFF",
                       align:"center" });
@@ -32803,10 +32803,10 @@ function pagesP2AParGroupement(doc, annee, b){
   trierGroupements(L).forEach(g => {
     const ls = L.filter(l => grpP2A(l) === g);
     const n = k => ls.filter(l => statutDeLigne(l.avancement, l.interrompu) === k).length;
-    const page = nouvellePage(doc, "P2A " + annee + " — " + g + " · " + ls.length + " inscription" + (ls.length > 1 ? "s" : ""), null);
+    const page = nouvellePage(doc, "P2A " + annee + " — " + g + " · " + ls.length + " inscription" + (ls.length > 1 ? "s" : ""), null, 18);
     /* quatre chiffres */
     const kp = [[n("a engager"), "à engager", "#C0504D"], [n("en cours"), "en cours", "#F79646"],
-                [n("termine"), "terminée" + (n("termine") > 1 ? "s" : ""), "#9BBB59"], [moyenneAv(ls) + " %", "avancement moyen", "#7f6f6c"]];
+                [n("termine"), "terminé" + (n("termine") > 1 ? "s" : ""), "#9BBB59"], [moyenneAv(ls) + " %", "avancement moyen", "#7f6f6c"]];
     const lk = (LARG - 0.9) / 4, yk = Y_CONTENU - 3.25;
     kp.forEach(([v, lib, coul], i) => {
       const x = MARGE + i * (lk + 0.3);
@@ -32874,7 +32874,10 @@ function pagesP2AParGroupement(doc, annee, b){
     };
     const fini = l => statutDeLigne(l.avancement, l.interrompu) === "termine";
     if(ls.some(l => !fini(l))){ section("RESTE À RÉALISER"); bloquer(l => !fini(l)); }
-    if(ls.some(fini)){ section("TERMINÉES"); bloquer(fini); }
+    if(ls.some(fini)){
+      if(lignes.length) lignes.push({ separateur:true, fond:"#FFFFFF", hauteur:0.45 });   // ligne vide avant les terminés
+      section("TERMINÉS"); bloquer(fini);
+    }
     tableauPagine(doc, { page, x:MARGE, y:Y_CONTENU - 1.9, titreSuite:null, maxLignes:2, taille:10,
       hauteurFixe:0.62, sansAlternance:true, lignesFines:true,
       largeurs:[0.1, 13.5, 2.4, 3.6, 2.4, 3.2],
