@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 05/11/2026 · 17 h 55</div>';
+    '<div class="ed-version">Version du 06/11/2026 · 9 h 23</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -30381,6 +30381,7 @@ async function chargeDonnees(){
   construitCategories();
   construitFamilles();
   construitExergue();
+  modeSimple();
   alerte(soucis.length ? "Table illisible — " + soucis.join(" · ") : "", false);
   $("etat").textContent = recPEPS.length + " lignes projets · " + recMEC.length + " recommandations";
 }
@@ -30656,6 +30657,53 @@ function majEtatExergue(){
     : "Aucun élément retenu.";
 }
 
+/* ---------- Édition simplifiée ----------
+   On édite toujours la revue annuelle complète (diaporama Impress) ; seul le P2A est à choisir,
+   parmi celui de l'année en cours et ceux des années à venir. Les autres réglages sont neutres. */
+function modeSimple(){
+  const an = new Date().getFullYear();
+  const mils = [...new Set(recPEPS.flatMap(l => cfg.colP2A ? versListe(l[cfg.colP2A]) : []).map(v => txt(v).trim()))]
+    .filter(v => /p2a/i.test(v))
+    .map(v => ({ v, y:Number((v.match(/\d{4}/) || [])[0]) }))
+    .filter(o => o.y >= an)
+    .sort((a, b) => a.y - b.y || a.v.localeCompare(b.v));
+  /* interface : un seul choix, le reste masqué */
+  const fsType = $("typeRevue") && $("typeRevue").closest("fieldset");
+  if(fsType) fsType.hidden = true;
+  ["voletPerimetre", "voletContenu", "voletHisto", "btnReinit"].forEach(id => { const e = $(id); if(e) e.hidden = true; });
+  let fs = $("fsSimple");
+  if(!fs){
+    fs = document.createElement("fieldset"); fs.id = "fsSimple";
+    fs.innerHTML = '<legend>P2A à éditer</legend><div class="grille"><div><label for="selP2A">Millésime</label><select id="selP2A"></select></div></div>' +
+      '<p class="aide">Revue annuelle complète (diaporama Impress). Seuls le P2A de l\'année en cours et ceux des années à venir peuvent être édités.</p>';
+    (fsType || $("recap")).after(fs);
+    $("selP2A").addEventListener("change", () => choisitP2ASimple($("selP2A").value));
+  }
+  const sel = $("selP2A");
+  sel.innerHTML = mils.length ? mils.map(o => '<option value="' + esc(o.v) + '">' + esc(o.v.replace(/_/g, " ")) + '</option>').join("")
+    : '<option value="">Aucun P2A de ' + an + ' ou des années suivantes</option>';
+  const cur = (cfg.p2aChoisis || [])[0];
+  const choix = mils.some(o => o.v === cur) ? cur : (mils.find(o => o.y === an) || mils[0] || {}).v || "";
+  sel.value = choix;
+  choisitP2ASimple(choix);
+}
+function choisitP2ASimple(v){
+  const y = Number((String(v).match(/\d{4}/) || [])[0]) || new Date().getFullYear();
+  cfg.typeRevue = "complete";
+  cfg.diapos = TYPES.find(t => t.id === "complete").diapos.slice();
+  cfg.p2aChoisis = v ? [v] : [];
+  cfg.prioritesExclues = []; cfg.categoriesExclues = [];
+  cfg.natureP2A = "tous";
+  if($("typeRevue")) $("typeRevue").value = "complete";
+  if($("revA")) $("revA").value = ""; if($("revB")) $("revB").value = "";
+  $("annee").value = y;
+  try{ appliqueType(); }catch(e){}
+  try{ construitP2A(); construitPriorites(); construitCategories(); }catch(e){}
+  sauve(); recalcule();
+  const b1 = $("btnGen"), b2 = $("btnGenRecap");
+  [b1, b2].forEach(b => { if(b) b.disabled = !v; });
+}
+
 function construitP2A(){
   const zone = $("p2a"); zone.innerHTML = "";
   if(!cfg.colP2A){ zone.textContent = "Choisissez d'abord la colonne des millésimes."; return; }
@@ -30892,7 +30940,7 @@ function majVisibilite(){
   $("fsDetail").hidden   = odp;
   for(const id of ["voletPerimetre", "voletContenu"]){
     const v = $(id);
-    v.hidden = [...v.querySelectorAll(":scope > .corps > fieldset")].every(f => f.hidden);
+    v.hidden = !!$("fsSimple") || [...v.querySelectorAll(":scope > .corps > fieldset")].every(f => f.hidden);   // édition simplifiée : masqués
   }
 }
 
@@ -31065,22 +31113,48 @@ function sauve(){
 /* Calculs                                                             */
 /* ------------------------------------------------------------------ */
 
+/* Périmètre de l'année, identique aux chiffres-clés de la console :
+   PEPS = lignes de nature PEPS caractérisées au Millésime PEPS de l'année ;
+   AV (actions hors PEPS) = lignes projet (jamais les MEO) inscrites au P2A de l'année,
+   par elles-mêmes ou par leurs actions MEO, et non caractérisées au Millésime PEPS de l'année.
+   Sans colonne Millesime_PEPS : nature PEPS ou AV inscrite au P2A de l'année. */
+function perimetreAnnee(nature, annee){
+  const an = String(annee);
+  const colMP = ["Millesime_PEPS", "Millésime_PEPS"].find(k => recPEPS.some(l => k in l));
+  const nat = l => String(l[cfg.colNature] || "").toUpperCase();
+  const inscrit = l => cfg.colP2A && versListe(l[cfg.colP2A]).some(m => String(m).indexOf(an) >= 0);
+  const meoDe = new Map();
+  if(cfg.colIdProjet) recPEPS.forEach(l => { if(nat(l) !== "MEO") return;
+    const id = txt(l[cfg.colIdProjet]); if(!id) return;
+    if(!meoDe.has(id)) meoDe.set(id, []); meoDe.get(id).push(l); });
+  const auP2A = l => inscrit(l) || (cfg.colIdProjet ? (meoDe.get(txt(l[cfg.colIdProjet])) || []).some(inscrit) : false);
+  const auPEPS = l => !!colMP && versListe(l[colMP]).some(m => String(m).indexOf(an) >= 0);
+  return recPEPS.filter(l => {
+    const n = nat(l);
+    if(n === "MEO" || !prioriteRetenue(l)) return false;
+    if(nature === "PEPS") return n === "PEPS" && (colMP ? auPEPS(l) : auP2A(l));
+    return (n === "PEPS" || n === "AV") && auP2A(l) && (colMP ? !auPEPS(l) : n === "AV");
+  });
+}
 function bilanNature(nature, jan1, finAnnee, fraction){
-  const lignes = recPEPS.filter(l => String(l[cfg.colNature] || "").toUpperCase() === nature
-                                  && prioriteRetenue(l));
+  const lignes = cfg.colP2A ? perimetreAnnee(nature, jan1.getUTCFullYear())
+    : recPEPS.filter(l => String(l[cfg.colNature] || "").toUpperCase() === nature && prioriteRetenue(l));
 
-  // Stock au 1er janvier : la ligne est comptée sauf si elle était déjà close à cette date.
-  const stock = lignes.filter(l => {
+  // Périmètre de l'année (P2A) : toutes les lignes retenues ; sinon, stock au 1er janvier.
+  const stock = cfg.colP2A ? lignes : lignes.filter(l => {
     const cloture = [cfg.colFin, cfg.colSuspension, cfg.colAbandon]
       .map(c => c ? versDate(l[c]) : null)
       .filter(Boolean);
     return !cloture.some(d => d < jan1);
   });
 
-  const termines = lignes.filter(l => {
-    const f = cfg.colFin ? versDate(l[cfg.colFin]) : null;
-    return f && f >= jan1 && f <= finAnnee;
-  }).sort((a, b) => versDate(a[cfg.colFin]) - versDate(b[cfg.colFin]));
+  // Terminés : avec le périmètre P2A, les lignes à 100 % (comme la console) ; sinon, fin dans l'année.
+  const termines = (cfg.colP2A
+    ? lignes.filter(l => !interrompuPEPS(l) && versPourcent(l[cfg.colAvancement], fraction) >= 100)
+    : lignes.filter(l => {
+        const f = cfg.colFin ? versDate(l[cfg.colFin]) : null;
+        return f && f >= jan1 && f <= finAnnee;
+      })).sort((a, b) => (versDate(a[cfg.colFin]) || 0) - (versDate(b[cfg.colFin]) || 0));
 
   // Lignes suspendues ou abandonnées au cours de l'année de référence.
   const dateArret = l => {
@@ -31089,10 +31163,10 @@ function bilanNature(nature, jan1, finAnnee, fraction){
     if(s && a) return s < a ? s : a;
     return s || a;
   };
-  const interrompus = lignes.filter(l => {
+  const interrompus = (cfg.colP2A ? lignes.filter(l => interrompuPEPS(l)) : lignes.filter(l => {
     const d = dateArret(l);
     return d && d >= jan1 && d <= finAnnee;
-  }).sort((a, b) => dateArret(a) - dateArret(b));
+  })).sort((a, b) => (dateArret(a) || 0) - (dateArret(b) || 0));
 
   const decrit = l => ({
     libelle: txt(l[cfg.colLibelle]),
@@ -31516,7 +31590,7 @@ function dessineApercu(){
     const e = ecarts ? ecarts[cle] : null;
     h += "<fieldset><legend>" + titre + "</legend>";
     h += '<div class="chiffre">' + b.stock + (e ? ec(e.stock, "neutre") : "") + "</div>";
-    h += '<p class="aide">en cours au 01/01/' + c.annee + " — " + b.termines.length +
+    h += '<p class="aide">' + (cfg.colP2A ? (cle === "peps" ? "inscrits au PEPS " : "actions (hors PEPS) ") + c.annee : "en cours au 01/01/" + c.annee) + " — " + b.termines.length +
          (e ? " (" + formateEcart(e.termines) + ")" : "") + " terminé(s) dans l'année</p>";
     h += tableauHTML(["Libellé", "Porteur", "Fin"],
           b.termines.slice(0, 8).map(t => [t.libelle, t.porteur, t.date]));
@@ -32064,7 +32138,8 @@ function pageNature(doc, c, b, titre, cle){
   const largeur = (LARG - 0.8) / 3;
 
   cartouche(doc, page, MARGE, largeur, b.stock,
-            "en cours au 01/01/" + c.annee, "#C0504D", e ? e.stock : null, "neutre");
+            cfg.colP2A ? (cle === "peps" ? "inscrits au PEPS " : "actions (hors PEPS) ") + c.annee : "en cours au 01/01/" + c.annee,
+            "#C0504D", e ? e.stock : null, "neutre");
   cartouche(doc, page, MARGE + largeur + 0.4, largeur, b.termines.length,
             "terminés en " + c.annee, "#9BBB59", e ? e.termines : null, "haut");
   cartouche(doc, page, MARGE + 2 * (largeur + 0.4), largeur, b.interrompus.length,
