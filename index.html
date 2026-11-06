@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 06/11/2026 · 9 h 23</div>';
+    '<div class="ed-version">Version du 06/11/2026 · 9 h 30</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -33688,6 +33688,10 @@ function pageDetailPdf(doc, ctx, jeu){
     const dispo = libres.reduce((a, b) => a + b, 0) || 1;
     largeurs = largeurs.map((l, i) => l < minis[i] ? minis[i] : l - manque * libres[i] / dispo);
   }
+  /* jamais au-delà de la marge droite : si les mots les plus longs ne tiennent pas tous,
+     toutes les colonnes sont réduites dans la même proportion */
+  const sommeL = largeurs.reduce((a, b) => a + b, 0);
+  if(sommeL > total) largeurs = largeurs.map(l => l * total / sommeL);
   let curseur = MARGE_P;
   const colonnes = champs.map((c, i) => {
     const l = largeurs[i];
@@ -33719,13 +33723,18 @@ function pageDetailPdf(doc, ctx, jeu){
     // En-tête de groupe : nom de la catégorie et intitulés de colonnes sur la même ligne.
     // Il est répété, suivi de « (suite) », en haut de chaque nouvelle page du groupe.
     const enteteGroupe = (yy, suite) => {
-      doc.setFillColor(...cat.couleur);
-      doc.rect(MARGE_P, yy - 3.2, 3, 3.6, "F");
-      doc.setFontSize(9); doc.setTextColor(...ENCRE_P);
+      doc.setFontSize(9);
       const intitule = ligatures(cat.libelle) + (suite ? " (suite)" : "  (" + membres.length + ")");
-      doc.text(intitule, MARGE_P + 5, yy);
       // Intitulé trop long pour la première colonne : les titres passent à la ligne.
       const aLaLigne = doc.getTextWidth(intitule) > colonnes[1].x - MARGE_P - 7;
+      /* bandeau d'en-tête : surbrillance légère de la couleur du groupe */
+      const teinte = (cat.couleur || [200, 200, 200]).map(v => Math.round(255 - (255 - v) * 0.16));
+      doc.setFillColor(...teinte);
+      doc.rect(MARGE_P - 1, yy - 4.6, droite - MARGE_P + 1, (aLaLigne ? 11 : 6.2), "F");
+      doc.setFillColor(...cat.couleur);
+      doc.rect(MARGE_P, yy - 3.2, 3, 3.6, "F");
+      doc.setTextColor(...ENCRE_P);
+      doc.text(intitule, MARGE_P + 5, yy);
       if(aLaLigne) yy += 5;
       doc.setFontSize(7); doc.setTextColor(...GRIS_P);
       colonnes.slice(1).forEach(c => doc.text(tronqueA(doc, nettoiePdf(c.titre), c.l + 1), c.x, yy));
