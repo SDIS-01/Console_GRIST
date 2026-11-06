@@ -17536,7 +17536,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 06/11/2026 · 11 h 10</div>';
+    '<div class="ed-version">Version du 06/11/2026 · 11 h 21</div>';
   return h;
 }
 async function lancerEdition(id){
@@ -32180,7 +32180,7 @@ function pageNature(doc, c, b, titre, cle){
   const avecEtoile = b.termines.concat(b.interrompus).some(t => / \*$/.test(t.libelle));
   let page = nouvellePage(doc, titre, sousTitreComparaison());
   /* légende de l'astérisque en bas de page */
-  if(avecEtoile) bloc(doc, page, { x:MARGE, y:20.25, w:8, h:0.55, texte:"* relié à la MEC 2023", taille:9, couleur:"#6F6862", fond:"#FFFFFF" });
+  if(avecEtoile) bloc(doc, page, { x:MARGE, y:20.25, w:8, h:0.55, texte:"* en lien avec la MEC 2023", taille:9, couleur:"#6F6862", fond:"#FFFFFF" });
   const largeur = (LARG - 0.8) / 3;
 
   cartouche(doc, page, MARGE, largeur, b.stock,
@@ -32696,7 +32696,7 @@ function pageP2ARecap(doc, annee, b){
 
 /* Sommaire des diapositives par groupement, posé sur la diapo récapitulatif
    une fois les diapositives créées (pour connaître leur numéro). */
-const COUL_ETAT_P2A = { "a engager":"#C0504D", "en cours":"#F79646", "termine":"#9BBB59", "interrompu":"#9A948E" };
+const COUL_ETAT_P2A = { "a engager":"#C0504D", "en cours":"#FAC090", "termine":"#9BBB59", "interrompu":"#9A948E" };
 function sommaireP2A(doc, r, annee, L, diapos){
   if(!r) return;
   const etat = l => statutDeLigne(l.avancement, l.interrompu);
@@ -32731,7 +32731,7 @@ function sommaireP2A(doc, r, annee, L, diapos){
 function pageP2ATableau(doc, titre, lignes, vide){
   const page = nouvellePage(doc, titre, null);   // pas de sous-titre : le tableau monte sous le titre
   if(lignes.some(l => l.mec || l.mecProjet))
-    bloc(doc, page, { x:MARGE, y:20.25, w:8, h:0.55, texte:"* relié à la MEC 2023",
+    bloc(doc, page, { x:MARGE, y:20.25, w:8, h:0.55, texte:"* en lien avec la MEC 2023",
                       taille:9, couleur:"#6F6862", fond:"#FFFFFF" });
   if(!lignes.length){
     bloc(doc, page, { x:MARGE, y:Y_CONTENU, w:LARG, h:1, taille:11, couleur:"#6F6862", texte:vide });
@@ -32919,8 +32919,8 @@ function pagesP2AParGroupement(doc, annee, b, diapos){
       bloc(doc, page, { x:xl + 0.35, y:20.25, w:5.6, h:0.55, texte:lib, taille:9, couleur:"#6F6862" });
       xl += lib.length * 0.17 + 1.2;
     });
-    bloc(doc, page, { x:xl, y:20.25, w:5.2, h:0.55, texte:"* relié à la MEC 2023", taille:9, couleur:"#6F6862" });
-    bloc(doc, page, { x:xl + 4.6, y:20.25, w:4.4, h:0.55, texte:"Échéance dépassée", taille:9, couleur:"#C0504D" });
+    bloc(doc, page, { x:xl, y:20.25, w:5.2, h:0.55, texte:"* en lien avec la MEC 2023", taille:9, couleur:"#6F6862" });
+    bloc(doc, page, { x:xl + 5.3, y:20.25, w:4.4, h:0.55, texte:"Échéance dépassée", taille:9, couleur:"#C0504D" });
   });
 }
 
