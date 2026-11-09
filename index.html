@@ -3159,7 +3159,8 @@ function lireBrut(tableId,ligne,colId){
 /* --- identifiant d'une nouvelle action ----------------------------------
    <identifiant du projet>_MEO<nn>_<intitulé>, par ex. 2027_08_P_MEO03_Migration.
    Le numéro suit le plus grand MEOnn déjà pris par les actions du projet
-   (chaque projet repart à MEO01 ; un numéro libéré n'est pas réutilisé).
+   (chaque projet repart à MEO01 ; après une suppression, les actions restantes
+   sont renumérotées sans trou, voir renumeroterMEO).
    L'identifiant est fixé à la création : les tâches s'y rattachent. */
 function colActKeySaisissable(){
   const c=S.cfg, i=c.colActKey && infoCol(c.tblMain,c.colActKey);
@@ -3179,6 +3180,44 @@ function prochainNumeroMEO(p){
     if(m) max=Math.max(max,Number(m[1]));
   });
   return String(max+1).padStart(2,"0");
+}
+/* Après une suppression, les actions restantes du projet sont renumérotées
+   MEO01, MEO02… dans leur ordre actuel. Les liens texte vers l'identifiant
+   (tâches, notes) suivent ; les liens par référence n'ont rien à changer. */
+async function renumeroterMEO(projetId){
+  if(!colActKeySaisissable()) return false;
+  const c=S.cfg, p=S.data.main.find(x=>x.id===Number(projetId));
+  if(!p) return false;
+  const acts=actionsDe(p).map(a=>({a, m:txt(a[c.colActKey]).match(/_MEO(\d+)/i)})).filter(x=>x.m)
+    .sort((x,y)=>Number(x.m[1])-Number(y.m[1]) || x.a.id-y.a.id);
+  const corresp=new Map(), actions=[];
+  acts.forEach((x,i)=>{
+    const ancien=txt(x.a[c.colActKey]), nouveau=ancien.replace(/_MEO\d+/i,"_MEO"+String(i+1).padStart(2,"0"));
+    if(nouveau===ancien) return;
+    corresp.set(ancien,nouveau);
+    actions.push(["UpdateRecord",c.tblMain,x.a.id,{[c.colActKey]:nouveau}]);
+  });
+  if(!actions.length) return false;
+  /* liens texte : la valeur (ou chaque élément d'une liste) égale à un ancien identifiant est remplacée */
+  const suivre=(tbl,col,lignes)=>{
+    if(!tbl||!col||!lignes) return;
+    const info=infoCol(tbl,col);
+    if(!info || /^Ref(List)?:/.test(info.type)) return;
+    lignes.forEach(r=>{
+      const v=r[col];
+      if(estListe(v)){
+        if(!v.slice(1).some(x=>corresp.has(String(x)))) return;
+        actions.push(["UpdateRecord",tbl,r.id,{[col]:["L"].concat(v.slice(1).map(x=>corresp.get(String(x))||x))}]);
+      }else if(v!=null && corresp.has(String(v))) actions.push(["UpdateRecord",tbl,r.id,{[col]:corresp.get(String(v))}]);
+    });
+  };
+  suivre(c.tblTache,c.colTacheLien,S.data.taches);
+  suivre(c.tblNote,c.colNoteAction,S.data.notes);
+  try{
+    await grist.docApi.applyUserActions(actions);
+    toast("Actions renumérotées");
+    return true;
+  }catch(e){ toast("Renumérotation impossible : "+e.message,true); return false; }
 }
 function identifiantAction(p,intitule){
   return idProjetPourAction(p)+"_MEO"+prochainNumeroMEO(p)+"_"+String(intitule||"").trim();
@@ -6269,7 +6308,9 @@ function vueActions(p){
   document.querySelectorAll("[data-sup]").forEach(b=>b.onclick=async()=>{
     if(!await confirmerSuppression("Supprimer définitivement cette action du document Grist ?")) return;
     await supprimer(t,Number(b.dataset.sup));
-    await charger(); rendreListe(); rendreProjet();
+    await charger();
+    if(await renumeroterMEO(p.id)) await charger();
+    rendreListe(); rendreProjet();
   });
 }
 
@@ -17536,7 +17577,7 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
-    '<div class="ed-version">Version du 06/11/2026 · 14 h 48</div>';
+    '<div class="ed-version">Version du 09/11/2026 · 14 h 55</div>';
   return h;
 }
 async function lancerEdition(id){
