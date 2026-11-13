@@ -2231,6 +2231,13 @@ body.app-documents .app-filtres{display:none;}
 .doc-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .doc-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
 .pastille-com{display:inline-block;width:8px;height:8px;border-radius:50%;background:#F5A623;margin-left:7px;vertical-align:middle;flex:none}
+.btn-reu{margin-left:6px;background:#002395}
+.btn-reu:disabled{opacity:.45;cursor:not-allowed}
+.jc-reunion{border-left-width:4px}
+.jc-part{font-size:12px;color:#3c4a6b;margin:4px 0 2px}
+.jc-part b{font-weight:600;color:#5a6478}
+.jf-reu .jf-tete b{color:#002395}
+.jf-reu input[type=text]{width:100%;box-sizing:border-box}
 </style>
 </head>
 <body>
@@ -2607,7 +2614,7 @@ const DEF = {
   colTachePJ:"", colTacheOrdre:"", colTacheFinReelle:"", colTacheDetail:"", colJnlPJ:"", colInsPJ:"",
   tblJournal:"", colJnlLien:"", colJnlDate:"", colJnlTexte:"", colJnlAuteur:"", colJnlNature:"",
   colJnlAction:"", colJnlCollab:"Collaborateur_Concerné", colJnlDelai:"Délai_Exécution",
-  colJnlReponse:"Reponse_a", colJnlTraite:"Traité", colJnlSaisie:"Date_Saisie",
+  colJnlReponse:"Reponse_a", colJnlTraite:"Traité", colJnlSaisie:"Date_Saisie", colJnlParticipants:"Participants",
   colJalCommentaire:"",
   tblInstance:"", colInsLien:"", colInsDate:"", colInsLibelle:"", colInsHisto:"",
   colInsType:"", colInsRapporteur:"", colInsAction:"", colInsPeriode:"Periode_Prevue", colInsCommentaire:"Commentaire",
@@ -2668,7 +2675,8 @@ const CHAMPS_REGLAGES = [
     ["colJnlCollab","Collaborateur concerné"],["colJnlDelai","Délai d'exécution"],
     ["colJnlReponse","Réponse à (même table)"],
     ["colJnlTraite","Échéance traitée (case à cocher)"],["colJnlPJ","Pièces jointes"],
-    ["colJnlSaisie","Date de saisie (formule d'initialisation TODAY(), lue seulement)"]
+    ["colJnlSaisie","Date de saisie (formule d'initialisation TODAY(), lue seulement)"],
+    ["colJnlParticipants","Participants à la réunion (facultatif)"]
   ]},
   {bloc:"Table des instances", tableKey:"tblInstance", champs:[
     ["colInsLien","Lien vers le projet"],["colInsAction","Lien vers l'action (facultatif)"],
@@ -7482,6 +7490,25 @@ function etatJnl(j){
 const JNL_MOIS=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août",
                 "Septembre","Octobre","Novembre","Décembre"];
 
+/* --- réunions : entrées du journal dont la nature est « Réunion » --- */
+function jnlEstReunion(j){
+  const c=S.cfg;
+  return !!(c.colJnlNature && j && pliColonne(txt(lire(c.tblJournal,j,c.colJnlNature)))==="reunion");
+}
+/* valeur à écrire dans la colonne Nature pour une réunion (choix ou référence) */
+function jnlValeurReunion(){
+  const c=S.cfg, info=c.colJnlNature && infoCol(c.tblJournal,c.colJnlNature);
+  if(!info) return null;
+  if(info.type==="Choice"){ const v=(info.choices||[]).find(x=>pliColonne(x)==="reunion"); return v===undefined?null:v; }
+  if(info.type.startsWith("Ref:")){
+    const map=S.refLabels[info.refTable+"."+info.refDisplay]||{};
+    const id=Object.keys(map).find(i=>pliColonne(String(map[i]))==="reunion");
+    return id===undefined?null:Number(id);
+  }
+  return "Réunion";   // colonne texte libre
+}
+function jnlParticipantsOK(){ const c=S.cfg; return !!(c.colJnlParticipants && infoCol(c.tblJournal,c.colJnlParticipants)); }
+
 function vueJournal(p){
   const c=S.cfg;
   if(!c.tblJournal||!c.colJnlLien){
@@ -7498,7 +7525,7 @@ function vueJournal(p){
   const fils=filsJournal(p);
   const actJnl=j=>(c.colJnlAction?actionUtile(c.tblJournal,j,c.colJnlAction,p):"");
   const natJnl=j=>(c.colJnlNature?txt(lire(c.tblJournal,j,c.colJnlNature)).trim():"");
-  const F=S.fJnl=S.fJnl||{etat:"tout",nature:"",action:"",q:""};
+  const F=S.fJnl=S.fJnl||{etat:"tout",nature:"",action:"",q:"",genre:""};
   if(S.reponseA) S.jnlForm=true;
 
   /* --- échéances ouvertes : entrées du journal et instances à programmer --- */
@@ -7513,7 +7540,8 @@ function vueJournal(p){
   const q=pliColonne(F.q);
   const textesFil=f=>[f.j].concat(f.reponses).map(j=>[lire(c.tblJournal,j,c.colJnlTexte),
     c.colJnlAuteur?lire(c.tblJournal,j,c.colJnlAuteur):"",
-    c.colJnlCollab?lire(c.tblJournal,j,c.colJnlCollab):"",natJnl(j),actJnl(j)].join(" ")).join(" ");
+    c.colJnlCollab?lire(c.tblJournal,j,c.colJnlCollab):"",natJnl(j),actJnl(j),
+    jnlParticipantsOK()?lire(c.tblJournal,j,c.colJnlParticipants):""].join(" ")).join(" ");
   const etatsFil=f=>[f.j].concat(f.reponses).map(etatJnl).filter(Boolean).map(e=>e.k);
   const passe=f=>{
     const ks=etatsFil(f);
@@ -7521,6 +7549,8 @@ function vueJournal(p){
     if((F.etat==="retard"||F.etat==="proche") && !ks.includes(F.etat)) return false;
     if(F.etat==="sans" && etatJnl(f.j)) return false;
     if(F.nature && natJnl(f.j)!==F.nature) return false;
+    if(F.genre==="reunion" && !jnlEstReunion(f.j)) return false;
+    if(F.genre==="demande" && jnlEstReunion(f.j)) return false;
     if(F.action==="__projet" && actJnl(f.j)) return false;
     if(F.action && F.action!=="__projet" && actJnl(f.j)!==F.action) return false;
     if(q && !pliColonne(textesFil(f)).includes(q)) return false;
@@ -7529,14 +7559,14 @@ function vueJournal(p){
   const insVisibles=insP.filter(x=>{
     if(F.etat==="sans") return false;
     if((F.etat==="retard"||F.etat==="proche") && x.k!==F.etat) return false;
-    if(F.nature) return false;
+    if(F.nature || F.genre) return false;
     if(F.action==="__projet" && x.action) return false;
     if(F.action && F.action!=="__projet" && x.action!==F.action) return false;
     if(q && !pliColonne(x.periode.libelle+" "+(x.action||"")).includes(q)) return false;
     return true;
   });
   const visibles=fils.filter(passe);
-  const filtreActif=F.etat!=="tout"||F.nature||F.action||F.q;
+  const filtreActif=F.etat!=="tout"||F.nature||F.action||F.q||F.genre;
 
   const natures=[...new Set(js.map(natJnl).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr"));
   const actions=[...new Set(js.map(actJnl).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr"));
@@ -7583,12 +7613,13 @@ function vueJournal(p){
   const edition=(j,reponse)=>{
     const ch=(lab,col,opt)=>col?'<div class="champ"><label>'+lab+'</label>'+
       editeur(c.tblJournal,j,col,opt)+'</div>':'';
+    const reu=!reponse && jnlEstReunion(j);
     return '<div class="jc-edit"><div class="grille">'+
-      ch("Date de l'événement",c.colJnlDate)+
+      ch(reu?"Date de la réunion":"Date de l'événement",c.colJnlDate)+
       (reponse?'':ch("Nature / origine",c.colJnlNature))+
-      (reponse?'':ch("Collaborateur concerné",c.colJnlCollab))+
-      ch("Délai d'exécution",c.colJnlDelai)+
-      (c.colJnlTexte?'<div class="champ pleine"><label>Commentaire</label>'+
+      (reponse||reu?'':ch("Collaborateur concerné",c.colJnlCollab))+
+      (reu?(jnlParticipantsOK()?ch("Participants",c.colJnlParticipants):''):ch("Délai d'exécution",c.colJnlDelai))+
+      (c.colJnlTexte?'<div class="champ pleine"><label>'+(reu?'Objet et compte rendu':'Commentaire')+'</label>'+
         editeur(c.tblJournal,j,c.colJnlTexte,{multi:true})+'</div>':'')+
       (c.colJnlPJ?'<div class="champ pleine"><label>Pièces jointes</label>'+
         blocPJ(c.tblJournal,j,c.colJnlPJ)+'</div>':'')+
@@ -7601,17 +7632,19 @@ function vueJournal(p){
   const carte=f=>{
     const j=f.j, nat=natJnl(j), coul=couleurNature(nat), e=etatJnl(j), act=actJnl(j);
     const collab=c.colJnlCollab?lire(c.tblJournal,j,c.colJnlCollab):"";
-    const ed=S.jnlEdition===j.id;
-    return '<article class="jc'+(e&&e.k==="retard"?" jc-en-retard":"")+(e&&e.k==="solde"?" jc-est-solde":"")+
+    const ed=S.jnlEdition===j.id, reu=jnlEstReunion(j);
+    const part=reu && jnlParticipantsOK()?txt(lire(c.tblJournal,j,c.colJnlParticipants)).trim():"";
+    return '<article class="jc'+(reu?" jc-reunion":"")+(e&&e.k==="retard"?" jc-en-retard":"")+(e&&e.k==="solde"?" jc-est-solde":"")+
         (ed?" jc-edition":"")+'" id="jc-'+j.id+'" style="--lis:'+coul+'">'+
       '<div class="jc-tete">'+
         '<span class="jc-date">'+esc(dateVersFR(j[c.colJnlDate])||"—")+'</span>'+
-        (nat?'<span class="pastille jc-nat">'+marque(nat)+'</span>':'')+
+        (nat?'<span class="pastille jc-nat">'+(reu?'👥 ':'')+marque(nat)+'</span>':'')+
         (act?'<span class="pastille p-action" title="'+esc(act)+'">'+marque(act)+'</span>':'')+
         (collab?'<span class="pastille p-collab">'+marque(collab)+'</span>':'')+
         jnlStatutHtml(j)+pastEch(j)+
         '<span class="jc-outils">'+caseSolde(j)+crayon(j)+'</span>'+
       '</div>'+
+      (part && !ed?'<div class="jc-part"><b>Participants :</b> '+marque(part)+'</div>':'')+
       (ed ? edition(j,false)
           : '<p class="jc-texte">'+(marque(lire(c.tblJournal,j,c.colJnlTexte))||
               '<span class="cel-vide">(entrée sans commentaire)</span>')+'</p>'+pjLecture(j))+
@@ -7624,13 +7657,13 @@ function vueJournal(p){
         '</div>';
       }).join("")+
       '<div class="jc-pied"><span>'+auteurSaisie(j)+'</span>'+
-        (c.colJnlReponse?'<button type="button" class="jc-lien" data-repj="'+j.id+'">↩ Répondre</button>':'')+
+        (c.colJnlReponse && !reu?'<button type="button" class="jc-lien" data-repj="'+j.id+'">↩ Répondre</button>':'')+
       '</div>'+
     '</article>';
   };
 
   /* entrées sans destinataire (anciennes notes) : repliées, en lecture seule */
-  const estDemande=f=>!c.colJnlCollab || !!txt(lire(c.tblJournal,f.j,c.colJnlCollab)).trim();
+  const estDemande=f=>!c.colJnlCollab || jnlEstReunion(f.j) || !!txt(lire(c.tblJournal,f.j,c.colJnlCollab)).trim();
   const notesAnt=visibles.filter(f=>!estDemande(f));
   const notesHtml=notesAnt.length
     ? '<details class="jc-notes-ant" id="jc-notes-ant"'+(S.jnlNotesOuv?" open":"")+'><summary>Notes antérieures (lecture seule) · '+
@@ -7672,7 +7705,8 @@ function vueJournal(p){
     ? '<div class="jc-legende">'+natures.map(n=>'<span><i style="background:'+couleurNature(n)+'"></i>'+
         esc(n)+'</span>').join("")+'</div>' : '';
 
-  const formulaire='<div class="jb-form"'+(S.jnlForm?'':' hidden')+' id="jb-form">'+jnlFormulaireHtml(p)+'</div>';
+  const valReu=jnlValeurReunion(), modeReu=S.jnlForm==="reunion" && valReu!==null && !S.reponseA;
+  const formulaire='<div class="jb-form"'+(S.jnlForm?'':' hidden')+' id="jb-form">'+jnlFormulaireHtml(p,{reunion:modeReu})+'</div>';
 
   $("#corps").innerHTML=
     '<div class="carte jb-tete">'+
@@ -7681,11 +7715,15 @@ function vueJournal(p){
           '<button type="button" class="jb-pill jb-p-'+k+(F.etat===k?" on":"")+'" data-jpill="'+k+'"'+
           (v?'':' disabled')+' aria-pressed="'+(F.etat===k)+'"><i></i><b>'+v+'</b> '+l+'</button>').join("")+
         '</div>'+
-        '<button type="button" class="btn" id="jb-nouv" aria-expanded="'+!!S.jnlForm+'">'+
-          (S.jnlForm?"Fermer le formulaire":"✉ Nouvelle demande")+'</button>'+
+        (S.jnlForm ? '<button type="button" class="btn" id="jb-nouv" aria-expanded="true">Fermer le formulaire</button>'
+          : '<button type="button" class="btn" id="jb-nouv" aria-expanded="false">✉ Nouvelle demande</button>'+
+            '<button type="button" class="btn btn-reu" id="jb-reu"'+(valReu===null?' disabled title="Ajoutez la valeur « Réunion » à la colonne Nature du journal"':'')+'>👥 Nouvelle réunion</button>')+
       '</div>'+
       formulaire+
       '<div class="jb-filtres">'+
+        (valReu!==null?'<div class="jb-seg" role="group" aria-label="Type d\'entrée">'+
+          [["","Tout"],["demande","Demandes"],["reunion","Réunions"]].map(([k,l])=>
+            '<button type="button" data-jgenre="'+k+'" class="'+(F.genre===k?"on":"")+'">'+l+'</button>').join("")+'</div>':'')+
         '<div class="jb-seg" role="group" aria-label="Échéances">'+
           [["tout","Tout"],["suivre","À suivre"],["sans","Sans échéance"]].map(([k,l])=>
             '<button type="button" data-jseg="'+k+'" class="'+(F.etat===k?"on":"")+
@@ -7711,7 +7749,7 @@ function vueJournal(p){
   brancherEcheances(p);
   brancherPJ();
   brancherEditeurs();
-  brancherLibelleDate("j-nature","j-date-lib");
+  if(!modeReu) brancherLibelleDate("j-nature","j-date-lib");
   jnlBrancherFormulaire();
   const dna=$("#jc-notes-ant"); if(dna) dna.ontoggle=()=>{ S.jnlNotesOuv=dna.open; };
 
@@ -7720,6 +7758,7 @@ function vueJournal(p){
     F.etat=F.etat===b.dataset.jpill?"tout":b.dataset.jpill; vueJournal(p);
   });
   document.querySelectorAll("[data-jseg]").forEach(b=>b.onclick=()=>{ F.etat=b.dataset.jseg; vueJournal(p); });
+  document.querySelectorAll("[data-jgenre]").forEach(b=>b.onclick=()=>{ F.genre=b.dataset.jgenre; vueJournal(p); });
   const fn=$("#jf-nature"); if(fn) fn.onchange=()=>{ F.nature=fn.value; vueJournal(p); };
   const fa=$("#jf-action"); if(fa) fa.onchange=()=>{ F.action=fa.value; vueJournal(p); };
   const fq=$("#jf-q");
@@ -7732,9 +7771,15 @@ function vueJournal(p){
 
   /* --- formulaire replié --- */
   $("#jb-nouv").onclick=()=>{
-    S.jnlForm=!S.jnlForm; if(!S.jnlForm) S.reponseA=null;
+    S.jnlForm=S.jnlForm?false:"demande"; if(!S.jnlForm) S.reponseA=null;
     vueJournal(p);
     if(S.jnlForm){ const t=$("#j-texte"); if(t) t.focus(); }
+  };
+  const breu=$("#jb-reu");
+  if(breu) breu.onclick=()=>{
+    S.jnlForm="reunion"; S.reponseA=null;
+    vueJournal(p);
+    const t=$("#j-texte"); if(t) t.focus();
   };
   $("#j-fermer").onclick=()=>{ S.jnlForm=false; S.reponseA=null; vueJournal(p); };
 
@@ -7777,7 +7822,7 @@ function vueJournal(p){
 
   $("#j-ajouter").onclick=async()=>{
     const texte=$("#j-texte").value.trim();
-    if(!texte){ toast("Saisissez un commentaire avant d'ajouter.",true); return; }
+    if(!texte){ toast(modeReu?"Saisissez l'objet de la réunion.":"Saisissez un commentaire avant d'ajouter.",true); return; }
     const info=infoCol(c.tblJournal,c.colJnlLien);
     const champs={[c.colJnlTexte]:texte};
     if(c.colJnlDate){
@@ -7791,7 +7836,11 @@ function vueJournal(p){
       if(va===undefined) return;
       champs[c.colJnlAuteur]=va;
     }
-    if(!S.reponseA && c.colJnlCollab && $("#j-collab") && !String($("#j-collab").value||"").trim()){
+    if(modeReu){
+      champs[c.colJnlNature]=valReu;
+      if(jnlParticipantsOK() && $("#j-part")) champs[c.colJnlParticipants]=$("#j-part").value.trim();
+    }
+    if(!modeReu && !S.reponseA && c.colJnlCollab && $("#j-collab") && !String($("#j-collab").value||"").trim()){
       toast("Indiquez le destinataire de la demande.",true); return; }
     if(c.colJnlCollab && $("#j-collab")){
       const vc=lireOuvert("j-collab",c.tblJournal,c.colJnlCollab,"Collaborateur concerné");
@@ -7803,7 +7852,7 @@ function vueJournal(p){
       if(dl===undefined){ toast("Délai d'exécution invalide : saisissez-le au format jj/mm/aaaa.",true); return; }
       if(dl!==null) champs[c.colJnlDelai]=dl;
     }
-    if(c.colJnlNature && $("#j-nature")) champs[c.colJnlNature]=valeurChamp("j-nature",c.tblJournal,c.colJnlNature);
+    if(!modeReu && c.colJnlNature && $("#j-nature")) champs[c.colJnlNature]=valeurChamp("j-nature",c.tblJournal,c.colJnlNature);
     if(c.colJnlAction && $("#j-action")){
       const va=valeurAction("j-action",c.tblJournal,c.colJnlAction);
       if(va!==null) champs[c.colJnlAction]=va;
@@ -19590,6 +19639,19 @@ function jnlEcheancesRapides(){
 function jnlFormulaireHtml(p,o){
   o=o||{}; const c=S.cfg, P=o.prefixe||(o.mob?"mbj-":"j-"), rep=!o.nouvelle && !!S.reponseA, moi=jnlMoiNom();
   const lig=(lab,html,cls)=>'<div class="jf-l'+(cls?" "+cls:"")+'"><span class="jf-lab">'+lab+'</span><div class="jf-val">'+html+'</div></div>';
+  if(o.reunion){
+    return '<div class="jf jf-reu">'+
+      '<div class="jf-tete"><b>👥 Nouvelle réunion</b><span>'+(moi?'Saisie par <b>'+esc(moi)+'</b> · ':'')+'aujourd\'hui '+esc(dateDuJourFR())+'</span></div>'+
+      lig('<span id="'+P+'date-lib">Date de la réunion</span>',champDateFR('id="'+P+'date"','',dateDuJourFR()))+
+      (jnlParticipantsOK()?lig("Participants",'<input id="'+P+'part" type="text" placeholder="Noms des participants, séparés par des virgules">'):'')+
+      lig('Objet et compte rendu','<textarea id="'+P+'texte" class="auto-h" placeholder="Objet de la réunion, points abordés, décisions…"></textarea>','jf-quoi')+
+      (c.colJnlAction?lig("Concerne",champAction(p,P+"action",o.action||null)):'')+
+      (c.colJnlAuteur?lig("Saisi par",champOuvert(c.tblJournal,c.colJnlAuteur,P+"auteur")):'')+
+      '<div class="jf-pied"><span class="jf-aide">Ctrl + Entrée pour enregistrer · aucune notification n\'est envoyée</span>'+
+        '<button type="button" class="btn-2" id="j-fermer">Annuler</button>'+
+        '<button class="btn" id="j-ajouter">Enregistrer la réunion</button></div>'+
+    '</div>';
+  }
   /* type : boutons tirés des valeurs de la colonne Nature, liste cachée conservée */
   let typeHtml="";
   if(!rep && c.colJnlNature){
@@ -19641,7 +19703,7 @@ function jnlBrancherFormulaire(o){
   const rep=!o.nouvelle && !!S.reponseA;
   const btn=$("#"+(o.prefixe?o.prefixe+"ok":(o.mob?"mbj-ok":"j-ajouter"))), collab=$("#"+P+"collab"), aut=$("#"+P+"auteur"), dl=$("#"+P+"delai");
   if(aut && !aut.value) aut.value=jnlMoiNom();
-  const majBtn=()=>{ if(!btn || rep) return; const n=collab?collab.value.trim():"";
+  const majBtn=()=>{ if(!btn || rep || racine.querySelector(".jf-reu")) return; const n=collab?collab.value.trim():"";
     btn.textContent=n?"Envoyer à "+n:"Envoyer la demande";
     racine.querySelectorAll("[data-jfqui]").forEach(b=>b.classList.toggle("on",pliColonne(b.dataset.jfqui)===pliColonne(n))); };
   const majDl=()=>{ const v=dl?dl.value.trim():""; racine.querySelectorAll("[data-jfdl]").forEach(b=>b.classList.toggle("on",b.dataset.jfdl===v)); };
