@@ -2230,6 +2230,11 @@ body.app-documents .app-filtres{display:none;}
 .doc-fen input,.doc-fen select{font:inherit;font-weight:400;font-size:13px;padding:7px 8px;border:1px solid var(--trait);border-radius:6px;}
 .doc-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .doc-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
+.btn-com{border:0;background:#FFE3B3;border-radius:10px;padding:0 6px;margin-left:6px;font-size:12px;line-height:19px;cursor:pointer;vertical-align:middle}
+.btn-com:hover{background:#FFD08A}
+.btn-bulle.btn-com-plein{background:#FFE3B3}
+.btn-bulle.btn-com-plein:hover{background:#FFD08A}
+.bulle-com .bc-hist{max-height:200px;overflow:auto;border:1px solid var(--trait);border-radius:6px;padding:6px 8px;margin-bottom:10px;font-size:12px;background:#fafbfd}
 .pastille-com{display:inline-block;width:8px;height:8px;border-radius:50%;background:#F5A623;margin-left:7px;vertical-align:middle;flex:none}
 .btn-reu{margin-left:6px;background:#002395}
 .btn-reu:disabled{opacity:.45;cursor:not-allowed}
@@ -2763,13 +2768,28 @@ function estListe(v){ return Array.isArray(v) && v[0]==="L"; }
 function valListe(v){ return estListe(v) ? v.slice(1) : (v==null||v==="" ? [] : [v]); }
 
 /* pastille : un commentaire est saisi sur l'action ou la tâche (contenu non affiché) */
-function pastilleCom(r,col){
-  if(!r||!col) return "";
+function aCommentaire(r,col){
+  if(!r||!col) return false;
   const v=r[col]; const t=v==null?"":String(Array.isArray(v)?v.slice(1).join(""):v);
-  return t.trim()?'<span class="pastille-com" title="Commentaire présent"></span>':"";
+  return !!t.trim();
 }
-function pastilleComA(r){ return pastilleCom(r,S.cfg.colCommentaire); }
-function pastilleComT(r){ return pastilleCom(r,S.cfg.colTacheCommentaire); }
+function pastilleCom(tbl,r,col){
+  return aCommentaire(r,col)
+    ? '<button type="button" class="btn-com" data-bc-t="'+esc(tbl)+'" data-bc-r="'+r.id+'" data-bc-c="'+esc(col)+'" title="Voir les commentaires">💬</button>'
+    : "";
+}
+function pastilleComA(r){ return pastilleCom(S.cfg.tblMain,r,S.cfg.colCommentaire); }
+function pastilleComT(r){ return pastilleCom(S.cfg.tblTache,r,S.cfg.colTacheCommentaire); }
+/* clic sur une bulle colorée : ouvre les commentaires, sans déclencher la ligne */
+document.addEventListener("click",e=>{
+  const b=e.target.closest && e.target.closest(".btn-com[data-bc-t]");
+  if(!b) return;
+  e.stopPropagation(); e.preventDefault();
+  ouvrirBulle(b,b.dataset.bcT,Number(b.dataset.bcR),b.dataset.bcC,()=>{
+    try{ if(typeof rafraichirVueApp==="function") rafraichirVueApp(); }catch(err){}
+    try{ if(S.projetSel && typeof rendreProjet==="function") rendreProjet(); }catch(err){}
+  });
+},true);
 function txt(v){
   if(v==null) return "";
   if(estListe(v)) return v.slice(1).join(", ");
@@ -6271,7 +6291,7 @@ function vueActions(p){
         return '<tr class="ligne-action" data-ouvrir-ligne="'+r.id+'">'+
           '<td><button type="button" class="lien-action" data-ouvrir="'+r.id+'" title="Ouvrir l\'action">'+
             (lib.num?'<span class="pastille-meo">'+esc(lib.num)+'</span>':'')+
-            '<span class="lib-action">'+esc(lib.texte||"(sans libellé)")+'</span>'+pastilleComA(r)+'</button>'+
+            '<span class="lib-action">'+esc(lib.texte||"(sans libellé)")+'</span></button>'+pastilleComA(r)+
             (nbT!==null?'<span class="nb-taches">'+nbT+' tâche'+(nbT>1?'s':'')+'</span>':'')+
             pastillesP2AAction(r)+(typeof bdgPastille==="function"?bdgPastille("A:"+r.id,p,{ajout:true}):'')+'</td>'+
           (avecStatut?'<td>'+editeur(t,r,c.colStatut)+'</td>':'')+
@@ -6425,7 +6445,7 @@ function ligneTacheHtml(r,act,avecStatutT,nbColT){
   return '<tr class="ligne-repli" data-repli="'+cle+'" data-tache="'+r.id+'" data-act="'+act.id+'">'+
     '<td class="col-poignee">'+(c.colTacheOrdre?'<span class="poignee" title="Glisser pour déplacer">⋮⋮</span>':'')+'</td>'+
     '<td class="col-chevron">'+(detail?'<span class="chevron">'+(ouvert?"▾":"▸")+'</span>':'')+'</td>'+
-    '<td>'+editeur(c.tblTache,r,c.colTacheLibelle,{auto:true})+pastilleComT(r)+(typeof bdgPastille==="function"?bdgPastille("T:"+r.id,S.projetSel,{ajout:true}):'')+'</td>'+
+    '<td>'+editeur(c.tblTache,r,c.colTacheLibelle,{auto:true})+(typeof bdgPastille==="function"?bdgPastille("T:"+r.id,S.projetSel,{ajout:true}):'')+'</td>'+
     (avecStatutT?'<td>'+editeur(c.tblTache,r,c.colTacheStatut)+'</td>':'')+
     '<td>'+(c.colTacheAvancement
       ? champAvct(c.tblTache,r,c.colTacheAvancement,a,statutInterrompu(c.tblTache,r,c.colTacheStatut)):'')+'</td>'+
@@ -6434,8 +6454,8 @@ function ligneTacheHtml(r,act,avecStatutT,nbColT){
     '<td>'+editeur(c.tblTache,r,c.colTacheFin)+'</td>'+
     (c.colTacheFinReelle?'<td>'+dateFinLecture(r[c.colTacheFinReelle])+'</td>':'')+
     '<td class="col-bulle">'+(c.colTacheCommentaire
-      ? '<button type="button" class="btn-bulle" data-bulle-t="'+c.tblTache+'" data-bulle-r="'+r.id+
-        '" data-bulle-c="'+c.colTacheCommentaire+'" title="Ajouter un commentaire">💬</button>':'')+'</td>'+
+      ? '<button type="button" class="btn-bulle'+(aCommentaire(r,c.colTacheCommentaire)?' btn-com-plein':'')+'" data-bulle-t="'+c.tblTache+'" data-bulle-r="'+r.id+
+        '" data-bulle-c="'+c.colTacheCommentaire+'" title="'+(aCommentaire(r,c.colTacheCommentaire)?'Voir les commentaires':'Ajouter un commentaire')+'">💬</button>':'')+'</td>'+
     '<td><button class="btn-sup" data-supt="'+r.id+'" title="Supprimer la tâche">✕</button></td></tr>'+
     (detail
       ? '<tr class="ligne-com" data-sous="'+cle+'"'+(ouvert?'':' style="display:none"')+
@@ -6615,7 +6635,9 @@ function ouvrirBulle(bouton,tableId,rowId,colId,apres){
   const demanderNom=!auto && (!hmPret()||nonTrace);
   const b=document.createElement("div");
   b.className="bulle-com";
-  b.innerHTML='<div class="bc-titre">Nouveau commentaire <span>'+esc(dateDuJourFR())+
+  const lgn=ligneDe(tableId,rowId), exist=lgn && aCommentaire(lgn,colId);
+  b.innerHTML=(exist?'<div class="bc-titre">Commentaires</div><div class="bc-hist">'+commentaireLecture(lgn[colId])+'</div>':'')+
+    '<div class="bc-titre">Nouveau commentaire <span>'+esc(dateDuJourFR())+
       (auto?' — '+esc(auto):'')+'</span></div>'+
     (demanderNom?'<input type="text" class="bc-nom" placeholder="Votre nom" value="'+esc(connu)+'">':'')+
     '<textarea class="bc-texte" rows="4" placeholder="Votre commentaire…"></textarea>'+
@@ -6626,7 +6648,7 @@ function ouvrirBulle(bouton,tableId,rowId,colId,apres){
   const w=Math.min(380,window.innerWidth-20);
   b.style.width=w+"px";
   b.style.left=Math.max(10,Math.min(window.innerWidth-w-10,r.right-w))+"px";
-  const haut=r.bottom+6+200>window.innerHeight;
+  const haut=r.bottom+6+b.offsetHeight>window.innerHeight;
   b.style.top=(haut?Math.max(10,r.top-6-b.offsetHeight):r.bottom+6)+"px";
   const ta=b.querySelector(".bc-texte");
   ta.focus();
