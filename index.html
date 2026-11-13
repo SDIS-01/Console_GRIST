@@ -2230,6 +2230,7 @@ body.app-documents .app-filtres{display:none;}
 .doc-fen input,.doc-fen select{font:inherit;font-weight:400;font-size:13px;padding:7px 8px;border:1px solid var(--trait);border-radius:6px;}
 .doc-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .doc-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
+.pastille-com{display:inline-block;width:8px;height:8px;border-radius:50%;background:#F5A623;margin-left:7px;vertical-align:middle;flex:none}
 </style>
 </head>
 <body>
@@ -2753,6 +2754,14 @@ function toast(msg,err){
 function estListe(v){ return Array.isArray(v) && v[0]==="L"; }
 function valListe(v){ return estListe(v) ? v.slice(1) : (v==null||v==="" ? [] : [v]); }
 
+/* pastille : un commentaire est saisi sur l'action ou la tâche (contenu non affiché) */
+function pastilleCom(r,col){
+  if(!r||!col) return "";
+  const v=r[col]; const t=v==null?"":String(Array.isArray(v)?v.slice(1).join(""):v);
+  return t.trim()?'<span class="pastille-com" title="Commentaire présent"></span>':"";
+}
+function pastilleComA(r){ return pastilleCom(r,S.cfg.colCommentaire); }
+function pastilleComT(r){ return pastilleCom(r,S.cfg.colTacheCommentaire); }
 function txt(v){
   if(v==null) return "";
   if(estListe(v)) return v.slice(1).join(", ");
@@ -6254,7 +6263,7 @@ function vueActions(p){
         return '<tr class="ligne-action" data-ouvrir-ligne="'+r.id+'">'+
           '<td><button type="button" class="lien-action" data-ouvrir="'+r.id+'" title="Ouvrir l\'action">'+
             (lib.num?'<span class="pastille-meo">'+esc(lib.num)+'</span>':'')+
-            '<span class="lib-action">'+esc(lib.texte||"(sans libellé)")+'</span></button>'+
+            '<span class="lib-action">'+esc(lib.texte||"(sans libellé)")+'</span>'+pastilleComA(r)+'</button>'+
             (nbT!==null?'<span class="nb-taches">'+nbT+' tâche'+(nbT>1?'s':'')+'</span>':'')+
             pastillesP2AAction(r)+(typeof bdgPastille==="function"?bdgPastille("A:"+r.id,p,{ajout:true}):'')+'</td>'+
           (avecStatut?'<td>'+editeur(t,r,c.colStatut)+'</td>':'')+
@@ -6408,7 +6417,7 @@ function ligneTacheHtml(r,act,avecStatutT,nbColT){
   return '<tr class="ligne-repli" data-repli="'+cle+'" data-tache="'+r.id+'" data-act="'+act.id+'">'+
     '<td class="col-poignee">'+(c.colTacheOrdre?'<span class="poignee" title="Glisser pour déplacer">⋮⋮</span>':'')+'</td>'+
     '<td class="col-chevron">'+(detail?'<span class="chevron">'+(ouvert?"▾":"▸")+'</span>':'')+'</td>'+
-    '<td>'+editeur(c.tblTache,r,c.colTacheLibelle,{auto:true})+(typeof bdgPastille==="function"?bdgPastille("T:"+r.id,S.projetSel,{ajout:true}):'')+'</td>'+
+    '<td>'+editeur(c.tblTache,r,c.colTacheLibelle,{auto:true})+pastilleComT(r)+(typeof bdgPastille==="function"?bdgPastille("T:"+r.id,S.projetSel,{ajout:true}):'')+'</td>'+
     (avecStatutT?'<td>'+editeur(c.tblTache,r,c.colTacheStatut)+'</td>':'')+
     '<td>'+(c.colTacheAvancement
       ? champAvct(c.tblTache,r,c.colTacheAvancement,a,statutInterrompu(c.tblTache,r,c.colTacheStatut)):'')+'</td>'+
@@ -17090,13 +17099,13 @@ function rendreListeApp(){
   const ligneAction=(a,p)=>{
     const av=pct(a[c.colAvancement]), inter=interrompu(a), e=Number(a[c.colEch])||null;
     const d=decouperLibelleAction(lire(c.tblMain,a,c.colActKey)||""), d2=d.num?d:decouperLibelleAction(lire(c.tblMain,a,c.colLibelle));
-    return '<tr class="et-action" data-p="'+p.id+'" data-a="'+a.id+'"><td class="et-lib"><span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(d2.num?d2.texte:lire(c.tblMain,a,c.colLibelle))+'</td>'+
+    return '<tr class="et-action" data-p="'+p.id+'" data-a="'+a.id+'"><td class="et-lib"><span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(d2.num?d2.texte:lire(c.tblMain,a,c.colLibelle))+pastilleComA(a)+'</td>'+
       '<td></td><td></td><td>'+esc(lire(c.tblMain,a,c.colPorteur))+'</td><td></td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td>'+
       '<td>'+etBarre(av)+'</td><td>'+etEch(e,av>=100||inter)+'</td><td></td></tr>';
   };
   const ligneTache=(t,p)=>{
     const av=pct(t[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,t,c.colTacheStatut), e=Number(t[c.colTacheFin])||null;
-    return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+'</td>'+
+    return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+pastilleComT(t)+'</td>'+
       '<td></td><td></td><td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td><td></td>'+
       '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",av||0,inter)+'</td><td>'+(av==null?"":etBarre(av))+'</td><td>'+etEch(e,av>=100||inter)+'</td><td></td></tr>';
   };
@@ -18828,7 +18837,7 @@ function etLigneMain(r, genre, p){
   } else {
     const d=decouperLibelleAction(lire(c.tblMain,r,c.colActKey)||lire(c.tblMain,r,c.colLibelle));
     const d2=d.num?d:decouperLibelleAction(lire(c.tblMain,r,c.colLibelle));
-    lib='<span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(d2.num?d2.texte:lire(c.tblMain,r,c.colLibelle));
+    lib='<span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(d2.num?d2.texte:lire(c.tblMain,r,c.colLibelle))+pastilleComA(r);
   }
   return '<tr class="et-'+genre+'" data-p="'+p.id+'"'+(genre==="action"?' data-a="'+r.id+'"':'')+'><td class="et-lib">'+lib+'</td>'+
     '<td>'+esc(natureDe(r))+'</td><td>'+esc(c.colMillesime?lire(c.tblMain,r,c.colMillesime):"")+'</td>'+
@@ -18840,7 +18849,7 @@ function etNbTaches(p){ try{ return tachesDe(p).length+actionsDe(p).reduce((s,a)
 function etLigneTache(t, p){
   const c=S.cfg;
   const a=pct(t[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,t,c.colTacheStatut), e=Number(t[c.colTacheFin])||null;
-  return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+'</td>'+
+  return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+pastilleComT(t)+'</td>'+
     '<td></td><td></td><td></td><td></td><td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td>'+
     '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",a||0,inter)+'</td><td>'+(a==null?"":etBarre(a))+'</td><td>'+etEch(e,a>=100||inter)+'</td></tr>';
 }
@@ -19753,7 +19762,7 @@ function rendreMonPf(){
     const d=decouperLibelleAction(lire(c.tblMain,a,c.colActKey)||""), d2=d.num?d:decouperLibelleAction(lire(c.tblMain,a,c.colLibelle));
     let tx=d2.num?d2.texte:"";
     if(!tx || plierTexte(tx)===plierTexte(d2.num) || /^MEO\s*\d+$/i.test(tx.trim())) tx=decouperLibelleAction(lire(c.tblMain,a,c.colLibelle)).texte||lire(c.tblMain,a,c.colLibelle);
-    return '<span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(tx);
+    return '<span class="et-t">'+esc(d2.num||"MEO")+'</span>'+esc(tx)+pastilleComA(a);
   };
   const ligneA=(a,p,avecProjet)=>{
     const av=pct(a[c.colAvancement]), inter=interrompu(a), e=Number(a[c.colEch])||null;
@@ -19846,7 +19855,7 @@ function mpRendreGroupe(z,ag,est,u){
     }
     const x=it.t, av=pct(x[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,x,c.colTacheStatut);
     return '<tr class="et-tache mp-sous-it" '+(it.a?'data-a="'+it.a.id+'"':'data-p="'+it.p.id+'"')+'><td class="et-lib"><span class="et-t">Tâche</span>'+
-      esc(lire(c.tblTache,x,c.colTacheLibelle)||"(sans libellé)")+
+      esc(lire(c.tblTache,x,c.colTacheLibelle)||"(sans libellé)")+pastilleComT(x)+
       (it.a?'<div class="app-sous">'+esc(decouperLibelleAction(lire(c.tblMain,it.a,c.colLibelle)).texte||lire(c.tblMain,it.a,c.colLibelle))+'</div>':'')+'</td>'+
       '<td>'+esc(it.porteur)+'</td><td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,x,c.colTacheStatut):"",av||0,inter)+'</td>'+
       '<td>'+(av==null?"":etBarre(av))+'</td>'+mpMarque(u.ech(it.ech,av>=100||inter),it.p)+'</tr>';
