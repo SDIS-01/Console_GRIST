@@ -16833,7 +16833,7 @@ function ouvrirFiche(p,onglet){
   rendreApp();
 }
 /* projet d'une ligne (projet ou action MEO) */
-function projetDeLigne(id){
+function projetEtActionDeLigne(id){
   const r=S.data.main.find(x=>x.id===Number(id));
   if(!r) return {p:null};
   if(estProjet(r)) return {p:r};
@@ -16841,7 +16841,7 @@ function projetDeLigne(id){
   return {p, action:r};
 }
 function ouvrirFicheDepuisLigne(id){
-  const o=projetDeLigne(id);
+  const o=projetEtActionDeLigne(id);
   if(!o.p){ toast("Ligne introuvable dans la table des projets.",true); return; }
   ouvrirFiche(o.p, o.action ? "actions" : null);
   /* une action : sa fenêtre s'ouvre directement, avec ses tâches */
@@ -17661,6 +17661,8 @@ function menuEditionsHtml(){
         it("","recap-notifs","🔒 Récapitulatif des notifications","mot de passe") : '')+
     (typeof autNbOccurrences==="function" && autNbOccurrences()
       ? it("","corr-auteur","🔒 Corriger les commentaires « AUTEUR » ("+autNbOccurrences()+")","mot de passe") : '')+
+    (typeof hmNbSansProjet==="function" && hmNbSansProjet()
+      ? it("","corr-hm","🔒 Compléter l'historique sans projet ("+hmNbSansProjet()+")","mot de passe") : '')+
     '<div class="ed-version">Version du 09/11/2026 · 14 h 55</div>';
   return h;
 }
@@ -17672,6 +17674,7 @@ async function lancerEdition(id){
   if(id==="revues"){ ouvrirRevues(); return; }
   if(id==="demandes"){ demOuvrirAdmin(); return; }
   if(id==="corr-auteur"){ autCorriger(); return; }
+  if(id==="corr-hm"){ hmReparer(); return; }
   if(id==="recap-notifs"){
     if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
     ouvrirRecapNotifs(); return;
@@ -19233,7 +19236,7 @@ async function demOuvrirFormulaire(){
     let pid=null, objetTxt="";
     const nomObj=(DEM_OBJETS.find(x=>x[0]===objet)||["",""])[1];
     if(val.startsWith("P:")){ pid=Number(val.slice(2)); objetTxt="Projet"; }
-    else if(val.startsWith("A:")){ const a=S.data.main.find(x=>x.id===Number(val.slice(2))); const o=a?projetDeLigne(a.id):{}; pid=o.p?o.p.id:null; objetTxt="Action MEO : "+(a?libA(a):""); }
+    else if(val.startsWith("A:")){ const a=S.data.main.find(x=>x.id===Number(val.slice(2))); const o=a?projetEtActionDeLigne(a.id):{}; pid=o.p?o.p.id:null; objetTxt="Action MEO : "+(a?libA(a):""); }
     else if(val.startsWith("T:")){ const [,tid,ppid]=val.split(":"); const tk=S.data.taches.find(x=>x.id===Number(tid)); pid=Number(ppid)||null;
       objetTxt="Tâche : "+(tk?lire(c.tblTache,tk,c.colTacheLibelle):""); }
     else objetTxt=nomObj+(val?" : "+val:"");
@@ -20513,7 +20516,7 @@ function bdgLiens(p){
   return map;
 }
 function bdgProjetDe(r,estTache){
-  if(!estTache) return projetDeLigne(r.id).p || (estProjet(r)?r:null);
+  if(!estTache) return projetEtActionDeLigne(r.id).p || (estProjet(r)?r:null);
   return projets().find(p=>[p].concat(actionsDe(p)).some(x=>tachesDe(x).some(t=>t.id===r.id)))||S.projetSel||null;
 }
 function bdgTotalDe(cle,p){
@@ -21428,6 +21431,66 @@ async function autCorriger(){
     toast("Commentaires corrigés : "+stats.ok+" avec auteur"+(stats.sans?", "+stats.sans+" sans auteur":""));
     await charger(); if(typeof rendreApp==="function") rendreApp();
   }catch(e){ toast("Correction impossible : "+e.message,true); }
+}
+
+/* =======================================================================
+   Réparation ponctuelle : lignes d'historique sans projet
+   Le projet est retrouvé d'après la colonne Élément (« Tâche « … » »,
+   « Action « … » », « Journal « … » », « Note « … » », « Instance « … » ») :
+   on cherche les lignes dont le libellé abrégé correspond. Si plusieurs lignes
+   correspondent à des projets différents, la trace est laissée vide.
+   ======================================================================= */
+function hmSansProjet(){
+  const c=S.cfg, hm=S.data.hm||[];
+  if(!hmPret() || !c.colHmLien || !c.colHmElement || !infoCol(c.tblHm,c.colHmLien)) return [];
+  return hm.filter(h=>!valListe(h[c.colHmLien]).some(x=>Number(x)) && txt(h[c.colHmElement]).trim());
+}
+function hmNbSansProjet(){ try{ return hmSansProjet().length; }catch(e){ return 0; } }
+function hmProjetDepuisElement(el){
+  const c=S.cfg, m=String(el||"").match(/^(\S+)\s+«\s*([\s\S]*?)\s*»\s*$/);
+  if(!m) return {etat:"illisible"};
+  const genre=m[1], lib=m[2], pli=v=>plierTexte(String(v||"")).replace(/\s+/g," ").trim(), cible=pli(lib);
+  let table=null, lignes=[], texte=null;
+  if(genre==="Action"){ table=c.tblMain; lignes=S.data.main; texte=r=>court(lire(c.tblMain,r,c.colLibelle)); }
+  else if(genre==="Tâche"){ table=c.tblTache; lignes=S.data.taches||[]; texte=r=>court(lire(c.tblTache,r,c.colTacheLibelle)); }
+  else if(genre==="Journal"){ table=c.tblJournal; lignes=S.data.journal||[];
+    texte=r=>court(lire(c.tblJournal,r,c.colJnlTexte),50)||dateVersFR(r[c.colJnlDate]); }
+  else if(genre==="Note"){ table=c.tblNote; lignes=S.data.notes||[]; texte=r=>court(lire(c.tblNote,r,c.colNoteTexte),50); }
+  else if(genre==="Instance"){ table=c.tblInstance; lignes=S.data.instances||[];
+    texte=r=>court(lire(c.tblInstance,r,c.colInsHisto||c.colInsLibelle),50)||dateVersFR(r[c.colInsDate]); }
+  if(!table) return {etat:"illisible"};
+  const cands=lignes.filter(r=>pli(texte(r))===cible);
+  if(!cands.length) return {etat:"introuvable"};
+  const projets=new Map();
+  cands.forEach(r=>{
+    const p=(table===c.tblMain && estProjet(r)) ? r : projetDeLigne(table,r.id);
+    if(p) projets.set(p.id,p);
+  });
+  if(projets.size===1) return {etat:"ok", projet:[...projets.values()][0]};
+  return {etat:projets.size?"ambigu":"introuvable"};
+}
+async function hmReparer(){
+  if(!S.cfg.mdpHash){ toast("Aucun mot de passe n'est défini dans les réglages de la console : accès fermé.",true); return; }
+  const c=S.cfg, vides=hmSansProjet();
+  if(!vides.length){ toast("Aucune ligne d'historique sans projet."); return; }
+  if(!await motDePasseValide("Mot de passe pour compléter l'historique :")) return;
+  const acts=[], restes=[];
+  vides.forEach(h=>{
+    const r=hmProjetDepuisElement(h[c.colHmElement]);
+    if(r.etat==="ok"){ const ch={}; champLienHm(ch,r.projet); if(Object.keys(ch).length){ acts.push(["UpdateRecord",c.tblHm,h.id,ch]); return; } }
+    restes.push(txt(h[c.colHmElement])+(r.etat==="ambigu"?" (plusieurs projets possibles)":r.etat==="introuvable"?" (élément introuvable)":""));
+  });
+  const msg=vides.length+" ligne(s) d'historique sans projet : "+acts.length+" rattachée(s) à leur projet"+
+    (restes.length?", "+restes.length+" laissée(s) vide(s)":"")+".";
+  if(!acts.length){ alert(msg+"\n\n"+restes.slice(0,30).join("\n")); return; }
+  if(!confirm(msg+"\n\nCompléter maintenant ?")) return;
+  try{
+    for(let i=0;i<acts.length;i+=200) await grist.docApi.applyUserActions(acts.slice(i,i+200));
+    toast("Historique complété : "+acts.length+" ligne(s)");
+    if(restes.length) setTimeout(()=>alert("Lignes laissées sans projet ("+restes.length+") :\n\n"+restes.slice(0,40).join("\n")+
+      (restes.length>40?"\n… et "+(restes.length-40)+" autre(s)":"")+"\n\nTu peux les compléter à la main dans Historique_Modifs."),300);
+    await charger(); if(typeof rendreApp==="function") rendreApp();
+  }catch(e){ toast("Complément impossible : "+e.message,true); }
 }
 
 /* =======================================================================
