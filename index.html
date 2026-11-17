@@ -26640,7 +26640,7 @@ window.planningPret = ()=>!!(lastView && lastView.units && lastView.units.length
   .tab tr.ins .fut .d{color:#C0504D;font-weight:normal;}
   .tab tr.ins .prog{font-style:italic;color:#A2551A;}
   .w-nat{width:46px;} .w-p2a{width:72px;} .w-origine{width:78px;}
-  .tab td.col-p2a{overflow:visible;white-space:nowrap;}
+  .tab td.col-p2a{overflow:hidden;white-space:normal;line-height:1.25;}
   .tab td.col-origine{white-space:normal;overflow:hidden;line-height:1.25;}
   .w-ins{width:104px;} .w-prio{width:62px;}
   .prio-e{display:inline-block;padding:0 6px;border-radius:9px;font-size:10px;font-weight:bold;line-height:15px;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact;} .w-com{width:150px;} .tab.pap th,.tab.plat th.w-com{white-space:normal;} .tab td.com{white-space:pre-line;font-size:10px;line-height:1.3;color:#3e382f;} .tab td.col-ins{white-space:normal;line-height:1.25;font-size:10.5px;}
@@ -29204,8 +29204,10 @@ function ligneTableau(opts){
   else {
     h.push('<td class="c col-nat">' + echapper(opts.nature || "") + "</td>");
     h.push('<td class="c col-prio">' + pastillePrioriteEtat(o && opts.nature !== "MEO" ? o.priorite : (o ? o.priorite : "")) + "</td>");
+    /* plusieurs millésimes : un par ligne, pour rester dans la colonne */
     h.push('<td class="c col-p2a">' + (opts.millesime
-      ? '<span class="pastille-p2a">' + echapper(opts.millesime) + "</span>" : "") + "</td>");
+      ? String(opts.millesime).split(/\s*[,;]\s*/).filter(Boolean)
+          .map(m => '<span class="pastille-p2a">' + echapper(m) + "</span>").join("<br>") : "") + "</td>");
     /* Origine sur deux lignes si besoin : coupure possible après chaque « _ ». */
     h.push('<td class="c col-origine">' + (opts.origine
       ? pastilleOrigine(opts.origine).replace(/>([^<]*)</, m => m.replace(/_/g, "_<wbr>")) : "") + "</td>");
