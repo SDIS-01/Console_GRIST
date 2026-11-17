@@ -1738,6 +1738,7 @@ body:not(.app-hors-fiche) .app-filtres, body.app-revues .app-filtres{display:non
 .app-filtres .filtre-archives{grid-column:auto;flex:0 0 auto;margin:0;font-size:12px;border:1px solid var(--trait);
   border-radius:14px;padding:3px 10px;background:#fff;color:#3c4a6b;}
 .app-filtres .compteur{margin-left:auto;border:0;padding:0;min-height:0;font-size:12px;gap:10px;}
+.app-filtres #compteur-texte{display:none;}   /* « n projets sur N · archivés » : retiré à la demande */
 .app-filtres .btn-raz{font-size:12px;}
 .app-filtres .msel-lib{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 /* Liste / Planning / États centrés dans le fil d'Ariane */
@@ -19136,6 +19137,8 @@ function etOptionsEtat(){
   const c=S.cfg, E=APP.etat, un=id=>(MENUS[id]&&MENUS[id].sel.length===1)?MENUS[id].sel[0]:"";
   return Object.assign({}, E.opts, {
     meo:!!E.meo, taches:!!E.taches, termine:!!E.termine, interrompu:!!E.interrompu, perimetre:E.perimetre, rappel:!!E.rappel,
+    projets:(()=>{ const ps=projetsFiltres(); let im=[]; try{ im=[...etProjetsImpliques(ps).keys()]; }catch(e){}
+      return ps.concat(im).map(p=>({id:p.id, libelle:lire(c.tblMain,p,c.colLibelle)})); })(),
     g:MENUS["m-groupement"].sel.slice(), sp:(MENUS["m-sponsor"]||{sel:[]}).sel.slice(),
     porteur:un("m-porteur"), origine:un("m-origine"), service:un("m-service"), recherche:$("#q").value.trim()
   });
@@ -27685,8 +27688,12 @@ function construireEtat(code, sansProjetSeul){
   const projetExact = !!f.projet && arbre.has(f.projet);
   const garderProjet = cle => !f.projet || (projetExact ? cle === f.projet : norm(cle).includes(norm(f.projet)));
 
+  /* édition demandée par la console : uniquement les projets affichés à l'écran,
+     sans refiltrer leur statut (le filtre État de la console a déjà joué) */
+  const ECp = (window.EDITION_CONSOLE || {}).projets || null;
   const projetsFinaux = [];
   arbre.forEach(np => {
+    if (ECp && !ECp.has(np.cle)) return;
     if (!garderProjet(np.cle)) return;
     if (!garderOrigine(np.a ? np.a.origine : origineProjet(np.cle), f.origine)) return;
     const actionsFinales = [];
@@ -27701,7 +27708,7 @@ function construireEtat(code, sansProjetSeul){
     const tachesProjet = np.taches.filter(t =>
       garderStatut(t) && garderPersonne(t, np.cle) && (garderTexte(t.libelle) || garderTexte(np.cle)));
     const projetVisible = np.direct
-      && (!np.a || (garderStatut(np.a) && garderPersonne(np.a, np.cle)))
+      && (!np.a || ((ECp || garderStatut(np.a)) && garderPersonne(np.a, np.cle)))
       && garderTexte(np.cle);
     if (projetVisible || actionsFinales.length || tachesProjet.length){
       projetsFinaux.push({ noeud: np, direct: projetVisible, actions: actionsFinales, taches: tachesProjet });
@@ -27742,7 +27749,7 @@ function construireEtat(code, sansProjetSeul){
           && texte(TA, x, "ID_Projet_Action_AV") === p.noeud.cle);
         if (l) a = lireAction(l);
       }
-      if (!a || !garderStatut(a)) return;
+      if (!a || (!ECp && !garderStatut(a))) return;
       const el = { noeud: Object.assign({}, p.noeud, { a }), direct: true, actions: [], taches: [] };
       (p.noeud.direct ? portes : impactes).push(el);
     });
@@ -28255,8 +28262,10 @@ function imprimerTous(){
     codes = codes.filter(c => retenus.has(norm(c)));
   }
   codes.sort((x, y) => String(x).localeCompare(String(y), "fr", { numeric:true, sensitivity:"base" }));
+  const ECt = (window.EDITION_CONSOLE || {}).projets || null;
   const morceaux = codes.map(code => {
     const e = construireEtat(code, true);
+    if (e && ECt && !(e.projets || []).length) return "";      // groupement sans projet affiché dans la console
     return e ? '<div class="section-impression">' + etatHtml(e, true) + "</div>" : "";
   });
   zone.innerHTML =
@@ -30000,6 +30009,11 @@ window.preparerEtatConsole = o => {
   if (!D.pretes) return false;
   o = o || {};
   window.EDITION_CONSOLE = { sansMeo: !o.meo, sansTaches: !o.taches };
+  if (Array.isArray(o.projets)){
+    const cles = new Set();
+    o.projets.forEach(pj => { const k = cleProjetConsole(pj); if (k) cles.add(k); });
+    window.EDITION_CONSOLE.projets = cles;
+  }
   const fixer = (id, v) => { const el = document.getElementById(id); if (!el) return;
     if (el.type === "checkbox") el.checked = !!v; else { el.value = v || ""; if (el.tagName === "SELECT" && el.value !== (v || "")) el.value = ""; } };
   const g = o.g || [], sp = o.sp || [];
