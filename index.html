@@ -2245,6 +2245,11 @@ body.app-documents .app-filtres{display:none;}
 .btn-info,#jb-info{background:#0F8A7E !important}
 .ico-jnl{width:15px;height:15px;vertical-align:-3px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
 .jnl-info .jnl-tete b{color:#0F8A7E}
+.et-sep{width:1px;height:22px;background:#d5dcea;margin:0 4px}
+#et-perim{font:inherit;font-size:12.5px;padding:4px 6px;border:1px solid #c6cedc;border-radius:6px;background:#fff;max-width:250px}
+#et-perim:disabled{background:#f1f3f7;color:#9aa3b5;cursor:not-allowed}
+tr.et-implique>td{background:#fffcf5}
+.et-imp{display:inline-block;margin-left:8px;font-size:10.5px;font-weight:700;color:#9a5a00;background:#FFF1D6;border-radius:9px;padding:1px 8px;vertical-align:middle}
 .btn-info{margin-left:6px;background:#5a6478}
 .btn-info:disabled{opacity:.45;cursor:not-allowed}
 .jf-info .jf-tete b{color:#3c4a6b}
@@ -17196,13 +17201,14 @@ function rendreListeApp(){
   const liste=[...ps].sort((a,b)=>{ const x=cle[k](a), y=cle[k](b); return (x<y?-1:x>y?1:0)*sens; });
   const th=(kk,l)=>'<th data-tri="'+kk+'">'+l+(k===kk?(sens>0?" ▾":" ▴"):"")+'</th>';
   const auj=aujourdHuiUTC();
-  const ligneProjet=p=>{
+  const impliques=etProjetsImpliques(ps,()=>rendreListeApp());
+  const ligneProjet=(p,impl)=>{
     const e=echeanceProjet(p), ret=projetEnRetard(p), al=alerteProjet(p);
     const sous=[lire(c.tblMain,p,c.colNature), c.colSponsor?lire(c.tblMain,p,c.colSponsor):""].filter(Boolean).join(" · ");
     const n=actionsDe(p).length+tachesP(p).length, ouvert=E.ouverts.has(p.id)||E.meo||E.taches;
-    return '<tr data-p="'+p.id+'"><td class="app-nom">'+liseret(p)+
+    return '<tr data-p="'+p.id+'"'+(impl?' class="et-implique"':'')+'><td class="app-nom">'+liseret(p)+
       '<span class="et-chev" data-chev="'+p.id+'">'+(n?(ouvert?"▾":"▸"):"")+'</span>'+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+(typeof piPastille==="function"?piPastille(p):'')+
-      (estArchive(p)?' <span class="app-mut">(archivé)</span>':'')+(sous?'<div class="app-sous">'+esc(sous)+'</div>':'')+'</td>'+
+      (estArchive(p)?' <span class="app-mut">(archivé)</span>':'')+(impl?'<span class="et-imp">impliqué</span>':'')+(sous?'<div class="app-sous">'+esc(sous)+'</div>':'')+'</td>'+
       '<td class="app-ins">'+instancesListeHtml(p)+'</td>'+
       '<td>'+esc(lire(c.tblMain,p,c.colGroupement))+'</td><td>'+esc(lire(c.tblMain,p,c.colPorteur))+'</td>'+
       '<td>'+pastillePriorite(lire(c.tblMain,p,c.colPriorite))+'</td><td>'+statutAppHtml(p)+'</td><td>'+barreAppHtml(p)+'</td>'+
@@ -17222,13 +17228,16 @@ function rendreListeApp(){
       '<td></td><td></td><td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td><td></td>'+
       '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",av||0,inter)+'</td><td>'+(av==null?"":etBarre(av))+'</td><td>'+etEch(e,av>=100||inter)+'</td><td></td></tr>';
   };
-  const blocProjet=p=>{
-    let h=ligneProjet(p);
-    const ouvert=E.ouverts.has(p.id), voirA=E.meo||ouvert, voirT=E.taches||ouvert;
-    if(voirT){ let tp=[]; try{ tp=tachesDe(p); }catch(e){} tp.forEach(t=>{ h+=ligneTache(t,p); }); }
+  const visA=a=>etSousVisible(pct(a[c.colAvancement]),interrompu(a));
+  const visT=t=>etSousVisible(pct(t[c.colTacheAvancement]),statutInterrompu(c.tblTache,t,c.colTacheStatut));
+  const blocProjet=(p,impl)=>{
+    let h=ligneProjet(p,impl);
+    const ouvert=E.ouverts.has(p.id), voirA=E.meo||ouvert||!!impl, voirT=E.taches||ouvert||!!impl;
+    const okA=a=>visA(a) && (!impl || impl.actions.has(a.id)), okT=t=>visT(t) && (!impl || impl.taches.has(t.id));
+    if(voirT){ let tp=[]; try{ tp=tachesDe(p); }catch(e){} tp.filter(okT).forEach(t=>{ h+=ligneTache(t,p); }); }
     if(voirA||voirT) actionsDe(p).forEach(a=>{
-      if(voirA) h+=ligneAction(a,p);
-      if(voirT){ let ta=[]; try{ ta=tachesDe(a); }catch(e){} ta.forEach(t=>{ h+=ligneTache(t,p); }); }
+      if(voirA && okA(a)) h+=ligneAction(a,p);
+      if(voirT){ let ta=[]; try{ ta=tachesDe(a); }catch(e){} ta.filter(okT).forEach(t=>{ h+=ligneTache(t,p); }); }
     });
     return h;
   };
@@ -17243,21 +17252,19 @@ function rendreListeApp(){
       l.forEach(p=>{ corps+=blocProjet(p); });
     });
   } else liste.forEach(p=>{ corps+=blocProjet(p); });
+  /* périmètre « Tout ce qui implique le groupement » : projets d'autres groupements, à la suite */
+  [...impliques.keys()].sort((a,b)=>cle.nom(a)<cle.nom(b)?-1:1).forEach(p=>{ corps+=blocProjet(p,impliques.get(p)); });
   const sponsorFiltre=(MENUS["m-sponsor"]||{sel:[]}).sel.length>0;
-  const chip=(kk,l)=>'<button type="button" class="mt-chip'+(E[kk]?" on":"")+'" data-etchip="'+kk+'">'+(E[kk]?"☑":"☐")+' '+l+'</button>';
   const tot=rep.rouge+rep.orange+rep.vert+rep.gris;
   $("#zone-liste").innerHTML=
-    '<div class="et-outils"><span class="et-lab">Regrouper par</span><select id="et-grp">'+
-      [["","Aucun"],["porteur","Porteur"],["groupement","Groupement"]].map(([v,l])=>'<option value="'+v+'"'+(E.grp===v?" selected":"")+'>'+l+'</option>').join("")+'</select>'+
-      chip("meo","Actions MEO")+chip("taches","Tâches")+'<span class="fil-esp"></span>'+
-      '<button type="button" class="fil-lien" id="et-opts">⚙ Options d\'édition ▾</button>'+
+    etBarreHtml([["","Aucun"],["porteur","Porteur"],["groupement","Groupement"]],
       '<button type="button" class="anx-pdf" id="et-pdf" title="État de tous les groupements (ou sponsors), limité aux filtres de la console">🖨 État PDF</button>'+
       '<button type="button" class="anx-xl" id="et-xl" title="Extraction PEPS / AV des projets affichés">⬇ Excel</button>'+
-      '<button type="button" class="anx-pdf" id="et-plus" title="Autres éditions du portefeuille">⋯</button></div>'+
+      '<button type="button" class="anx-pdf" id="et-plus" title="Autres éditions du portefeuille">⋯</button>')+
     (tot ? '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([kk])=>rep[kk]).map(([kk,col])=>'<i style="flex:'+rep[kk]+';background:'+col+'"></i>').join("")+'</div>'+
       '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([kk])=>rep[kk]).map(([kk,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[kk]).join("")+
       ' <span class="app-mut">('+(c.colMillesime?'projets et actions inscrits au '+(selRep.length?selRep.join(", "):'P2A '+anRep):'projets et actions')+')</span></div>' : '')+
-    (liste.length ? '<table class="app-table"><thead><tr>'+th("nom","Projet")+th("ins","Instances")+th("grp","Groupement")+th("por","Porteur")+
+    ((liste.length||impliques.size) ? '<table class="app-table"><thead><tr>'+th("nom","Projet")+th("ins","Instances")+th("grp","Groupement")+th("por","Porteur")+
       th("pri","Priorité")+'<th>Statut</th>'+th("av","Avancement")+th("ech","Échéance")+'<th>Nature</th></tr></thead><tbody>'+corps+'</tbody></table>'
       : '<div class="app-vide">Aucun projet ne correspond aux filtres.</div>');
   const z=$("#zone-liste");
@@ -17265,8 +17272,7 @@ function rendreListeApp(){
     if(APP.tri.k===t.dataset.tri) APP.tri.sens*=-1; else APP.tri={k:t.dataset.tri,sens:1};
     rendreListeApp();
   });
-  $("#et-grp").onchange=e=>{ E.grp=e.target.value; rendreListeApp(); };
-  z.querySelectorAll("[data-etchip]").forEach(b=>b.onclick=()=>{ E[b.dataset.etchip]=!E[b.dataset.etchip]; rendreListeApp(); });
+  etBrancherBarre(z,()=>rendreListeApp());
   z.querySelectorAll("[data-chev]").forEach(sp=>sp.onclick=ev=>{ ev.stopPropagation(); const id=Number(sp.dataset.chev);
     if(E.ouverts.has(id)) E.ouverts.delete(id); else E.ouverts.add(id); rendreListeApp(); });
   z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>{
@@ -18916,8 +18922,98 @@ async function revueImprimer(id){
    l'état, chargé en arrière-plan et réglé sur les filtres de la console.
    La vue complète de l'état reste accessible (options avancées).
    ======================================================================= */
-APP.etat={grp:"", meo:false, taches:false, ouverts:new Set(), avance:false,
+APP.etat={grp:"", meo:false, taches:false, termine:false, interrompu:false, perimetre:"portage", rappel:false,
+  ouverts:new Set(), avance:false, nomsGrp:null, nomsGrpCle:"", nomsGrpEnCours:false,
   opts:{meo:false, taches:false, rappel:false, termine:false, interrompu:false, perimetre:"portage"}};
+/* choix de la barre mémorisés d'une session à l'autre */
+(function(){ try{ const m=JSON.parse(localStorage.getItem("console.barreListe")||"{}");
+  ["meo","taches","termine","interrompu","rappel"].forEach(k=>{ if(typeof m[k]==="boolean") APP.etat[k]=m[k]; });
+  if(m.perimetre==="portage"||m.perimetre==="implication") APP.etat.perimetre=m.perimetre; }catch(e){} })();
+function etMemoriser(){ const E=APP.etat;
+  try{ localStorage.setItem("console.barreListe",JSON.stringify({meo:E.meo,taches:E.taches,termine:E.termine,interrompu:E.interrompu,rappel:E.rappel,perimetre:E.perimetre})); }catch(e){} }
+/* une action ou une tâche est-elle affichée (puces Terminés / Interrompus) ? */
+function etSousVisible(av,inter){
+  const E=APP.etat;
+  if(inter) return !!E.interrompu;
+  if(av!=null && av>=100) return !!E.termine;
+  return true;
+}
+function etGroupementsChoisis(){ return ((MENUS["m-groupement"]||{}).sel||[]).slice(); }
+const motsTriesEt=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort().join(" ");
+/* noms des agents des groupements choisis (lus par le moteur de l'état), pour le périmètre « implication » */
+function etNomsGroupements(relancer){
+  const E=APP.etat, g=etGroupementsChoisis(), cle=g.slice().sort().join("|");
+  if(!g.length) return null;
+  if(E.nomsGrpCle===cle && E.nomsGrp) return E.nomsGrp;
+  if(!E.nomsGrpEnCours){
+    E.nomsGrpEnCours=true;
+    anxEtatPret().then(w=>{
+      const noms=new Set();
+      g.forEach(x=>((w.collaborateursGroupement?w.collaborateursGroupement(x):[])||[]).forEach(n=>noms.add(motsTriesEt(n))));
+      E.nomsGrp=noms; E.nomsGrpCle=cle;
+    }).catch(()=>{ E.nomsGrp=new Set(); E.nomsGrpCle=cle; })
+      .finally(()=>{ E.nomsGrpEnCours=false; if(relancer) relancer(); });
+  }
+  return null;
+}
+/* projets d'autres groupements où une action ou une tâche est portée par un agent des groupements choisis */
+function etProjetsImpliques(ps,relancer){
+  const E=APP.etat, c=S.cfg, g=etGroupementsChoisis();
+  const out=new Map();
+  if(!g.length || E.perimetre!=="implication") return out;
+  const noms=etNomsGroupements(relancer); if(!noms || !noms.size) return out;
+  const dans=v=>noms.has(motsTriesEt(v));
+  const sel=MENUS["m-groupement"].sel; let autres=[];
+  MENUS["m-groupement"].sel=[];
+  try{ autres=projetsFiltres(); } finally{ MENUS["m-groupement"].sel=sel; }
+  const deja=new Set(ps.map(p=>p.id));
+  const tachesDeX=x=>{ try{ return tachesDe(x); }catch(e){ return []; } };
+  autres.forEach(p=>{
+    if(deja.has(p.id) || g.includes(lire(c.tblMain,p,c.colGroupement))) return;
+    const actions=new Set(), taches=new Set();
+    tachesDeX(p).forEach(t=>{ if(c.colTachePorteur && dans(lire(c.tblTache,t,c.colTachePorteur))) taches.add(t.id); });
+    actionsDe(p).forEach(a=>{
+      if(dans(lire(c.tblMain,a,c.colPorteur))) actions.add(a.id);
+      tachesDeX(a).forEach(t=>{ if(c.colTachePorteur && dans(lire(c.tblTache,t,c.colTachePorteur))){ taches.add(t.id); actions.add(a.id); } });
+    });
+    if(actions.size || taches.size) out.set(p,{actions,taches});
+  });
+  return out;
+}
+/* barre au-dessus de la liste : regroupement, puces, périmètre, éditions */
+function etBarreHtml(grpOpts,boutons){
+  const E=APP.etat, g=etGroupementsChoisis();
+  const chip=(k,l)=>'<button type="button" class="mt-chip'+(E[k]?" on":"")+'" data-etchip="'+k+'">'+(E[k]?"☑":"☐")+' '+l+'</button>';
+  return '<div class="et-outils"><span class="et-lab">Regrouper par</span><select id="et-grp">'+
+      grpOpts.map(([v,l])=>'<option value="'+v+'"'+(E.grp===v?" selected":"")+'>'+l+'</option>').join("")+'</select>'+
+      chip("meo","Actions MEO")+chip("taches","Tâches")+chip("termine","Terminés")+chip("interrompu","Interrompus")+
+      '<span class="et-sep"></span><span class="et-lab">Périmètre</span>'+
+      '<select id="et-perim"'+(g.length?'':' disabled title="Choisissez d\'abord un groupement"')+'>'+
+        '<option value="portage"'+(E.perimetre==="portage"?" selected":"")+'>Projets portés par le groupement</option>'+
+        '<option value="implication"'+(E.perimetre==="implication"?" selected":"")+'>Tout ce qui implique le groupement</option></select>'+
+      '<span class="fil-esp"></span>'+boutons+'</div>';
+}
+function etBrancherBarre(z,rerendre){
+  const E=APP.etat;
+  const g=z.querySelector("#et-grp"); if(g) g.onchange=e=>{ E.grp=e.target.value; rerendre(); };
+  z.querySelectorAll("[data-etchip]").forEach(b=>b.onclick=()=>{ E[b.dataset.etchip]=!E[b.dataset.etchip]; etMemoriser(); rerendre(); });
+  const pe=z.querySelector("#et-perim"); if(pe) pe.onchange=e=>{ E.perimetre=e.target.value; etMemoriser(); rerendre(); };
+}
+/* encadré du bouton « État PDF » : rappel des définitions, puis génération */
+function etPopupPdf(bouton,lancer){
+  document.querySelectorAll(".anx-pop").forEach(x=>x.remove());
+  const E=APP.etat;
+  const pop=document.createElement("div"); pop.className="anx-pop et-pop";
+  pop.innerHTML='<label><input type="checkbox" id="et-rappel"'+(E.rappel?" checked":"")+'> Inclure le rappel des définitions en tête</label>'+
+    '<div style="margin-top:10px"><button type="button" class="btn" id="et-gen">Générer le PDF</button></div>';
+  document.body.appendChild(pop);
+  const r=bouton.getBoundingClientRect();
+  pop.style.top=(r.bottom+4)+"px"; pop.style.left=Math.max(8,Math.min(window.innerWidth-pop.offsetWidth-8,r.right-pop.offsetWidth))+"px";
+  const fermer=e=>{ if(!pop.contains(e.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } };
+  pop.querySelector("#et-rappel").onchange=e=>{ E.rappel=e.target.checked; etMemoriser(); };
+  pop.querySelector("#et-gen").onclick=()=>{ pop.remove(); document.removeEventListener("mousedown",fermer); lancer(); };
+  setTimeout(()=>document.addEventListener("mousedown",fermer),0);
+}
 
 /* colonnes Origine et Service de la table principale (si elles existent) */
 function colOrigineApp(){ const c=S.cfg; return ["Origine"].find(k=>infoCol(c.tblMain,k))||""; }
@@ -19000,41 +19096,35 @@ function rendreEtatsApp(){
     l.forEach(p=>{
       corps+=etLigneMain(p,"projet",p);
       const ouvert=E.ouverts.has(p.id), voirA=E.meo||ouvert, voirT=E.taches||ouvert;
+      const vT=t=>etSousVisible(pct(t[c.colTacheAvancement]),statutInterrompu(c.tblTache,t,c.colTacheStatut));
       let tp=[]; try{ tp=tachesDe(p); }catch(e){}
-      if(voirT) tp.forEach(t=>{ corps+=etLigneTache(t,p); });
+      if(voirT) tp.filter(vT).forEach(t=>{ corps+=etLigneTache(t,p); });
       if(voirA || voirT) actionsDe(p).forEach(a=>{
-        if(voirA) corps+=etLigneMain(a,"action",p);
-        if(voirT){ let ta=[]; try{ ta=tachesDe(a); }catch(e){} ta.forEach(t=>{ corps+=etLigneTache(t,p); }); }
+        if(voirA && etSousVisible(pct(a[c.colAvancement]),interrompu(a))) corps+=etLigneMain(a,"action",p);
+        if(voirT){ let ta=[]; try{ ta=tachesDe(a); }catch(e){} ta.filter(vT).forEach(t=>{ corps+=etLigneTache(t,p); }); }
       });
     });
   });
-  const chip=(k,l)=>'<button type="button" class="mt-chip'+(E[k]?" on":"")+'" data-etchip="'+k+'">'+(E[k]?"☑":"☐")+' '+l+'</button>';
   z.innerHTML=
-    '<div class="et-outils"><span class="et-lab">Regrouper par</span><select id="et-grp">'+
-      [["porteur","Porteur"],["groupement","Groupement"],["","Aucun"]].map(([v,l])=>'<option value="'+v+'"'+(E.grp===v?" selected":"")+'>'+l+'</option>').join("")+'</select>'+
-      chip("meo","Actions MEO")+chip("taches","Tâches")+
-      '<span class="fil-esp"></span>'+
-      '<button type="button" class="fil-lien" id="et-opts">⚙ Options d\'édition ▾</button>'+
+    etBarreHtml([["porteur","Porteur"],["groupement","Groupement"],["","Aucun"]],
       '<button type="button" class="anx-pdf" id="et-pdf" title="État de tous les groupements (ou sponsors), limité aux filtres de la console">🖨 État PDF</button>'+
       '<button type="button" class="anx-xl" id="et-xl">⬇ Excel</button>'+
-      '<button type="button" class="anx-pdf" id="et-xl-tous">Excel tous</button></div>'+
+      '<button type="button" class="anx-pdf" id="et-xl-tous">Excel tous</button>')+
     '<div class="kpi-app et-kpi"><div><b>'+ps.length+'</b><span>projets</span></div><div><b>'+nbA+'</b><span>actions MEO</span></div><div><b>'+nbT+'</b><span>tâches</span></div></div>'+
     '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([k])=>rep[k]).map(([k,col])=>'<i style="flex:'+rep[k]+';background:'+col+'"></i>').join("")+'</div>'+
     '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([k])=>rep[k]).map(([k,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[k]).join("")+'</div>'+
     (ps.length ? '<div class="et-defil"><table class="app-table et-table"><thead><tr><th>Projet / action / tâche</th><th>Nat.</th><th>P2A</th><th>Origine</th><th>Service</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Échéance</th></tr></thead><tbody>'+corps+'</tbody></table></div>'
                : '<div class="app-vide">Aucun projet ne correspond aux filtres.</div>');
   /* interactions */
-  $("#et-grp").onchange=e=>{ E.grp=e.target.value; rendreEtatsApp(); };
-  z.querySelectorAll("[data-etchip]").forEach(b=>b.onclick=()=>{ E[b.dataset.etchip]=!E[b.dataset.etchip]; rendreEtatsApp(); });
+  etBrancherBarre(z,()=>rendreEtatsApp());
   z.querySelectorAll("[data-chev]").forEach(s=>s.onclick=ev=>{ ev.stopPropagation(); const id=Number(s.dataset.chev);
     if(E.ouverts.has(id)) E.ouverts.delete(id); else E.ouverts.add(id); rendreEtatsApp(); });
   z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>{
     const p=S.data.main.find(r=>r.id===Number(tr.dataset.p));
     ouvrirFiche(p, tr.dataset.a?"actions":(tr.classList.contains("et-tache")?"taches":null));
   });
-  $("#et-opts").onclick=e=>{ e.stopPropagation(); etPopupOptions(e.currentTarget); };
   const lancer=(fn,msg)=>{ toast(msg); fn().catch(er=>toast("Édition impossible : "+er.message,true)); };
-  $("#et-pdf").onclick=()=>lancer(()=>etImprimer(true),"Préparation de l'état…");
+  $("#et-pdf").onclick=e=>{ e.stopPropagation(); etPopupPdf(e.currentTarget,()=>lancer(()=>etImprimer(true),"Préparation de l'état…")); };
   $("#et-xl").onclick=()=>lancer(()=>etExcel(false),"Préparation du fichier Excel…");
   $("#et-xl-tous").onclick=()=>lancer(()=>etExcel(true),"Préparation du fichier Excel complet…");
   /* MEC 2023 et PAPRIPACT rattachés, comme sous la Liste */
@@ -19045,6 +19135,7 @@ function rendreEtatsApp(){
 function etOptionsEtat(){
   const c=S.cfg, E=APP.etat, un=id=>(MENUS[id]&&MENUS[id].sel.length===1)?MENUS[id].sel[0]:"";
   return Object.assign({}, E.opts, {
+    meo:!!E.meo, taches:!!E.taches, termine:!!E.termine, interrompu:!!E.interrompu, perimetre:E.perimetre, rappel:!!E.rappel,
     g:MENUS["m-groupement"].sel.slice(), sp:(MENUS["m-sponsor"]||{sel:[]}).sel.slice(),
     porteur:un("m-porteur"), origine:un("m-origine"), service:un("m-service"), recherche:$("#q").value.trim()
   });
@@ -19092,8 +19183,7 @@ function etPopupOptions(bouton){
 function brancherEditionsListe(){
   const lancer=(fn,msg)=>{ toast(msg); fn().catch(er=>toast("Édition impossible : "+er.message,true)); };
   const on=(id,f)=>{ const b=$("#"+id); if(b) b.onclick=f; };
-  on("et-opts",e=>{ e.stopPropagation(); etPopupOptions(e.currentTarget); });
-  on("et-pdf",()=>lancer(()=>etImprimer(true),"Préparation de l'état…"));
+  on("et-pdf",e=>{ e.stopPropagation(); etPopupPdf(e.currentTarget,()=>lancer(()=>etImprimer(true),"Préparation de l'état…")); });
   /* Excel de la Liste = extraction PEPS / AV des projets affichés */
   on("et-xl",()=>lancer(()=>exporterPepsAv(),"Préparation de l'extraction PEPS / AV…"));
   on("et-plus",e=>{
