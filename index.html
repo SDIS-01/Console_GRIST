@@ -20237,6 +20237,7 @@ function rendreMonPf(){
       '<tr class="et-grp"><td colspan="'+nbCol+'">'+esc(k)+'<small>'+g.get(k).length+'</small></td></tr>'+g.get(k).map(rendu).join("")).join("");
   };
   if(enGrp){ mpRendreGroupe(z,ag,est,{ech,libAction,ligneP}); return; }
+  mpRendreMoi(z,ag,{ech,libAction,ligneP}); return;
   const nbA=mesProjets.reduce((s,p)=>s+actsDe(p).length,0);
   const qui=enGrp?"du groupement":"";
   z.innerHTML='<div class="mp-outils"><span></span><button type="button" class="mt-chip'+(M.voir100?" on":"")+'" id="mp-100">'+
@@ -20261,6 +20262,63 @@ function rendreMonPf(){
   const bc=$("#mp-collab"); if(bc) bc.onclick=()=>{ M.parCollab=!M.parCollab; rendreMonPf(); };
   const b100=$("#mp-100"); if(b100) b100.onclick=()=>{ M.voir100=!M.voir100; rendreMonPf(); };
   const bp=$("#mp-pdf"); if(bp) bp.onclick=()=>mpImprimer("Portefeuille de "+nomAgent(ag), M.grp);
+  if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mp-annexes"));
+}
+
+/* Vue « Moi » : tout ce dont l'agent est porteur — projets, actions MEO et tâches —,
+   rangé par projet : le projet (sa ligne s'il le porte, sinon un entête), puis ses actions, puis ses tâches. */
+function mpRendreMoi(z,ag,u){
+  const c=S.cfg, M=APP.monpf, autre=!!APP.agentVu, Mes=autre?"Ses":"Mes";
+  const moi=mpMots(nomAgent(ag));
+  const estMoi=(tbl,r,col)=>!!col && (designe(tbl,r,col,ag) || (!!moi && String(lire(tbl,r,col)||"").split(/[,;\n]/).some(x=>mpMots(x)===moi)));
+  const por=r=>lire(c.tblMain,r,c.colPorteur);
+  const fini=v=>v!=null && v>=100;
+  const parProjet=new Map();   // projet -> {porte, actions:[], taches:[]}
+  const ent=p=>{ if(!parProjet.has(p.id)) parProjet.set(p.id,{p,porte:false,actions:[],taches:[]}); return parProjet.get(p.id); };
+  let nb100=0;
+  const garder=v=>{ if(fini(v)){ nb100++; return M.voir100; } return true; };
+  projets().filter(p=>!estArchive(p)).forEach(p=>{
+    if(estMoi(c.tblMain,p,c.colPorteur) && garder(pct(p[c.colAvancement]))) ent(p).porte=true;
+    tachesDe(p).forEach(t=>{ if(estMoi(c.tblTache,t,c.colTachePorteur) && garder(pct(t[c.colTacheAvancement]))) ent(p).taches.push({t,a:null}); });
+    actionsDe(p).forEach(a=>{
+      if(estMoi(c.tblMain,a,c.colPorteur) && garder(pct(a[c.colAvancement]))) ent(p).actions.push(a);
+      tachesDe(a).forEach(t=>{ if(estMoi(c.tblTache,t,c.colTachePorteur) && garder(pct(t[c.colTacheAvancement]))) ent(p).taches.push({t,a}); });
+    });
+  });
+  const blocs=[...parProjet.values()].filter(b=>b.porte||b.actions.length||b.taches.length);
+  blocs.sort((x,y)=>(Number(y.porte)-Number(x.porte)) || ((echeanceProjet(x.p)||9e15)-(echeanceProjet(y.p)||9e15)));
+  const nP=blocs.filter(b=>b.porte).length, nA=blocs.reduce((s2,b)=>s2+b.actions.length,0), nT=blocs.reduce((s2,b)=>s2+b.taches.length,0);
+  const ligneA=a=>{ const av=pct(a[c.colAvancement]), inter=interrompu(a), e=Number(a[c.colEch])||null;
+    return '<tr class="et-action mp-sous-it" data-a="'+a.id+'"><td class="et-lib">'+u.libAction(a)+'</td>'+
+      '<td>'+esc(por(a))+'</td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td><td>'+etBarre(av)+'</td>'+u.ech(e,av>=100||inter)+'</tr>'; };
+  const ligneT=(x,a,p)=>{ const av=pct(x[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,x,c.colTacheStatut), e=Number(x[c.colTacheFin])||null;
+    return '<tr class="et-tache mp-sous-it" '+(a?'data-a="'+a.id+'"':'data-p="'+p.id+'"')+'><td class="et-lib"><span class="et-t">Tâche</span>'+
+      esc(lire(c.tblTache,x,c.colTacheLibelle)||"(sans libellé)")+pastilleComT(x)+
+      (a?'<div class="app-sous">'+esc(decouperLibelleAction(lire(c.tblMain,a,c.colLibelle)).texte||lire(c.tblMain,a,c.colLibelle))+'</div>':'')+'</td>'+
+      '<td>'+esc(c.colTachePorteur?lire(c.tblTache,x,c.colTachePorteur):"")+'</td><td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,x,c.colTacheStatut):"",av||0,inter)+'</td>'+
+      '<td>'+(av==null?"":etBarre(av))+'</td>'+u.ech(e,av>=100||inter)+'</tr>'; };
+  const parEch=(f)=>(x,y)=>(f(x)||9e15)-(f(y)||9e15);
+  let corps="";
+  blocs.forEach(b=>{
+    const p=b.p, pp=por(p);
+    corps+= b.porte ? u.ligneP(p)
+      : '<tr class="mp-sousp" data-p="'+p.id+'"><td colspan="5">'+libelleProjetHtml(lire(c.tblMain,p,c.colLibelle))+(pp?'<span class="mp-pp">projet porté par '+esc(pp)+'</span>':'')+'</td></tr>';
+    b.actions.slice().sort(parEch(a=>Number(a[c.colEch]))).forEach(a=>{ corps+=ligneA(a); });
+    b.taches.slice().sort(parEch(x=>Number(x.t[c.colTacheFin]))).forEach(x=>{ corps+=ligneT(x.t,x.a,p); });
+  });
+  const det=[[nP,"projet"],[nA,"action MEO"],[nT,"tâche"]].map(([v,lb])=>v+" "+lb+(v>1?(lb==="action MEO"?"s":"s"):"")).join(" · ").replace("action MEOs","actions MEO");
+  z.innerHTML='<div class="mp-outils"><span></span><button type="button" class="mt-chip'+(M.voir100?" on":"")+'" id="mp-100">'+
+      (M.voir100?"☑":"☐")+' Afficher les 100 %'+(nb100&&!M.voir100?' ('+nb100+')':'')+'</button>'+
+      '<button type="button" class="anx-pdf" id="mp-pdf" title="Imprimer ce portefeuille tel qu\'il est affiché">🖨 État PDF</button></div>'+
+    '<div class="mp-carte"><h3>'+Mes+' projets, actions et tâches<span>'+det+'</span></h3>'+
+      (blocs.length
+        ? '<table class="app-table mp-table"><thead><tr><th>Projet / action / tâche</th><th>Porteur</th><th>Statut</th><th>Avancement</th><th>Échéance</th></tr></thead><tbody>'+corps+'</tbody></table>'
+        : '<div class="mt-vide">'+(autre?nomAgent(ag)+" n'est porteur":"Vous n'êtes porteur")+' d\'aucun projet, action ou tâche en cours.</div>')+'</div>'+
+    '<div class="mt-grille mp-annexes"></div>';
+  z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>ouvrirFiche(S.data.main.find(r=>r.id===Number(tr.dataset.p)), tr.classList.contains("et-tache")?"taches":null));
+  z.querySelectorAll("tr[data-a]").forEach(tr=>tr.onclick=()=>ouvrirFicheDepuisLigne(Number(tr.dataset.a)));
+  $("#mp-100").onclick=()=>{ M.voir100=!M.voir100; rendreMonPf(); };
+  $("#mp-pdf").onclick=()=>mpImprimer("Portefeuille de "+nomAgent(ag), M.grp);
   if(typeof annexesMonTravail==="function") annexesMonTravail(ag, z.querySelector(".mp-annexes"));
 }
 
