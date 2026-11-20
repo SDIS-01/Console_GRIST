@@ -2251,6 +2251,7 @@ body.app-documents .app-filtres{display:none;}
 #et-perim:disabled{background:#f1f3f7;color:#9aa3b5;cursor:not-allowed}
 tr.et-implique>td{background:#fffcf5}
 .et-imp{display:inline-block;margin-left:8px;font-size:10.5px;font-weight:700;color:#9a5a00;background:#FFF1D6;border-radius:9px;padding:1px 8px;vertical-align:middle}
+.champ[hidden]{display:none !important}
 .btn-info{margin-left:6px;background:#5a6478}
 .btn-info:disabled{opacity:.45;cursor:not-allowed}
 .jf-info .jf-tete b{color:#3c4a6b}
@@ -2643,6 +2644,9 @@ const DEF = {
   colInsType:"", colInsRapporteur:"", colInsAction:"", colInsPeriode:"Periode_Prevue", colInsCommentaire:"Commentaire",
   /* périodes d'instances, saisies dans Grist (instances « à programmer ») */
   tblPeriode:"Periodes_Instances", colPerLibelle:"Libelle", colPerDebut:"Debut", colPerFin:"Fin",
+  /* calendrier des séances d'instances (date connue) */
+  tblCalendrier:"Calendrier_Instance", colCalInstance:"Instance", colCalDate:"Date", colCalLibelle:"Libelle",
+  colCalStatut:"Statut", colInsSeance:"Seance",
   tblNote:"", colNoteLien:"Projet", colNoteAction:"Action_MEO", colNoteAuteur:"Auteur",
   colNoteDate:"Date", colNoteTexte:"Texte", colNoteStatut:"Statut",
   colNoteDestination:"Destination", colNoteLigne:"Ligne_creee", colNoteTraitee:"Traite_le",
@@ -2708,7 +2712,12 @@ const CHAMPS_REGLAGES = [
     ["colInsHisto","Colonne affichée dans l'historique"],
     ["colInsType","Type"],["colInsRapporteur","Rapporteur"],
     ["colInsPJ","Pièces jointes"],["colInsCommentaire","Commentaire"],
-    ["colInsPeriode","Période prévue (référence, instance à programmer)"]
+    ["colInsPeriode","Période prévue (référence, instance à programmer)"],
+    ["colInsSeance","Séance du calendrier (référence)"]
+  ]},
+  {bloc:"Calendrier des instances", tableKey:"tblCalendrier", champs:[
+    ["colCalInstance","Instance (CODIR, CASDIS…)"],["colCalDate","Date de la séance"],
+    ["colCalLibelle","Libellé"],["colCalStatut","Statut (facultatif : Annulée est écartée)"]
   ]},
   {bloc:"Table des périodes d'instances", tableKey:"tblPeriode", champs:[
     ["colPerLibelle","Libellé de la période"],["colPerDebut","Début"],["colPerFin","Fin"]
@@ -3132,7 +3141,7 @@ async function charger(o){
   const [taches,journal,instances,periodes,notes,agents,notifLues,hm]=await Promise.all([
     lireTable(c.tblTache), lireTable(c.tblJournal), lireTable(c.tblInstance),
     /* lues seulement si elles existent : pas de bandeau d'alerte tant qu'elles ne sont pas créées */
-    existe(c.tblPeriode) ? lireTable(c.tblPeriode) : [],
+    existe(c.tblPeriode) ? lireTable(c.tblPeriode).then(r=>{ return r; }) : [],
     lireTable(c.tblNote), lireTable(c.tblAgent),
     existe(c.tblNotif) ? lireTable(c.tblNotif) : [],
     lireTable(c.tblHm),
@@ -3140,6 +3149,8 @@ async function charger(o){
     ...refsAffichees().slice(1).flatMap(([t,cles])=>preparerRefsTable(t,cles))
   ]);
   Object.assign(S.data,{taches,journal,instances,periodes,notes,agents,notifLues,hm});
+  /* calendrier des séances : lu seulement s'il existe */
+  try{ S.data.calendrier = existe(c.tblCalendrier) ? await lireTable(c.tblCalendrier) : []; }catch(e){ S.data.calendrier=[]; }
   /* sans attendre : l'éventuelle photo liée à la revue ne retarde pas l'affichage */
   setTimeout(()=>photoSurArchivageRevue(),0);
   // références des lignes nouvelles des tables secondaires
@@ -6796,8 +6807,9 @@ function carteAjout(p,prefixe,titre,cles,extras,libelleChamp,bouton){
     return '<div class="carte"><h2>'+titre+'</h2>'+
       '<p style="color:var(--gris);font-size:11.5px;margin:0">Indiquez la table correspondante '+
       'dans les réglages pour pouvoir en ajouter.</p></div>';
+  const masquerType = cles===CLES_INSTANCE && calOK();
   const sup=extras.filter(e=>c[e.cle]).map(e=>
-    '<div class="champ"><label>'+e.libelle+'</label>'+
+    '<div class="champ"'+(masquerType && e.cle==="colInsType"?' hidden':'')+'><label>'+e.libelle+'</label>'+
     champVierge(c[cles.table],c[e.cle],prefixe+"-"+e.id)+'</div>').join("");
   const action = c[cles.action]
     ? '<div class="champ"><label>Action concernée</label>'+
@@ -6817,7 +6829,9 @@ function carteAjout(p,prefixe,titre,cles,extras,libelleChamp,bouton){
       pers.map(x=>'<option value="'+x.id+'">'+esc(x.libelle)+'</option>').join("")+'</select>'+
       '<div class="aide-per" id="'+prefixe+'-aide">'+
         (pers.length?'':'Aucune période à venir : ajoutez-en dans la table des périodes.')+'</div></div>'
-    : '<div class="champ"><label>Date</label>'+
+    : (cles===CLES_INSTANCE && calOK())
+      ? calChampsHtml(prefixe,libelleChamp,c,cles)
+      : '<div class="champ"><label>Date</label>'+
         champDateFR('id="'+prefixe+'-date"','',dateDuJourFR())+'</div>'+
       '<div class="champ"><label>'+libelleChamp+'</label>'+
         champVierge(c[cles.table],c[cles.lib],prefixe+"-libelle")+'</div>';
@@ -6830,6 +6844,69 @@ function carteAjout(p,prefixe,titre,cles,extras,libelleChamp,bouton){
     (prog?"Ajouter à programmer":bouton)+'</button></div></div>';
 }
 
+/* --- calendrier des séances d'instances --- */
+function calOK(){
+  const c=S.cfg;
+  return !!(c.tblCalendrier && c.colCalInstance && c.colCalDate && infoCol(c.tblCalendrier,c.colCalDate)
+    && (S.data.calendrier||[]).length);
+}
+function calSeances(){
+  const c=S.cfg;
+  return (S.data.calendrier||[]).map(r=>({id:r.id, instance:txt(lire(c.tblCalendrier,r,c.colCalInstance)).trim(),
+      date:Number(r[c.colCalDate])||null,
+      libelle:(c.colCalLibelle && infoCol(c.tblCalendrier,c.colCalLibelle) ? txt(lire(c.tblCalendrier,r,c.colCalLibelle)).trim() : ""),
+      statut:(c.colCalStatut && infoCol(c.tblCalendrier,c.colCalStatut) ? txt(lire(c.tblCalendrier,r,c.colCalStatut)).trim() : "")}))
+    .filter(x=>x.instance && x.date && !/annul/i.test(x.statut));
+}
+/* types d'instance : liste de la colonne du calendrier (Choix), sinon ceux qui y figurent */
+function calTypes(){
+  const c=S.cfg, info=infoCol(c.tblCalendrier,c.colCalInstance);
+  const vus=[...new Set(calSeances().map(x=>x.instance))];
+  const liste=(info && info.type==="Choice" && info.choices.length) ? info.choices.slice() : vus.sort((a,b)=>a.localeCompare(b,"fr"));
+  return liste;
+}
+/* séances proposées pour un type : la précédente (la plus récente passée) puis toutes celles à venir */
+function calProposees(type){
+  const auj=aujourdHuiUTC(), l=calSeances().filter(x=>x.instance===type).sort((a,b)=>a.date-b.date);
+  const passees=l.filter(x=>x.date<auj), avenir=l.filter(x=>x.date>=auj);
+  return (passees.length?[passees[passees.length-1]]:[]).concat(avenir);
+}
+function calLibelle(x){ return x.libelle || (x.instance+" du "+dateVersFR(x.date)); }
+function calChampsHtml(prefixe,libelleChamp,c,cles){
+  const types=calTypes();
+  return '<div class="champ"><label>Instance</label><select id="'+prefixe+'-cal-type"><option value="">Choisir une instance…</option>'+
+      types.map(t=>'<option>'+esc(t)+'</option>').join("")+'</select></div>'+
+    '<div class="champ"><label>Séance</label><select id="'+prefixe+'-cal-seance" disabled><option value="">Choisir d\'abord l\'instance</option></select></div>'+
+    '<div class="champ" id="'+prefixe+'-date-wrap" hidden><label>Date</label>'+champDateFR('id="'+prefixe+'-date"','',dateDuJourFR())+'</div>'+
+    '<div class="champ"><label>'+libelleChamp+'</label>'+champVierge(c[cles.table],c[cles.lib],prefixe+"-libelle")+'</div>';
+}
+function brancherCalendrier(prefixe){
+  const st=$("#"+prefixe+"-cal-type"), ss=$("#"+prefixe+"-cal-seance");
+  if(!st || !ss) return;
+  const wrap=$("#"+prefixe+"-date-wrap"), lib=$("#"+prefixe+"-libelle"), typ=$("#"+prefixe+"-type"), dt=$("#"+prefixe+"-date");
+  const poserType=v=>{ if(!typ) return;
+    if(typ.tagName==="SELECT"){ const o=[...typ.options].find(x=>x.text===v||x.value===v); typ.value=o?o.value:""; }
+    else typ.value=v; };
+  st.onchange=()=>{
+    const t=st.value, l=t?calProposees(t):[], auj=aujourdHuiUTC();
+    ss.disabled=!t;
+    ss.innerHTML=!t ? '<option value="">Choisir d\'abord l\'instance</option>'
+      : '<option value="">Choisir la séance…</option>'+
+        l.map(x=>'<option value="'+x.id+'">'+esc(dateVersFR(x.date))+(x.date<auj?" (précédente)":"")+'</option>').join("")+
+        '<option value="autre">Autre date…</option>';
+    poserType(t); if(wrap) wrap.hidden=true;
+  };
+  ss.onchange=()=>{
+    const v=ss.value;
+    if(wrap) wrap.hidden=v!=="autre";
+    if(v && v!=="autre"){
+      const x=calSeances().find(y=>y.id===Number(v));
+      if(x){ if(dt) dt.value=dateVersFR(x.date); if(lib && !lib.dataset.modifie) lib.value=calLibelle(x); }
+    }else if(v==="autre" && lib && !lib.dataset.modifie) lib.value=st.value?st.value+" du ":"";
+  };
+  if(lib) lib.addEventListener("input",()=>{ lib.dataset.modifie="1"; });
+}
+
 function brancherAjout(p,prefixe,cles,extras,alerte){
   const c=S.cfg;
   const b=$("#"+prefixe+"-ajouter");
@@ -6837,6 +6914,7 @@ function brancherAjout(p,prefixe,cles,extras,alerte){
   document.querySelectorAll("[data-insmode]").forEach(x=>x.onclick=()=>{
     S.insMode=x.dataset.insmode; vueInstances(p);
   });
+  brancherCalendrier(prefixe);
   const selPer=$("#"+prefixe+"-periode");
   if(selPer) selPer.onchange=()=>{
     const x=periodeObj((S.data.periodes||[]).find(r=>r.id===Number(selPer.value)));
@@ -6852,9 +6930,13 @@ function brancherAjout(p,prefixe,cles,extras,alerte){
       if(!per){ toast("Choisissez la période prévue.",true); return; }
       champs={[c[cles.periode]]:per};
     }else{
+      const ssCal=$("#"+prefixe+"-cal-seance");
+      if(ssCal && !ssCal.value){ toast("Choisissez l'instance et la séance (ou « Autre date… »).",true); return; }
       const lib=valeurChamp(prefixe+"-libelle",c[cles.table],c[cles.lib]);
       if(!lib){ toast(alerte,true); return; }
       champs={[c[cles.lib]]:lib};
+      if(ssCal && ssCal.value!=="autre" && c.colInsSeance && infoCol(c[cles.table],c.colInsSeance))
+        champs[c.colInsSeance]=Number(ssCal.value);
       if(c[cles.date]){
         const d=frVersDate($("#"+prefixe+"-date").value);
         if(d===undefined){ toast("Date invalide : saisissez-la au format jj/mm/aaaa.",true); return; }
