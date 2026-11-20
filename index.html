@@ -2252,6 +2252,7 @@ body.app-documents .app-filtres{display:none;}
 tr.et-implique>td{background:#fffcf5}
 .et-imp{display:inline-block;margin-left:8px;font-size:10.5px;font-weight:700;color:#9a5a00;background:#FFF1D6;border-radius:9px;padding:1px 8px;vertical-align:middle}
 .champ[hidden]{display:none !important}
+.onglet .n.n-attente{background:#FFE3B3;color:#9a5a00;font-weight:700}
 .btn-info{margin-left:6px;background:#5a6478}
 .btn-info:disabled{opacity:.45;cursor:not-allowed}
 .jf-info .jf-tete b{color:#3c4a6b}
@@ -5102,7 +5103,9 @@ function rendreProjet(){
     '</div></div>'+boutonPerso()+'</div>'+
     '<div class="onglets">'+ONGLETS.map(([k,l])=>
       '<button class="onglet'+(S.onglet===k?" actif":"")+'" data-o="'+k+'">'+l+
-      (nb[k]!==undefined?'<span class="n">'+nb[k]+'</span>':'')+'</button>').join("")+
+      (k==="notes" && notesAttenteProjet(p).length
+        ? '<span class="n n-attente" title="Notes à caractériser">'+notesAttenteProjet(p).length+' à caractériser</span>'
+        : (nb[k]!==undefined?'<span class="n">'+nb[k]+'</span>':''))+'</button>').join("")+
       '<button type="button" class="onglet-impr" id="btn-impr-onglet" title="Imprimer cet onglet (PDF)">🖨 Imprimer l\'onglet ▾</button></div>';
 
   $("#entete").querySelectorAll(".onglet").forEach(b=>b.onclick=()=>{
@@ -17293,6 +17296,7 @@ function rendreListeApp(){
     av:p=>{ const a=pct(p[c.colAvancement]); return a==null?-1:a; }, ech:p=>echeanceProjet(p)||9e15,
     ins:p=>{ const x=prochaineInstance(p); return x&&x.date?x.date:9e15; }
   };
+  if(E.tri==="echeance" && APP.tri.k!=="ech") APP.tri={k:"ech",sens:1};
   const k=APP.tri.k, sens=APP.tri.sens;
   const liste=[...ps].sort((a,b)=>{ const x=cle[k](a), y=cle[k](b); return (x<y?-1:x>y?1:0)*sens; });
   const th=(kk,l)=>'<th data-tri="'+kk+'">'+l+(k===kk?(sens>0?" ▾":" ▴"):"")+'</th>';
@@ -17330,10 +17334,10 @@ function rendreListeApp(){
     let h=ligneProjet(p,impl);
     const ouvert=E.ouverts.has(p.id), voirA=E.meo||ouvert||!!impl, voirT=E.taches||ouvert||!!impl;
     const okA=a=>visA(a) && (!impl || impl.actions.has(a.id)), okT=t=>visT(t) && (!impl || impl.taches.has(t.id));
-    if(voirT){ let tp=[]; try{ tp=tachesDe(p); }catch(e){} tp.filter(okT).forEach(t=>{ h+=ligneTache(t,p); }); }
-    if(voirA||voirT) actionsDe(p).forEach(a=>{
+    if(voirT){ let tp=[]; try{ tp=tachesDe(p); }catch(e){} etTrierTaches(tp.filter(okT)).forEach(t=>{ h+=ligneTache(t,p); }); }
+    if(voirA||voirT) etTrierActions(actionsDe(p)).forEach(a=>{
       if(voirA && okA(a)) h+=ligneAction(a,p);
-      if(voirT){ let ta=[]; try{ ta=tachesDe(a); }catch(e){} ta.filter(okT).forEach(t=>{ h+=ligneTache(t,p); }); }
+      if(voirT){ let ta=[]; try{ ta=tachesDe(a); }catch(e){} etTrierTaches(ta.filter(okT)).forEach(t=>{ h+=ligneTache(t,p); }); }
     });
     return h;
   };
@@ -17355,7 +17359,7 @@ function rendreListeApp(){
   $("#zone-liste").innerHTML=
     etBarreHtml([["","Aucun"],["porteur","Porteur"],["groupement","Groupement"]],
       '<button type="button" class="anx-pdf" id="et-pdf" title="État de tous les groupements (ou sponsors), limité aux filtres de la console">🖨 État PDF</button>'+
-      '<button type="button" class="anx-xl" id="et-xl" title="Extraction PEPS / AV des projets affichés">⬇ Excel</button>'+
+      '<button type="button" class="anx-xl" id="et-xl" title="Liste affichée : projets, actions MEO et tâches, dans l\'ordre de l\'écran">⬇ Excel</button>'+
       '<button type="button" class="anx-pdf" id="et-plus" title="Autres éditions du portefeuille">⋯</button>')+
     (tot ? '<div class="et-rep">'+[["rouge","#C0504D"],["orange","#F79646"],["vert","#9BBB59"],["gris","#9A948E"]].filter(([kk])=>rep[kk]).map(([kk,col])=>'<i style="flex:'+rep[kk]+';background:'+col+'"></i>').join("")+'</div>'+
       '<div class="et-leg">'+[["rouge","#C0504D","À engager"],["orange","#F79646","En cours"],["vert","#9BBB59","Terminé"],["gris","#9A948E","Interrompu"]].filter(([kk])=>rep[kk]).map(([kk,col,l])=>'<i style="background:'+col+'"></i>'+l+' : '+rep[kk]).join("")+
@@ -17366,6 +17370,7 @@ function rendreListeApp(){
   const z=$("#zone-liste");
   z.querySelectorAll("[data-tri]").forEach(t=>t.onclick=()=>{
     if(APP.tri.k===t.dataset.tri) APP.tri.sens*=-1; else APP.tri={k:t.dataset.tri,sens:1};
+    E.tri = APP.tri.k==="ech" ? "echeance" : "code"; etMemoriser();
     rendreListeApp();
   });
   etBrancherBarre(z,()=>rendreListeApp());
@@ -17488,7 +17493,8 @@ function rendreTravail(){
   const parDate=(a,b)=>(a.ech||9e12)-(b.ech||9e12);
   const acts=els.filter(n=>n.genre==="action" && (!idsMesProjets.has(n.p.id) || urgente(n)) && libre(n)).sort(parDate),
         taches=els.filter(n=>n.genre==="tache" && libre(n)).sort(parDate),
-        jnl=jnlCartesTravail(ag,autre,M,L);
+        jnl=jnlCartesTravail(ag,autre,M,L),
+        notesAtt=notesAttenteDe(ag);
   const dateHtml=t=>'<span class="'+(t<auj?"app-ret":"app-mut")+'">'+dateVersFR(t)+'</span>';
   const it=(n,i,droite)=>{ const sl=sousLigneTravail(n);
     return '<div class="mt-it" data-i="'+i+'"><div class="mt-x">'+esc(n.lib||"(sans libellé)")+
@@ -17519,6 +17525,10 @@ function rendreTravail(){
         '<small><span class="mt-raison">'+esc(n.raisons.join(" · "))+'</span></small></div>'+barreAppHtml(n.p)+'</div>')+
     bloc(M+"actions de mise en œuvre",acts.length,acts,(n,i)=>it(n,i,delaiHtml(n.ech)),true)+
     bloc(M+"tâches en cours",taches.length,taches,(n,i)=>it(n,i,delaiHtml(n.ech)),true)+
+    ((S.cfg.tblNote)?bloc("Notes à caractériser",notesAtt.length+" en attente",notesAtt,(n,i)=>
+      '<div class="mt-it" data-i="'+i+'"><div class="mt-x">'+esc(n.lib.length>140?n.lib.slice(0,140)+"…":n.lib)+
+        '<small>'+(n.date?esc(dateVersFR(n.date)):"")+(n.auteur?' · '+esc(n.auteur):'')+'</small></div>'+
+        '<span class="jnl-st jnl-st-n">à caractériser</span></div>',true):"")+
     jnl.html+
     (autre?"":carteNotifs(ag,autre,nl,tous))+
   '</div>';
@@ -17536,9 +17546,27 @@ function rendreTravail(){
     const n=tous[Number(e.dataset.i)];
     if(!n) return;
     if(e.dataset.notif && !autre){ basculerFiche(); ouvrirNotif(n); rendreApp(); return; }
-    ouvrirFiche(n.p, n.genre==="projet"?null:((n.genre==="journal"||n.genre==="demande")?"journal":"actions"));
+    ouvrirFiche(n.p, n.genre==="projet"?null:n.genre==="note"?"notes":((n.genre==="journal"||n.genre==="demande")?"journal":"actions"));
     if(n.genre==="action" && n.a) setTimeout(()=>{ try{ ouvrirFenetreAction(n.a.id); }catch(err){} },50);
   });
+}
+
+/* notes en attente de caractérisation */
+function notesAttenteProjet(p){
+  try{ return (S.cfg.tblNote ? notesDe(p) : []).filter(estACaracteriser); }catch(e){ return []; }
+}
+function notesAttenteDe(ag){
+  const c=S.cfg, out=[];
+  if(!c.tblNote || !c.colNoteLien || !(S.data.notes||[]).length) return out;
+  const admin=!APP.agentVu && typeof demEstAdmin==="function" && demEstAdmin();
+  projets().filter(p=>!estArchive(p)).forEach(p=>{
+    const porteur=ag && designe(c.tblMain,p,c.colPorteur,ag);
+    if(!porteur && !admin) return;
+    notesAttenteProjet(p).forEach(n=>out.push({p, n, genre:"note", cle:"note:"+n.id,
+      lib:txt(lire(c.tblNote,n,c.colNoteTexte)).trim()||"(note sans texte)",
+      date:Number(n[c.colNoteDate])||null, auteur:c.colNoteAuteur?txt(lire(c.tblNote,n,c.colNoteAuteur)).trim():""}));
+  });
+  return out.sort((a,b)=>(a.date||0)-(b.date||0));
 }
 
 /* carte « Notifications » de Mon travail (remplace le bouton de la barre) */
@@ -17592,7 +17620,7 @@ function majBadgeTravail(){
     const nl=nonLues(), cles=new Set(nl.map(x=>x.cle));
     /* les demandes reçues encore en attente comptent tant qu'elles ne sont pas traitées, même lues */
     const att=(typeof jnlRecues==="function"?jnlRecues(ag):[]).filter(x=>x.statut==="attente" && !cles.has(x.cle));
-    n=nl.length+att.length;
+    n=nl.length+att.length+(typeof notesAttenteDe==="function"?notesAttenteDe(ag).length:0);
   }
   b.hidden=!n;
   b.textContent=n>99?"99+":String(n);
@@ -19018,15 +19046,25 @@ async function revueImprimer(id){
    l'état, chargé en arrière-plan et réglé sur les filtres de la console.
    La vue complète de l'état reste accessible (options avancées).
    ======================================================================= */
-APP.etat={grp:"", meo:false, taches:false, termine:false, interrompu:false, perimetre:"portage", rappel:false,
+APP.etat={grp:"", meo:false, taches:false, termine:false, interrompu:false, perimetre:"portage", rappel:false, tri:"code", parPorteur:true,
   ouverts:new Set(), avance:false, nomsGrp:null, nomsGrpCle:"", nomsGrpEnCours:false,
   opts:{meo:false, taches:false, rappel:false, termine:false, interrompu:false, perimetre:"portage"}};
 /* choix de la barre mémorisés d'une session à l'autre */
 (function(){ try{ const m=JSON.parse(localStorage.getItem("console.barreListe")||"{}");
-  ["meo","taches","termine","interrompu","rappel"].forEach(k=>{ if(typeof m[k]==="boolean") APP.etat[k]=m[k]; });
+  ["meo","taches","termine","interrompu","rappel","parPorteur"].forEach(k=>{ if(typeof m[k]==="boolean") APP.etat[k]=m[k]; });
+  if(m.tri==="code"||m.tri==="echeance") APP.etat.tri=m.tri;
   if(m.perimetre==="portage"||m.perimetre==="implication") APP.etat.perimetre=m.perimetre; }catch(e){} })();
 function etMemoriser(){ const E=APP.etat;
-  try{ localStorage.setItem("console.barreListe",JSON.stringify({meo:E.meo,taches:E.taches,termine:E.termine,interrompu:E.interrompu,rappel:E.rappel,perimetre:E.perimetre})); }catch(e){} }
+  try{ localStorage.setItem("console.barreListe",JSON.stringify({meo:E.meo,taches:E.taches,termine:E.termine,interrompu:E.interrompu,rappel:E.rappel,perimetre:E.perimetre,tri:E.tri,parPorteur:E.parPorteur})); }catch(e){} }
+/* tri des lignes sous un projet : par échéance si « Trier par : Échéance » */
+function etTrierActions(l){ const c=S.cfg; return APP.etat.tri==="echeance" ? l.slice().sort((a,b)=>(Number(a[c.colEch])||9e15)-(Number(b[c.colEch])||9e15)) : l; }
+function etTrierTaches(l){ const c=S.cfg; return APP.etat.tri==="echeance" ? l.slice().sort((a,b)=>(Number(a[c.colTacheFin])||9e15)-(Number(b[c.colTacheFin])||9e15)) : l; }
+/* ordre des projets : celui de l'écran */
+function etOrdreProjets(ps){
+  const c=S.cfg;
+  if(APP.etat.tri==="echeance") return ps.slice().sort((a,b)=>(echeanceProjet(a)||9e15)-(echeanceProjet(b)||9e15));
+  return ps.slice().sort((a,b)=>lire(c.tblMain,a,c.colLibelle).localeCompare(lire(c.tblMain,b,c.colLibelle),"fr",{numeric:true}));
+}
 /* une action ou une tâche est-elle affichée (puces Terminés / Interrompus) ? */
 function etSousVisible(av,inter){
   const E=APP.etat;
@@ -19082,6 +19120,8 @@ function etBarreHtml(grpOpts,boutons){
   const chip=(k,l)=>'<button type="button" class="mt-chip'+(E[k]?" on":"")+'" data-etchip="'+k+'">'+(E[k]?"☑":"☐")+' '+l+'</button>';
   return '<div class="et-outils"><span class="et-lab">Regrouper par</span><select id="et-grp">'+
       grpOpts.map(([v,l])=>'<option value="'+v+'"'+(E.grp===v?" selected":"")+'>'+l+'</option>').join("")+'</select>'+
+      '<span class="et-lab">Trier par</span><select id="et-tri"><option value="code"'+(E.tri==="code"?" selected":"")+'>Code</option>'+
+        '<option value="echeance"'+(E.tri==="echeance"?" selected":"")+'>Échéance</option></select>'+
       chip("meo","Actions MEO")+chip("taches","Tâches")+chip("termine","Terminés")+chip("interrompu","Interrompus")+
       '<span class="et-sep"></span><span class="et-lab">Périmètre</span>'+
       '<select id="et-perim"'+(g.length?'':' disabled title="Choisissez d\'abord un groupement"')+'>'+
@@ -19094,6 +19134,8 @@ function etBrancherBarre(z,rerendre){
   const g=z.querySelector("#et-grp"); if(g) g.onchange=e=>{ E.grp=e.target.value; rerendre(); };
   z.querySelectorAll("[data-etchip]").forEach(b=>b.onclick=()=>{ E[b.dataset.etchip]=!E[b.dataset.etchip]; etMemoriser(); rerendre(); });
   const pe=z.querySelector("#et-perim"); if(pe) pe.onchange=e=>{ E.perimetre=e.target.value; etMemoriser(); rerendre(); };
+  const tr=z.querySelector("#et-tri"); if(tr) tr.onchange=e=>{ E.tri=e.target.value;
+    APP.tri = E.tri==="echeance" ? {k:"ech",sens:1} : {k:"nom",sens:1}; etMemoriser(); rerendre(); };
 }
 /* encadré du bouton « État PDF » : rappel des définitions, puis génération */
 function etPopupPdf(bouton,lancer){
@@ -19101,12 +19143,14 @@ function etPopupPdf(bouton,lancer){
   const E=APP.etat;
   const pop=document.createElement("div"); pop.className="anx-pop et-pop";
   pop.innerHTML='<label><input type="checkbox" id="et-rappel"'+(E.rappel?" checked":"")+'> Inclure le rappel des définitions en tête</label>'+
+    '<label style="display:block;margin-top:6px"><input type="checkbox" id="et-parpo"'+(E.parPorteur?" checked":"")+'> Regrouper par porteur</label>'+
     '<div style="margin-top:10px"><button type="button" class="btn" id="et-gen">Générer le PDF</button></div>';
   document.body.appendChild(pop);
   const r=bouton.getBoundingClientRect();
   pop.style.top=(r.bottom+4)+"px"; pop.style.left=Math.max(8,Math.min(window.innerWidth-pop.offsetWidth-8,r.right-pop.offsetWidth))+"px";
   const fermer=e=>{ if(!pop.contains(e.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } };
   pop.querySelector("#et-rappel").onchange=e=>{ E.rappel=e.target.checked; etMemoriser(); };
+  pop.querySelector("#et-parpo").onchange=e=>{ E.parPorteur=e.target.checked; etMemoriser(); };
   pop.querySelector("#et-gen").onclick=()=>{ pop.remove(); document.removeEventListener("mousedown",fermer); lancer(); };
   setTimeout(()=>document.addEventListener("mousedown",fermer),0);
 }
@@ -19232,8 +19276,9 @@ function etOptionsEtat(){
   const c=S.cfg, E=APP.etat, un=id=>(MENUS[id]&&MENUS[id].sel.length===1)?MENUS[id].sel[0]:"";
   return Object.assign({}, E.opts, {
     meo:!!E.meo, taches:!!E.taches, termine:!!E.termine, interrompu:!!E.interrompu, perimetre:E.perimetre, rappel:!!E.rappel,
+    tri:E.tri, parPorteur:E.parPorteur!==false,
     projets:(()=>{ const ps=projetsFiltres(); let im=[]; try{ im=[...etProjetsImpliques(ps).keys()]; }catch(e){}
-      return ps.concat(im).map(p=>({id:p.id, libelle:lire(c.tblMain,p,c.colLibelle)})); })(),
+      return etOrdreProjets(ps).concat(etOrdreProjets(im)).map(p=>({id:p.id, libelle:lire(c.tblMain,p,c.colLibelle)})); })(),
     g:MENUS["m-groupement"].sel.slice(), sp:(MENUS["m-sponsor"]||{sel:[]}).sel.slice(),
     porteur:un("m-porteur"), origine:un("m-origine"), service:un("m-service"), recherche:$("#q").value.trim()
   });
@@ -19277,24 +19322,80 @@ function etPopupOptions(bouton){
   setTimeout(()=>{ const fermer=e=>{ if(!pop.contains(e.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
 }
 
+/* Excel de la Liste : ce qui est affiché (projets, actions MEO et tâches selon les puces), dans l'ordre de l'écran */
+async function exporterListeComplete(){
+  await anxChargerExcelJs();
+  const c=S.cfg, E=APP.etat, ps=projetsFiltres();
+  let impl=new Map(); try{ impl=etProjetsImpliques(ps); }catch(e){}
+  const wb=new ExcelJS.Workbook(), ws=wb.addWorksheet("Liste");
+  ws.columns=[{header:"Niveau",width:11},{header:"Projet",width:44},{header:"Action MEO",width:40},{header:"Tâche",width:36},
+    {header:"Groupement",width:18},{header:"Porteur",width:22},{header:"Priorité",width:10},{header:"Statut",width:13},
+    {header:"Avancement",width:11},{header:"Échéance",width:12},{header:"Nature",width:9},{header:"P2A",width:16}];
+  ws.getRow(1).eachCell(cl=>{ cl.font={bold:true,color:{argb:"FFFFFFFF"}}; cl.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1D3F8F"}};
+    cl.alignment={vertical:"middle",horizontal:"center",wrapText:true}; });
+  const d=v=>{ const n=Number(v); return n?new Date(n*1000):null; };
+  const av=v=>{ const n=pct(v); return n==null?null:n/100; };
+  const statut=(tbl,r,colSt,a,inter)=>txt(colSt?lire(tbl,r,colSt):"")||(inter?"Interrompu":a>=100?"Terminé":a>0?"En cours":"À engager");
+  const libA=a=>{ const brut=lire(c.tblMain,a,c.colLibelle), x=decouperLibelleAction(lire(c.tblMain,a,c.colActKey)||brut);
+    let t=x.texte; if(!t || /^MEO\s*\d+$/i.test(t.trim())) t=decouperLibelleAction(brut).texte||brut;
+    return (x.num?x.num+" ":"")+t; };
+  const ajouter=(vals,niveau)=>{ const row=ws.addRow(vals);
+    if(niveau==="Projet"){ row.font={bold:true}; row.eachCell({includeEmpty:true},cl=>{ cl.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFEEF2FB"}}; }); }
+    row.getCell(9).numFmt="0 %"; row.getCell(10).numFmt="dd/mm/yyyy"; row.alignment={vertical:"top",wrapText:true}; };
+  const bloc=(p,im)=>{
+    const lp=lire(c.tblMain,p,c.colLibelle), g=lire(c.tblMain,p,c.colGroupement);
+    const ap=pct(p[c.colAvancement]);
+    ajouter(["Projet",lp+(im?" (impliqué)":""),"","",g,lire(c.tblMain,p,c.colPorteur),lire(c.tblMain,p,c.colPriorite),
+      statut(c.tblMain,p,c.colStatut,ap,interrompu(p)),av(p[c.colAvancement]),d(echeanceProjet(p)),natureDe(p),
+      c.colMillesime?lire(c.tblMain,p,c.colMillesime):""],"Projet");
+    const okA=a=>etSousVisible(pct(a[c.colAvancement]),interrompu(a)) && (!im || im.actions.has(a.id));
+    const okT=t=>etSousVisible(pct(t[c.colTacheAvancement]),statutInterrompu(c.tblTache,t,c.colTacheStatut)) && (!im || im.taches.has(t.id));
+    const voirA=E.meo||!!im, voirT=E.taches||!!im;
+    const ligneT=(t,act)=>{ const at=pct(t[c.colTacheAvancement]);
+      ajouter(["Tâche",lp,act?libA(act):"",lire(c.tblTache,t,c.colTacheLibelle),g,c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"","",
+        statut(c.tblTache,t,c.colTacheStatut,at||0,statutInterrompu(c.tblTache,t,c.colTacheStatut)),av(t[c.colTacheAvancement]),
+        d(t[c.colTacheFin]),"Tâche",""],"Tâche"); };
+    let tp=[]; try{ tp=tachesDe(p); }catch(e){}
+    if(voirT) etTrierTaches(tp.filter(okT)).forEach(t=>ligneT(t,null));
+    if(voirA||voirT) etTrierActions(actionsDe(p)).forEach(a=>{
+      const aa=pct(a[c.colAvancement]);
+      if(voirA && okA(a)) ajouter(["Action MEO",lp,libA(a),"",g,lire(c.tblMain,a,c.colPorteur),lire(c.tblMain,a,c.colPriorite),
+        statut(c.tblMain,a,c.colStatut,aa,interrompu(a)),av(a[c.colAvancement]),d(a[c.colEch]),"MEO",
+        c.colMillesime?lire(c.tblMain,a,c.colMillesime):""],"Action MEO");
+      if(voirT){ let ta=[]; try{ ta=tachesDe(a); }catch(e){} etTrierTaches(ta.filter(okT)).forEach(t=>ligneT(t,a)); }
+    });
+  };
+  etOrdreProjets(ps).forEach(p=>bloc(p,null));
+  etOrdreProjets([...impl.keys()]).forEach(p=>bloc(p,impl.get(p)));
+  ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"L1"};
+  ws.pageSetup={paperSize:9,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:"1:1"};
+  const g=etGroupementsChoisis().join("_")||"portefeuille";
+  const buf=await wb.xlsx.writeBuffer(), a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  a.download=("Liste_"+g).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\w\-]+/g,"_")+"_"+new Date().toISOString().slice(0,10)+".xlsx";
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },2000);
+}
+
 /* boutons d'édition de la barre de la Liste */
 function brancherEditionsListe(){
   const lancer=(fn,msg)=>{ toast(msg); fn().catch(er=>toast("Édition impossible : "+er.message,true)); };
   const on=(id,f)=>{ const b=$("#"+id); if(b) b.onclick=f; };
   on("et-pdf",e=>{ e.stopPropagation(); etPopupPdf(e.currentTarget,()=>lancer(()=>etImprimer(true),"Préparation de l'état…")); });
-  /* Excel de la Liste = extraction PEPS / AV des projets affichés */
-  on("et-xl",()=>lancer(()=>exporterPepsAv(),"Préparation de l'extraction PEPS / AV…"));
+  /* Excel de la Liste = ce qui est affiché (projets + actions MEO + tâches), dans l'ordre de l'écran */
+  on("et-xl",()=>lancer(()=>exporterListeComplete(),"Préparation du fichier Excel…"));
   on("et-plus",e=>{
     e.stopPropagation();
     document.querySelectorAll(".anx-pop").forEach(x=>x.remove());
     const pop=document.createElement("div"); pop.className="anx-pop et-pop";
     pop.innerHTML='<div class="et-pop-t">Autres éditions du portefeuille</div>'+
+      '<button type="button" class="ed-it" data-ed2="pepsav"><span>Extraction PEPS / AV (projets affichés)</span><small>Excel</small></button>'+
       '<button type="button" class="ed-it" data-ed2="echeances"><span>Échéances en retard et à venir</span><small>Excel</small></button>';
     document.body.appendChild(pop);
     const r=e.currentTarget.getBoundingClientRect();
     pop.style.top=(r.bottom+4)+"px"; pop.style.left=Math.max(8,Math.min(window.innerWidth-pop.offsetWidth-8,r.right-pop.offsetWidth))+"px";
     pop.querySelectorAll("[data-ed2]").forEach(b=>b.onclick=()=>{ pop.remove();
-      if(b.dataset.ed2==="etat-xl"||b.dataset.ed2==="etat-xl-tous"){ toast("Préparation du fichier Excel…"); etExcel(b.dataset.ed2==="etat-xl-tous").catch(er=>toast("Export impossible : "+er.message,true)); }
+      if(b.dataset.ed2==="pepsav"){ toast("Préparation de l'extraction PEPS / AV…"); exporterPepsAv().catch(er=>toast("Export impossible : "+er.message,true)); }
+      else if(b.dataset.ed2==="etat-xl"||b.dataset.ed2==="etat-xl-tous"){ toast("Préparation du fichier Excel…"); etExcel(b.dataset.ed2==="etat-xl-tous").catch(er=>toast("Export impossible : "+er.message,true)); }
       else lancerEdition(b.dataset.ed2); });
     setTimeout(()=>{ const fermer=ev=>{ if(!pop.contains(ev.target)){ pop.remove(); document.removeEventListener("mousedown",fermer); } }; document.addEventListener("mousedown",fermer); },0);
   });
@@ -27831,6 +27932,21 @@ function construireEtat(code, sansProjetSeul){
     p.taches.sort(triTaches);
     p.actions.forEach(a => a.taches.sort(triTaches));
   });
+  /* édition demandée par la console : même ordre que l'écran, et tri des lignes par échéance */
+  const ECo = window.EDITION_CONSOLE || {};
+  if (ECo.ordre && ECo.ordre.length){
+    const rang = new Map(ECo.ordre.map((k, i) => [k, i]));
+    projetsFinaux.sort((x, y) => (rang.has(x.noeud.cle) ? rang.get(x.noeud.cle) : 9e9) - (rang.has(y.noeud.cle) ? rang.get(y.noeud.cle) : 9e9));
+  }
+  if (ECo.triEch){
+    const ech = o => (o && o.echeanceDate) || null;
+    const parEch = (x, y) => parDate(ech(x), ech(y));
+    projetsFinaux.forEach(p => {
+      p.taches.sort(parEch);
+      p.actions.sort((x, y) => parDate(ech(x.noeud.a), ech(y.noeud.a)));
+      p.actions.forEach(a => a.taches.sort(parEch));
+    });
+  }
 
   /* Détail « projets seuls » : projets portés par le groupement (ligne projet rattachée)
      et projets qui l'impactent (rattachés par une action MEO ou une tâche), sans leurs lignes filles. */
@@ -28172,10 +28288,11 @@ function etatHtml(etat, pourImpression){
     return h.join("");
   }
 
-  /* Détail par porteur du projet. */
+  /* Détail par porteur du projet (ou d'un seul tenant si la console le demande). */
+  const sansPorteur = !!(window.EDITION_CONSOLE || {}).sansPorteur;
   const parPorteur = new Map();
   etat.projets.forEach(p => {
-    const po = (p.noeud.a && p.noeud.a.porteur) || SANS_PORTEUR;
+    const po = sansPorteur ? "Projets, actions MEO et tâches" : ((p.noeud.a && p.noeud.a.porteur) || SANS_PORTEUR);
     if (!parPorteur.has(po)) parPorteur.set(po, []);
     parPorteur.get(po).push(p);
   });
@@ -28184,7 +28301,7 @@ function etatHtml(etat, pourImpression){
     if (b === SANS_PORTEUR) return -1;
     return a.localeCompare(b, "fr");
   });
-  if (porteurs.length || etat.orphelins.length) h.push('<div class="titre-partie">Détail par porteur</div>');
+  if (porteurs.length || etat.orphelins.length) h.push('<div class="titre-partie">' + (sansPorteur ? "Détail" : "Détail par porteur") + '</div>');
 
   const entete = enteteTableau("Projet / action / tâche", false, true, false);
   porteurs.forEach(po => {
@@ -30108,7 +30225,10 @@ window.preparerEtatConsole = o => {
     const cles = new Set();
     o.projets.forEach(pj => { const k = cleProjetConsole(pj); if (k) cles.add(k); });
     window.EDITION_CONSOLE.projets = cles;
+    window.EDITION_CONSOLE.ordre = o.projets.map(pj => cleProjetConsole(pj)).filter(Boolean);
   }
+  window.EDITION_CONSOLE.triEch = o.tri === "echeance";
+  window.EDITION_CONSOLE.sansPorteur = o.parPorteur === false;
   const fixer = (id, v) => { const el = document.getElementById(id); if (!el) return;
     if (el.type === "checkbox") el.checked = !!v; else { el.value = v || ""; if (el.tagName === "SELECT" && el.value !== (v || "")) el.value = ""; } };
   const g = o.g || [], sp = o.sp || [];
