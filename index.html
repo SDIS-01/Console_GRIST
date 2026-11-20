@@ -6845,6 +6845,16 @@ function carteAjout(p,prefixe,titre,cles,extras,libelleChamp,bouton){
 }
 
 /* --- calendrier des séances d'instances --- */
+function calDate(v){
+  if(typeof v==="number") return v||null;
+  const m=String(v||"").trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);
+  return m ? Date.UTC(+m[3],+m[2]-1,+m[1])/1000 : null;
+}
+/* le libellé de l'instance est-il une référence vers le calendrier ? */
+function calLibelleRef(){
+  const c=S.cfg, i=c.tblInstance && c.colInsLibelle && infoCol(c.tblInstance,c.colInsLibelle);
+  return !!(i && /^Ref:/.test(i.type) && i.refTable===c.tblCalendrier);
+}
 function calOK(){
   const c=S.cfg;
   return !!(c.tblCalendrier && c.colCalInstance && c.colCalDate && infoCol(c.tblCalendrier,c.colCalDate)
@@ -6853,7 +6863,7 @@ function calOK(){
 function calSeances(){
   const c=S.cfg;
   return (S.data.calendrier||[]).map(r=>({id:r.id, instance:txt(lire(c.tblCalendrier,r,c.colCalInstance)).trim(),
-      date:Number(r[c.colCalDate])||null,
+      date:calDate(r[c.colCalDate]),
       libelle:(c.colCalLibelle && infoCol(c.tblCalendrier,c.colCalLibelle) ? txt(lire(c.tblCalendrier,r,c.colCalLibelle)).trim() : ""),
       statut:(c.colCalStatut && infoCol(c.tblCalendrier,c.colCalStatut) ? txt(lire(c.tblCalendrier,r,c.colCalStatut)).trim() : "")}))
     .filter(x=>x.instance && x.date && !/annul/i.test(x.statut));
@@ -6878,7 +6888,7 @@ function calChampsHtml(prefixe,libelleChamp,c,cles){
       types.map(t=>'<option>'+esc(t)+'</option>').join("")+'</select></div>'+
     '<div class="champ"><label>Séance</label><select id="'+prefixe+'-cal-seance" disabled><option value="">Choisir d\'abord l\'instance</option></select></div>'+
     '<div class="champ" id="'+prefixe+'-date-wrap" hidden><label>Date</label>'+champDateFR('id="'+prefixe+'-date"','',dateDuJourFR())+'</div>'+
-    '<div class="champ"><label>'+libelleChamp+'</label>'+champVierge(c[cles.table],c[cles.lib],prefixe+"-libelle")+'</div>';
+    (calLibelleRef() ? '' : '<div class="champ"><label>'+libelleChamp+'</label>'+champVierge(c[cles.table],c[cles.lib],prefixe+"-libelle")+'</div>');
 }
 function brancherCalendrier(prefixe){
   const st=$("#"+prefixe+"-cal-type"), ss=$("#"+prefixe+"-cal-seance");
@@ -6893,6 +6903,7 @@ function brancherCalendrier(prefixe){
     ss.innerHTML=!t ? '<option value="">Choisir d\'abord l\'instance</option>'
       : '<option value="">Choisir la séance…</option>'+
         l.map(x=>'<option value="'+x.id+'">'+esc(dateVersFR(x.date))+(x.date<auj?" (précédente)":"")+'</option>').join("")+
+        (l.length?'':'<option value="" disabled>Aucune séance au calendrier pour '+esc(t)+'</option>')+
         '<option value="autre">Autre date…</option>';
     poserType(t); if(wrap) wrap.hidden=true;
   };
@@ -6932,10 +6943,12 @@ function brancherAjout(p,prefixe,cles,extras,alerte){
     }else{
       const ssCal=$("#"+prefixe+"-cal-seance");
       if(ssCal && !ssCal.value){ toast("Choisissez l'instance et la séance (ou « Autre date… »).",true); return; }
-      const lib=valeurChamp(prefixe+"-libelle",c[cles.table],c[cles.lib]);
+      const libRef=ssCal && calLibelleRef();
+      if(libRef && ssCal.value==="autre"){ toast("Le libellé est lié au calendrier : choisissez une séance, ou ajoutez la date dans Calendrier_Instance.",true); return; }
+      const lib=libRef ? Number(ssCal.value) : valeurChamp(prefixe+"-libelle",c[cles.table],c[cles.lib]);
       if(!lib){ toast(alerte,true); return; }
       champs={[c[cles.lib]]:lib};
-      if(ssCal && ssCal.value!=="autre" && c.colInsSeance && infoCol(c[cles.table],c.colInsSeance))
+      if(ssCal && ssCal.value!=="autre" && c.colInsSeance && c.colInsSeance!==c.colInsLibelle && infoCol(c[cles.table],c.colInsSeance))
         champs[c.colInsSeance]=Number(ssCal.value);
       if(c[cles.date]){
         const d=frVersDate($("#"+prefixe+"-date").value);
