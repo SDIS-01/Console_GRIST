@@ -21628,9 +21628,9 @@ function rendreP2A(){
   const z=$("#zone-p2a"); if(!z) return;
   const c=S.cfg;
   if(!c.colMillesime){ z.innerHTML='<div class="app-vide">Aucune colonne « Millésime P2A » n\'est paramétrée dans les réglages.</div>'; return; }
-  /* comme la revue : aucun filtre de la console (ni état, ni archives, ni groupement…),
-     seul le filtre Millésime P2A choisit les millésimes */
-  const mil=p2aMillesimes(), ps=S.data.main.filter(estProjet), L=p2aLignes(ps,mil);
+  /* les filtres de la console s'appliquent (groupement, porteur, état…), comme sur la Liste ;
+     le filtre Millésime P2A choisit les millésimes */
+  const mil=p2aMillesimes(), ps=projetsFiltres(), L=p2aLignes(ps,mil);
   const etat=x=>etatDe(x);
   const n={termine:0,encours:0,afaire:0,interrompu:0};
   L.forEach(l=>{ n[etat(l.x)]=(n[etat(l.x)]||0)+1; });
