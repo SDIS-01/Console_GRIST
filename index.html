@@ -2240,6 +2240,14 @@ body.app-documents .app-filtres{display:none;}
 .doc-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .doc-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
 .lib-com{display:flex;align-items:center;gap:6px}
+a.lt-lien{color:#1d4ed8;text-decoration:underline;}
+a.lt-clip{text-decoration:none;margin-left:3px;font-size:.95em;}
+.lt-aff{padding:4px 6px;border:1px solid transparent;border-radius:4px;cursor:text;min-height:1.4em;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
+.lt-aff:hover{border-color:var(--trait);}
+.lib-com>.lt-zone{flex:0 1 auto!important;}
+.lib-com>.lt-zone:has(textarea:not(.lt-cache)){flex:1 1 auto!important;}
+textarea.lt-cache{display:none!important;}
+.lt-aff[hidden]{display:none!important;}
 .lib-com>:first-child{flex:1;min-width:0}
 @supports (field-sizing:content){.lib-com>textarea:first-child{field-sizing:content;width:auto;flex:0 1 auto;min-width:60px;max-width:100%}}
 .lib-com .btn-bulle{flex:none}
@@ -3197,9 +3205,31 @@ function fonctionAgent(tableId,ligne,colPorteur){
 }
 
 /* --- accès aux valeurs, en résolvant les références --- */
+/* Liens dans l'intitulé d'une tâche : [texte](https://…) ou adresse seule */
+const LT_RE=/\[([^\]\n]+)\]\(((?:https?:\/\/|www\.)[^\s)]+)\)|((?:https?:\/\/|www\.)[^\s<>"]+)/gi;
+function ltSansLien(s){ return String(s==null?"":s).replace(/\[([^\]\n]+)\]\(((?:https?:\/\/|www\.)[^\s)]+)\)/gi,"$1"); }
+function ltALien(s){ LT_RE.lastIndex=0; return LT_RE.test(String(s||"")); }
+function ltHref(u){ u=/^www\./i.test(u)?"https://"+u:u; return /^https?:\/\/[^\s"'<>]+$/i.test(u)?u:""; }
+function ltHtml(s){
+  s=String(s==null?"":s); let h="", i=0, m; LT_RE.lastIndex=0;
+  while((m=LT_RE.exec(s))){
+    h+=esc(s.slice(i,m.index)); i=LT_RE.lastIndex;
+    const brut=m[3]?m[3].replace(/[.,;:!?)]+$/,""):"", href=ltHref(m[2]||brut);
+    if(m[3]&&brut.length<m[3].length){ i-= m[3].length-brut.length; }
+    if(!href){ h+=esc(m[0]); continue; }
+    const a=' href="'+esc(href)+'" target="_blank" rel="noopener noreferrer" title="'+esc(href)+'"';
+    h+=(m[1]?'<a class="lt-lien"'+a+'>'+esc(m[1])+'</a>':'')+'<a class="lt-clip"'+a+'>📎</a>';
+  }
+  return h+esc(s.slice(i));
+}
+function libTacheHtml(t){
+  const v=txt(t&&t[S.cfg.colTacheLibelle]);
+  return v.trim()?ltHtml(v):"(sans libellé)";
+}
 function lire(tableId,ligne,colId){
-  const v=lireBrut(tableId,ligne,colId);
+  const v0=lireBrut(tableId,ligne,colId);
   const c=S.cfg;
+  const v=(colId&&tableId===c.tblTache&&colId===c.colTacheLibelle)?ltSansLien(v0):v0;
   if(colId && colId===c.colLibelle && tableId===c.tblMain && c.colActKey && ligne && ligne[c.colActKey]){
     const k=txt(ligne[c.colActKey]).trim();
     if(k && k!==v){
@@ -6493,6 +6523,37 @@ function ordreTache(t){
   return (v===null||v===undefined||v===""||isNaN(Number(v))) ? null : Number(v);
 }
 
+/* intitulé de tâche : texte avec liens au repos, zone de saisie au clic */
+function ltEditeur(r){
+  const c=S.cfg, e=editeur(c.tblTache,r,c.colTacheLibelle,{auto:true}), v=txt(r[c.colTacheLibelle]);
+  if(!ltALien(v) || !/^<textarea/.test(e)) return e;
+  return '<div class="lt-zone"><div class="lt-aff">'+ltHtml(v)+'</div>'+e.replace('<textarea class="edit','<textarea class="lt-cache edit')+'</div>';
+}
+document.addEventListener("click",e=>{
+  const a=e.target.closest&&e.target.closest("a.lt-lien,a.lt-clip");
+  if(a){ e.stopPropagation(); return; }                   // le lien s'ouvre, la ligne ne réagit pas
+  const aff=e.target.closest&&e.target.closest(".lt-aff");
+  if(!aff) return;
+  const ta=aff.parentNode.querySelector("textarea");
+  if(!ta) return;
+  e.stopPropagation();
+  aff.hidden=true; ta.classList.remove("lt-cache"); ta.focus();
+  if(typeof ajusterHauteur==="function") try{ ajusterHauteur(ta); }catch(_){}
+},true);
+document.addEventListener("focusout",e=>{
+  const ta=e.target;
+  if(!ta||ta.tagName!=="TEXTAREA"||ta.dataset.t!==S.cfg.tblTache||ta.dataset.c!==S.cfg.colTacheLibelle) return;
+  setTimeout(()=>{
+    if(!document.body.contains(ta)) return;
+    let zone=ta.closest(".lt-zone");
+    if(!ltALien(ta.value)){ if(zone){ const aff=zone.querySelector(".lt-aff"); if(aff) aff.remove(); } ta.classList.remove("lt-cache"); return; }
+    if(!zone){ zone=document.createElement("div"); zone.className="lt-zone"; ta.before(zone); zone.appendChild(ta); }
+    let aff=zone.querySelector(".lt-aff");
+    if(!aff){ aff=document.createElement("div"); aff.className="lt-aff"; zone.prepend(aff); }
+    aff.innerHTML=ltHtml(ta.value); aff.hidden=false; ta.classList.add("lt-cache");
+  },0);
+});
+
 /* Une ligne de tâche : poignée, chevron, champs, bulle, suppression. */
 function ligneTacheHtml(r,act,avecStatutT,nbColT){
   const c=S.cfg;
@@ -6502,7 +6563,7 @@ function ligneTacheHtml(r,act,avecStatutT,nbColT){
   return '<tr class="ligne-repli" data-repli="'+cle+'" data-tache="'+r.id+'" data-act="'+act.id+'">'+
     '<td class="col-poignee">'+(c.colTacheOrdre?'<span class="poignee" title="Glisser pour déplacer">⋮⋮</span>':'')+'</td>'+
     '<td class="col-chevron">'+(detail?'<span class="chevron">'+(ouvert?"▾":"▸")+'</span>':'')+'</td>'+
-    '<td><div class="lib-com">'+editeur(c.tblTache,r,c.colTacheLibelle,{auto:true})+(c.colTacheCommentaire
+    '<td><div class="lib-com">'+ltEditeur(r)+(c.colTacheCommentaire
       ? '<button type="button" class="btn-bulle'+(aCommentaire(r,c.colTacheCommentaire)?' btn-com-plein':'')+'" data-bulle-t="'+c.tblTache+'" data-bulle-r="'+r.id+
         '" data-bulle-c="'+c.colTacheCommentaire+'" title="'+(aCommentaire(r,c.colTacheCommentaire)?'Voir les commentaires':'Ajouter un commentaire')+'">💬</button>':'')+'</div>'+(typeof bdgPastille==="function"?bdgPastille("T:"+r.id,S.projetSel,{ajout:true}):'')+'</td>'+
     (avecStatutT?'<td>'+editeur(c.tblTache,r,c.colTacheStatut)+'</td>':'')+
@@ -16472,7 +16533,7 @@ function mbTravaux(p){
                 '<span class="lib'+(depliable?" cliquable":"")+
                   (S.mob.coms[t.id]?" ouvert":"")+'"'+
                   (depliable?' data-comt="'+t.id+'"':'')+'>'+
-                  esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+
+                  libTacheHtml(t)+
                   (typeof bdgPastille==="function"?bdgPastille("T:"+t.id,p,{ajout:true}):'')+
                   (aCom?'<span class="pt-com" title="Contient un commentaire"></span>':'')+
                 '</span>'+
@@ -17354,7 +17415,7 @@ function rendreListeApp(){
   };
   const ligneTache=(t,p)=>{
     const av=pct(t[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,t,c.colTacheStatut), e=Number(t[c.colTacheFin])||null;
-    return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+pastilleComT(t)+'</td>'+
+    return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+libTacheHtml(t)+pastilleComT(t)+'</td>'+
       '<td></td><td></td><td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td><td></td>'+
       '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",av||0,inter)+'</td><td>'+(av==null?"":etBarre(av))+'</td><td>'+etEch(e,av>=100||inter)+'</td><td></td></tr>';
   };
@@ -19232,7 +19293,7 @@ function etNbTaches(p){ try{ return tachesDe(p).length+actionsDe(p).reduce((s,a)
 function etLigneTache(t, p){
   const c=S.cfg;
   const a=pct(t[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,t,c.colTacheStatut), e=Number(t[c.colTacheFin])||null;
-  return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+esc(lire(c.tblTache,t,c.colTacheLibelle)||"(sans libellé)")+pastilleComT(t)+'</td>'+
+  return '<tr class="et-tache" data-p="'+p.id+'"><td class="et-lib"><span class="et-t">Tâche</span>'+libTacheHtml(t)+pastilleComT(t)+'</td>'+
     '<td></td><td></td><td></td><td></td><td>'+esc(c.colTachePorteur?lire(c.tblTache,t,c.colTachePorteur):"")+'</td>'+
     '<td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,t,c.colTacheStatut):"",a||0,inter)+'</td><td>'+(a==null?"":etBarre(a))+'</td><td>'+etEch(e,a>=100||inter)+'</td></tr>';
 }
@@ -20323,7 +20384,7 @@ function mpRendreMoi(z,ag,u){
       '<td>'+esc(por(a))+'</td><td>'+etStatutHtml(lire(c.tblMain,a,c.colStatut),av,inter)+'</td><td>'+etBarre(av)+'</td>'+u.ech(e,av>=100||inter)+'</tr>'; };
   const ligneT=(x,a,p)=>{ const av=pct(x[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,x,c.colTacheStatut), e=Number(x[c.colTacheFin])||null;
     return '<tr class="et-tache mp-sous-it" '+(a?'data-a="'+a.id+'"':'data-p="'+p.id+'"')+'><td class="et-lib"><span class="et-t">Tâche</span>'+
-      esc(lire(c.tblTache,x,c.colTacheLibelle)||"(sans libellé)")+pastilleComT(x)+
+      libTacheHtml(x)+pastilleComT(x)+
       (a?'<div class="app-sous">'+esc(decouperLibelleAction(lire(c.tblMain,a,c.colLibelle)).texte||lire(c.tblMain,a,c.colLibelle))+'</div>':'')+'</td>'+
       '<td>'+esc(c.colTachePorteur?lire(c.tblTache,x,c.colTachePorteur):"")+'</td><td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,x,c.colTacheStatut):"",av||0,inter)+'</td>'+
       '<td>'+(av==null?"":etBarre(av))+'</td>'+u.ech(e,av>=100||inter)+'</tr>'; };
@@ -20390,7 +20451,7 @@ function mpRendreGroupe(z,ag,est,u){
     }
     const x=it.t, av=pct(x[c.colTacheAvancement]), inter=statutInterrompu(c.tblTache,x,c.colTacheStatut);
     return '<tr class="et-tache mp-sous-it" '+(it.a?'data-a="'+it.a.id+'"':'data-p="'+it.p.id+'"')+'><td class="et-lib"><span class="et-t">Tâche</span>'+
-      esc(lire(c.tblTache,x,c.colTacheLibelle)||"(sans libellé)")+pastilleComT(x)+
+      libTacheHtml(x)+pastilleComT(x)+
       (it.a?'<div class="app-sous">'+esc(decouperLibelleAction(lire(c.tblMain,it.a,c.colLibelle)).texte||lire(c.tblMain,it.a,c.colLibelle))+'</div>':'')+'</td>'+
       '<td>'+esc(it.porteur)+'</td><td>'+etStatutHtml(c.colTacheStatut?lire(c.tblTache,x,c.colTacheStatut):"",av||0,inter)+'</td>'+
       '<td>'+(av==null?"":etBarre(av))+'</td>'+mpMarque(u.ech(it.ech,av>=100||inter),it.p)+'</tr>';
@@ -25868,7 +25929,7 @@ function renderBarCells(row, spec, units, mappings){
     }
     p0=Math.max(0,Math.min(1,p0)); p1=Math.max(p0,Math.min(1,p1))
     const cls = row.t==="task" ? " pbar-sub" : (row.t==="axe" ? " pbar-axe" : "")
-    const libelle = row.t==="axe" ? row.axe : (row.t==="task" ? displayValue(row.rec[taskCfg.label]) : libelleDe(row.rec, mappings))
+    const libelle = row.t==="axe" ? row.axe : (row.t==="task" ? String(displayValue(row.rec[taskCfg.label])).replace(/\[([^\]\n]+)\]\(((?:https?:\/\/|www\.)[^\s)]+)\)/gi,"$1") : libelleDe(row.rec, mappings))
     let tip = libelle + (spec.av!==null && spec.av!==undefined ? " – "+spec.av+" %" : "")
     tip += " – du "+formatDateFr(spec.s)+" au "+formatDateFr(spec.e)
     if(spec.retard) tip += " – échéance dépassée de "+nDuree(spec.jours)
@@ -25930,7 +25991,7 @@ function renderRow(row, units, mappings){
         return `<tr class="row-axe" style="background:${tt[1]}">${nameCell}${renderBarCells(row, spec, units, mappings)}</tr>`
     }
     if(row.t==="task"){
-        const name = displayValue(row.rec[taskCfg.label]) || "(sans libellé)"
+        const name = String(displayValue(row.rec[taskCfg.label])).replace(/\[([^\]\n]+)\]\(((?:https?:\/\/|www\.)[^\s)]+)\)/gi,"$1") || "(sans libellé)"
         attrs = ` data-task-id="${row.rec.id}"`
         nameCell = `<td class="task-name-cell task-name-sub-cell${pctCls}" style="padding-left:${16+row.depth*16}px" title="${escapeAttr(name)}"><div class="task-name-task">↳ ${escapeHtml(name)}</div>${pct}</td>`
         return `<tr class="task-row-sub"${attrs}>${nameCell}${renderBarCells(row, spec, units, mappings)}</tr>`
@@ -26407,7 +26468,7 @@ function pgLigne(row, mappings){
         lib = row.axe || "Sans axe"
         sous = `${nb} action${nb>1?"s":""}${sp.av!==null&&sp.av!==undefined?" · "+sp.av+" %":""}`
     } else if(row.t==="task"){
-        lib = displayValue(row.rec[taskCfg.label]) || "(sans libellé)"
+        lib = String(displayValue(row.rec[taskCfg.label])).replace(/\[([^\]\n]+)\]\(((?:https?:\/\/|www\.)[^\s)]+)\)/gi,"$1") || "(sans libellé)"
     } else {
         const nom = (row.t==="meo" ? nomAction(row.rec, mappings) : libelleDe(row.rec, mappings)) || "(sans libellé)"
         if(row.t==="meo" && row.num) lib = row.num+". "+(decouperLibelleAction(nom).texte||nom)
@@ -27653,7 +27714,7 @@ function lireTache(ligne){
     id: ligne.id,
     cleProjet: texte(T, ligne, "ID_Projet_Action_AV"),
     cleAction: texte(T, ligne, "ID_Action_MEO"),
-    libelle: texte(T, ligne, "ID_Tâche", "ID_Tache"),
+    libelle: String(texte(T, ligne, "ID_Tâche", "ID_Tache")).replace(/\[([^\]\n]+)\]\(((?:https?:\/\/|www\.)[^\s)]+)\)/gi,"$1"),
     porteur: texte(T, ligne, "Porteur"),
     service: serviceReel(texte(T, ligne, "Service")),
     groupement: texte(T, ligne, "Groupement"),
@@ -33833,7 +33894,7 @@ function tachesDe(idAction, libelle){
   return recTaches
     .filter(t => cles.includes(txt(t[cfg.tacheIdAction]).trim().toLowerCase()))
     .map(t => ({
-      libelle: txt(t[cfg.tacheLibelle]),
+      libelle: String(txt(t[cfg.tacheLibelle])).replace(/\[([^\]\n]+)\]\(((?:https?:\/\/|www\.)[^\s)]+)\)/gi,"$1"),
       avancement: versPourcent(t[cfg.tacheAvancement], frac),
       debut: cfg.tacheDebut ? versDate(t[cfg.tacheDebut]) : null,
       echeance: cfg.tacheEch ? versDate(t[cfg.tacheEch]) : null,
