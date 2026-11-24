@@ -2249,7 +2249,8 @@ tr.rq-flash>td{animation:rqFlash 2.4s ease-out;}
 .rq-nav button:hover{background:#eef2f8;}
 .rq-nav .rq-type{color:var(--gris);}
 .rq-nav .rq-fermer{margin-left:auto;}
-a.lt-clip{text-decoration:none;margin-left:3px;font-size:.95em;}
+a.lt-clip{display:inline-flex;align-items:center;justify-content:center;vertical-align:-3px;margin-left:4px;padding:2px;border-radius:4px;color:#1d4ed8;text-decoration:none;}
+a.lt-clip:hover{background:#e0e8fb;color:#0b3aa8;}
 .lt-aff{padding:4px 6px;border:1px solid transparent;border-radius:4px;cursor:text;min-height:1.4em;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
 .lt-aff:hover{border-color:var(--trait);}
 .lib-com>.lt-zone{flex:0 1 auto!important;}
@@ -3226,7 +3227,7 @@ function ltHtml(s){
     if(m[3]&&brut.length<m[3].length){ i-= m[3].length-brut.length; }
     if(!href){ h+=esc(m[0]); continue; }
     const a=' href="'+esc(href)+'" target="_blank" rel="noopener noreferrer" title="'+esc(href)+'"';
-    h+=(m[1]?'<a class="lt-lien"'+a+'>'+esc(m[1])+'</a>':'')+'<a class="lt-clip"'+a+'>📎</a>';
+    h+=(m[1]?'<a class="lt-lien"'+a+'>'+esc(m[1])+'</a>':'')+'<a class="lt-clip"'+a+'><svg viewBox="0 0 24 24" width="15" height="15" aria-label="Ouvrir le lien" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></a>';
   }
   return h+esc(s.slice(i));
 }
