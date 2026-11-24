@@ -1500,6 +1500,14 @@ tbody tr.ligne-com:hover{background:transparent;}
 /* onglet Budget */
 .bdg-contenu{font-size:13px;line-height:1.55;overflow-x:auto;}
 .bdg-contenu p{margin:0 0 6px;}
+.bdg-contenu a{color:#1d4ed8;text-decoration:underline;cursor:pointer;}
+.bdg-menu-web{padding:10px;gap:6px;min-width:300px;}
+.bdg-menu-web label{font-size:12px;color:var(--gris);}
+.bdg-menu-web input{padding:6px 8px;border:1px solid var(--trait);border-radius:4px;font-size:13px;}
+.bdg-menu-web .bdg-mw-btns{display:flex;justify-content:flex-end;gap:6px;margin-top:4px;}
+.bdg-menu-web .bdg-mw-btns button{border:1px solid var(--trait);background:#fff;}
+.bdg-menu-web .bdg-mw-btns button.ok{background:var(--bleu);color:#fff;border-color:var(--bleu);}
+.bdg-menu-web .bdg-mw-err{color:#b42318;font-size:12px;}
 .bdg-contenu ul,.bdg-contenu ol{margin:0 0 6px;padding-left:22px;}
 .bdg-contenu table{border-collapse:collapse;margin:8px 0;}
 .bdg-contenu th,.bdg-contenu td{border:1px solid var(--trait);padding:5px 10px;text-align:left;
@@ -10203,12 +10211,14 @@ function vueStrategie(p){
    colonne Texte de la table principale. Partagé entre poste et mobile.
    ======================================================================= */
 const BDG_BALISES={P:"p",DIV:"p",H1:"p",H2:"p",H3:"p",H4:"p",BR:"br",
-  B:"b",STRONG:"b",I:"i",EM:"i",U:"u",UL:"ul",OL:"ol",LI:"li",
+  B:"b",STRONG:"b",I:"i",EM:"i",U:"u",UL:"ul",OL:"ol",LI:"li",A:"a",
   TABLE:"table",THEAD:"tbody",TBODY:"tbody",TFOOT:"tbody",TR:"tr",TH:"th",TD:"td"};
 /* attributs conservés : ceux qui décrivent un tableau de budget, et rien d'autre */
 const BDG_TYPES=["txt","eur","sec","lien"];
+const BDG_RE_URL=/^(https?:\/\/|mailto:)[^\s"'<>]+$/i;
 function bdgAttributs(src,dst){
   const k=dst.tagName;
+  if(k==="A"){ dst.setAttribute("href",src.getAttribute("href")); dst.setAttribute("target","_blank"); dst.setAttribute("rel","noopener noreferrer"); }
   if(k==="TABLE" && src.getAttribute("data-bdg")==="1") dst.setAttribute("data-bdg","1");
   if(k==="TR" && src.getAttribute("data-total")==="1") dst.setAttribute("data-total","1");
   if(k==="TH"){
@@ -10240,6 +10250,7 @@ function nettoyerBudget(html){
       /* bloc de texte rattaché à une action ou une tâche (jamais imbriqué) */
       const k=(tag==="DIV" && /^[AT]:\d+$/.test(n.getAttribute("data-lien")||"") && !dst.closest("div[data-lien]"))
         ? "div" : BDG_BALISES[tag];
+      if(tag==="A" && (!BDG_RE_URL.test((n.getAttribute("href")||"").trim()) || dst.closest("a"))){ copier(n,dst); return; }
       if(!k){ copier(n,dst); return; }     // span, font… : on garde le texte
       const e=document.createElement(k);
       bdgAttributs(n,e);
@@ -10399,7 +10410,7 @@ function bdgPlacerRepere(racine){
 }
 
 const BDG_OUTILS=[["gras","<b>G</b>","Gras"],["ital","<i>I</i>","Italique"],
-  ["puces","• Liste","Liste à puces"],["|"],
+  ["puces","• Liste","Liste à puces"],["lienweb","🌐 Lien","Insérer ou modifier un lien hypertexte"],["|"],
   ["tableau","Insérer un tableau","Insérer un tableau de budget"],["|"],
   ["lig+","+ ligne","Ajouter une ligne sous la ligne courante"],
   ["col+","+ colonne","Ajouter une colonne à droite de la colonne courante"],
@@ -10675,6 +10686,7 @@ function brancherBudget(racine,p,redessiner){
   racine.querySelectorAll(".bdg-outils button[data-bdg]").forEach(b=>{
     b.onmousedown=e=>e.preventDefault();      // garde la sélection dans l'éditeur
     b.onclick=()=>{
+      if(b.dataset.bdg==="lienweb"){ bdgMenuLienWeb(ed,b,noter); return; }
       if(document.activeElement!==ed && !bdgCellule(ed)) ed.focus();
       const td=bdgCellule(ed)||(derniere&&ed.contains(derniere)?derniere:null);
       bdgOutil(ed,b.dataset.bdg,td);
@@ -21051,6 +21063,58 @@ function bdgMenuLien(ancre,p,cur,choisir){
   m.style.left=Math.max(6,Math.min(r.left,window.innerWidth-m.offsetWidth-6))+"px";
   m.style.top=(r.bottom+m.offsetHeight+6>window.innerHeight ? Math.max(6,r.top-m.offsetHeight-2) : r.bottom+2)+"px";
   if(!document.body.classList.contains("mob")) setTimeout(()=>q.focus(),20);
+  setTimeout(()=>document.addEventListener("mousedown",function hors(e){
+    if(!m.contains(e.target)){ bdgFermerMenu(); document.removeEventListener("mousedown",hors); }
+  }),0);
+}
+
+/* --- lien hypertexte : insérer, modifier, retirer ----------------------- */
+function bdgMenuLienWeb(ed,ancre,apres){
+  bdgFermerMenu();
+  const s=window.getSelection();
+  let plage=(s&&s.rangeCount&&ed.contains(s.getRangeAt(0).commonAncestorContainer))?s.getRangeAt(0).cloneRange():null;
+  let n=plage?plage.commonAncestorContainer:null;
+  if(n&&n.nodeType===3) n=n.parentNode;
+  const a=n&&n.closest?n.closest("a"):null;
+  const lienA=(a&&ed.contains(a))?a:null;
+  const texteSel=lienA?lienA.textContent:(plage?plage.toString():"");
+  const m=document.createElement("div");
+  m.className="bdg-menu bdg-menu-web";
+  m.innerHTML='<label>Adresse (https://…, mailto:…)</label><input type="text" class="mw-url" autocomplete="off" placeholder="https://">'+
+    '<label>Texte affiché</label><input type="text" class="mw-txt" autocomplete="off" placeholder="(l\'adresse si vide)">'+
+    '<div class="bdg-mw-err" hidden></div>'+
+    '<div class="bdg-mw-btns">'+(lienA?'<button type="button" class="mw-suppr">Retirer le lien</button>':'')+
+    '<button type="button" class="mw-annul">Annuler</button><button type="button" class="ok mw-ok">'+(lienA?'Modifier':'Insérer')+'</button></div>';
+  document.body.appendChild(m);
+  const qU=m.querySelector(".mw-url"), qT=m.querySelector(".mw-txt"), err=m.querySelector(".bdg-mw-err");
+  qU.value=lienA?lienA.getAttribute("href"):""; qT.value=texteSel;
+  const fermer=()=>{ bdgFermerMenu(); };
+  const valider=()=>{
+    let u=qU.value.trim();
+    if(u && !/^[a-z]+:/i.test(u)) u=(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u)?"mailto:":"https://")+u;
+    if(!BDG_RE_URL.test(u)){ err.textContent="Adresse invalide : elle doit commencer par https://, http:// ou mailto:"; err.hidden=false; qU.focus(); return; }
+    const t=qT.value.trim()||u.replace(/^mailto:/i,"");
+    if(lienA){ lienA.setAttribute("href",u); if(lienA.textContent!==t) lienA.textContent=t; }
+    else{
+      const el=document.createElement("a");
+      el.setAttribute("href",u); el.setAttribute("target","_blank"); el.setAttribute("rel","noopener noreferrer");
+      el.textContent=t;
+      if(!plage){ plage=document.createRange(); plage.selectNodeContents(ed); plage.collapse(false); }
+      plage.deleteContents(); plage.insertNode(el);
+      const r=document.createRange(); r.setStartAfter(el); r.collapse(true);
+      s.removeAllRanges(); s.addRange(r);
+    }
+    fermer(); apres();
+  };
+  m.querySelector(".mw-ok").onclick=valider;
+  m.querySelector(".mw-annul").onclick=fermer;
+  const sup=m.querySelector(".mw-suppr");
+  if(sup) sup.onclick=()=>{ lienA.replaceWith(document.createTextNode(lienA.textContent)); fermer(); apres(); };
+  [qU,qT].forEach(q=>q.onkeydown=e=>{ if(e.key==="Escape") fermer(); if(e.key==="Enter"){ e.preventDefault(); valider(); } });
+  const r=ancre.getBoundingClientRect();
+  m.style.left=Math.max(6,Math.min(r.left,window.innerWidth-m.offsetWidth-6))+"px";
+  m.style.top=(r.bottom+2)+"px";
+  setTimeout(()=>(qU.value?qT:qU).focus(),20);
   setTimeout(()=>document.addEventListener("mousedown",function hors(e){
     if(!m.contains(e.target)){ bdgFermerMenu(); document.removeEventListener("mousedown",hors); }
   }),0);
