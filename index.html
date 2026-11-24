@@ -2241,6 +2241,14 @@ body.app-documents .app-filtres{display:none;}
 .doc-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
 .lib-com{display:flex;align-items:center;gap:6px}
 a.lt-lien{color:#1d4ed8;text-decoration:underline;}
+mark.rq{background:#ffe066;color:inherit;padding:0 1px;border-radius:2px;}
+@keyframes rqFlash{0%,35%{background:#fff3a0;}100%{background:transparent;}}
+tr.rq-flash>td{animation:rqFlash 2.4s ease-out;}
+.rq-nav{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:6px 12px;background:#fffbe6;border:1px solid #f0d36b;border-radius:6px;font-size:13px;}
+.rq-nav button{border:1px solid var(--trait);background:#fff;border-radius:4px;padding:2px 9px;cursor:pointer;font-size:12px;}
+.rq-nav button:hover{background:#eef2f8;}
+.rq-nav .rq-type{color:var(--gris);}
+.rq-nav .rq-fermer{margin-left:auto;}
 a.lt-clip{text-decoration:none;margin-left:3px;font-size:.95em;}
 .lt-aff{padding:4px 6px;border:1px solid transparent;border-radius:4px;cursor:text;min-height:1.4em;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
 .lt-aff:hover{border-color:var(--trait);}
@@ -4460,7 +4468,9 @@ function rendreListe(){
       '</div>';
   }).join("");
   el.querySelectorAll(".ligne-projet").forEach(d=>d.onclick=()=>{
-    ouvrirFiche(S.data.main.find(r=>r.id===Number(d.dataset.id)));
+    const pp=S.data.main.find(r=>r.id===Number(d.dataset.id));
+    if(rqTexte()){ rqOuvrir(pp); return; }
+    ouvrirFiche(pp);
   });
   rafraichirVueApp();
 }
@@ -6553,6 +6563,136 @@ document.addEventListener("focusout",e=>{
     aff.innerHTML=ltHtml(ta.value); aff.hidden=false; ta.classList.add("lt-cache");
   },0);
 });
+
+/* =======================================================================
+   Recherche par mot clé : la fiche s'ouvre sur l'action ou la tâche trouvée,
+   barre « 1 / n ◀ ▶ » pour passer de l'une à l'autre, mot clé surligné.
+   ======================================================================= */
+function rqTexte(){ const q=document.getElementById("q"); return q?q.value.trim():""; }
+function rqCibles(p){
+  const c=S.cfg, q=plierTexte(rqTexte()), out=[];
+  if(!q||!p) return out;
+  actionsDe(p).forEach(a=>{ if(plierTexte(lire(c.tblMain,a,c.colLibelle)).includes(q)) out.push({type:"A",id:a.id}); });
+  if(c.tblTache && c.colTacheLibelle){
+    const vues=new Set();
+    [p].concat(actionsDe(p)).forEach(x=>tachesDe(x).forEach(t=>{
+      if(vues.has(t.id)) return; vues.add(t.id);
+      if(plierTexte(lire(c.tblTache,t,c.colTacheLibelle)).includes(q)) out.push({type:"T",id:t.id});
+    }));
+  }
+  return out;
+}
+function rqOuvrir(p){
+  const l=rqCibles(p);
+  if(!l.length){ S.rqNav=null; ouvrirFiche(p); return; }
+  S.rqNav={pid:p.id,q:plierTexte(rqTexte()),liste:l,i:0};
+  ouvrirFiche(p,l[0].type==="A"?"actions":"taches");
+  rqAller();
+}
+function rqNavActive(){
+  const n=S.rqNav;
+  return !!(n && S.projetSel && n.pid===S.projetSel.id && n.q===plierTexte(rqTexte()) &&
+            (S.onglet==="actions"||S.onglet==="taches"));
+}
+function rqAller(){
+  setTimeout(()=>{
+    const n=S.rqNav; if(!n) return;
+    const x=n.liste[n.i];
+    const nav=document.getElementById("rq-nav"); if(nav) nav.remove();
+    rqSurligner();
+    const el=document.querySelector(x.type==="A"?'#corps tr.ligne-action[data-ouvrir-ligne="'+x.id+'"]':'#corps tr[data-tache="'+x.id+'"]');
+    if(!el){ toast((x.type==="A"?"Cette action":"Cette tâche")+" est masquée par les filtres de l'onglet.",true); return; }
+    el.scrollIntoView({block:"center",behavior:"smooth"});
+    el.classList.remove("rq-flash"); void el.offsetWidth; el.classList.add("rq-flash");
+  },80);
+}
+function rqDeplacer(d){
+  const n=S.rqNav; if(!n) return;
+  n.i=(n.i+d+n.liste.length)%n.liste.length;
+  const og=n.liste[n.i].type==="A"?"actions":"taches";
+  if(S.onglet!==og) ouvrirFiche(S.projetSel,og);
+  rqAller();
+}
+/* surligne q dans les nœuds texte de racine (hors champs de saisie et éditeurs) */
+function rqMarquer(racine,q){
+  const w=document.createTreeWalker(racine,NodeFilter.SHOW_TEXT,{acceptNode:n=>{
+    const e=n.parentNode;
+    if(!e||!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+    if(e.closest('script,style,textarea,input,select,option,svg,mark.rq,[contenteditable="true"],.rq-nav')) return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  const noeuds=[]; while(w.nextNode()) noeuds.push(w.currentNode);
+  noeuds.forEach(n=>{
+    const t=n.nodeValue; let f="", idx=[];
+    for(let i=0;i<t.length;i++){ const k=plierTexte(t[i]); for(let j=0;j<k.length;j++){ f+=k[j]; idx.push(i); } }
+    let pos=f.indexOf(q); if(pos<0) return;
+    const frag=document.createDocumentFragment(); let dern=0;
+    while(pos>=0){
+      const deb=idx[pos], fin=idx[pos+q.length-1]+1;
+      if(deb>=dern){
+        frag.appendChild(document.createTextNode(t.slice(dern,deb)));
+        const m=document.createElement("mark"); m.className="rq"; m.textContent=t.slice(deb,fin);
+        frag.appendChild(m); dern=fin;
+      }
+      pos=f.indexOf(q,pos+q.length);
+    }
+    frag.appendChild(document.createTextNode(t.slice(dern)));
+    n.replaceWith(frag);
+  });
+}
+let rqObs=null, rqEnCours=false, rqPlan=0;
+function rqSurligner(){
+  if(rqEnCours || typeof S==="undefined" || !S.cfg) return;
+  rqEnCours=true;
+  try{
+    const c=S.cfg, brut=rqTexte(), q=plierTexte(brut);
+    document.querySelectorAll("mark.rq").forEach(m=>{ const par=m.parentNode; m.replaceWith(document.createTextNode(m.textContent)); if(par) par.normalize(); });
+    const corps=document.getElementById("corps");
+    /* intitulés en saisie (textarea) : affichage surligné au repos, saisie au clic */
+    if(corps) corps.querySelectorAll("textarea.edit").forEach(ta=>{
+      const tache=ta.dataset.t===c.tblTache && ta.dataset.c===c.colTacheLibelle;
+      const intit=tache || (ta.dataset.t===c.tblMain && ta.dataset.c===c.colLibelle);
+      if(!intit || document.activeElement===ta) return;
+      const lien=tache && ltALien(ta.value), vise=!!q && plierTexte(tache?ltSansLien(ta.value):ta.value).includes(q);
+      let zone=ta.closest(".lt-zone"), aff=zone&&zone.querySelector(".lt-aff");
+      if(!vise && !lien){
+        if(aff){ aff.remove(); ta.classList.remove("lt-cache"); }
+        return;
+      }
+      if(!vise) return;
+      if(!zone){ zone=document.createElement("div"); zone.className="lt-zone"; ta.before(zone); zone.appendChild(ta); }
+      if(!aff){ aff=document.createElement("div"); aff.className="lt-aff"; zone.prepend(aff); }
+      aff.innerHTML=tache?ltHtml(ta.value):esc(ta.value); aff.hidden=false; ta.classList.add("lt-cache");
+    });
+    /* barre de navigation */
+    const nav=document.getElementById("rq-nav");
+    if(rqNavActive() && corps){
+      const n=S.rqNav;
+      if(!nav){
+        corps.insertAdjacentHTML("afterbegin",'<div id="rq-nav" class="rq-nav">🔍 « '+esc(brut)+' » : <b>'+(n.i+1)+' / '+n.liste.length+'</b>'+
+          '<button type="button" data-rq="-1" title="Précédent">◀</button><button type="button" data-rq="1" title="Suivant">▶</button>'+
+          '<span class="rq-type">'+(n.liste[n.i].type==="A"?"Action":"Tâche")+'</span>'+
+          '<button type="button" class="rq-fermer" data-rq="0" title="Fermer la navigation">✕</button></div>');
+        corps.querySelectorAll("#rq-nav [data-rq]").forEach(b=>b.onclick=()=>{
+          const d=Number(b.dataset.rq);
+          if(!d){ S.rqNav=null; const x=document.getElementById("rq-nav"); if(x) x.remove(); return; }
+          rqDeplacer(d);
+        });
+      }
+    }else if(nav) nav.remove();
+    if(q) ["zone-liste","liste","corps","entete"].forEach(id=>{ const r=document.getElementById(id); if(r) rqMarquer(r,q); });
+  }catch(e){ console.warn("Surbrillance : "+e.message); }
+  finally{ if(rqObs) rqObs.takeRecords(); rqEnCours=false; }
+}
+function rqDemarrer(){
+  if(rqObs || !window.MutationObserver) return;
+  rqObs=new MutationObserver(()=>{ if(rqEnCours) return; cancelAnimationFrame(rqPlan); rqPlan=requestAnimationFrame(rqSurligner); });
+  rqObs.observe(document.body,{childList:true,subtree:true});
+  const q=document.getElementById("q");
+  if(q) q.addEventListener("input",()=>{ cancelAnimationFrame(rqPlan); rqPlan=requestAnimationFrame(rqSurligner); });
+  document.addEventListener("focusout",e=>{ if(e.target&&e.target.tagName==="TEXTAREA") setTimeout(rqSurligner,20); });
+}
+if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",rqDemarrer); else rqDemarrer();
 
 /* Une ligne de tâche : poignée, chevron, champs, bulle, suppression. */
 function ligneTacheHtml(r,act,avecStatutT,nbColT){
@@ -17469,6 +17609,7 @@ function rendreListeApp(){
     if(E.ouverts.has(id)) E.ouverts.delete(id); else E.ouverts.add(id); rendreListeApp(); });
   z.querySelectorAll("tr[data-p]").forEach(tr=>tr.onclick=()=>{
     const p=S.data.main.find(r=>r.id===Number(tr.dataset.p));
+    if(!tr.dataset.a && !tr.classList.contains("et-tache") && rqTexte()){ rqOuvrir(p); return; }
     ouvrirFiche(p, tr.dataset.a?"actions":(tr.classList.contains("et-tache")?"taches":null));
   });
   brancherEditionsListe();
