@@ -5314,11 +5314,15 @@ function dansTranche(a,code){
   return true;
 }
 
-function barreFiltres(prefixe,etat,porteurs,total,affiches,menuId,libelleDate){
-  const actif = etat.porteur||etat.avct||etat.du||etat.au||etat.q||MENUS[menuId].sel.length;
+function barreFiltres(prefixe,etat,porteurs,total,affiches,menuId,libelleDate,axes){
+  const actif = etat.porteur||etat.avct||etat.du||etat.au||etat.q||etat.axe||MENUS[menuId].sel.length;
   return '<div class="barre-filtres">'+
     '<div class="msel" id="'+menuId+'"><button type="button" class="msel-btn"></button>'+
       '<div class="msel-pan" hidden></div></div>'+
+    ((axes&&axes.length)
+      ? '<select id="'+prefixe+'-axe"><option value="">Tous les axes</option>'+
+        axes.map(v=>'<option'+(etat.axe===v?" selected":"")+'>'+esc(v)+'</option>').join("")+
+        '<option value="__sans"'+(etat.axe==="__sans"?" selected":"")+'>Sans axe</option></select>' : '')+
     '<select id="'+prefixe+'-porteur"><option value="">Tous porteurs</option>'+
       porteurs.map(v=>'<option'+(etat.porteur===v?" selected":"")+'>'+esc(v)+'</option>').join("")+'</select>'+
     '<select id="'+prefixe+'-avct">'+
@@ -5338,6 +5342,8 @@ function barreFiltres(prefixe,etat,porteurs,total,affiches,menuId,libelleDate){
 function brancherFiltres(prefixe,etat,rendu,menuId){
   const po=$("#"+prefixe+"-porteur");
   if(po) po.onchange=()=>{ etat.porteur=po.value; rendu(); };
+  const ax=$("#"+prefixe+"-axe");
+  if(ax) ax.onchange=()=>{ etat.axe=ax.value; rendu(); };
   const av=$("#"+prefixe+"-avct");
   if(av) av.onchange=()=>{ etat.avct=av.value; rendu(); };
   const du=$("#"+prefixe+"-du");
@@ -5346,7 +5352,7 @@ function brancherFiltres(prefixe,etat,rendu,menuId){
   if(au) au.onchange=()=>{ etat.au=normaliserDateFR(au.value); rendu(); };
   const raz=$("#"+prefixe+"-raz");
   if(raz) raz.onclick=()=>{
-    etat.porteur=""; etat.avct=""; etat.du=""; etat.au=""; etat.q="";
+    etat.porteur=""; etat.avct=""; etat.du=""; etat.au=""; etat.q=""; etat.axe="";
     MENUS[menuId].sel=[];
     rendu();
   };
@@ -5363,6 +5369,16 @@ function menuActions(id,actions,rendu){
   return MENUS[id].sel;
 }
 
+/* filtre « axe » : la valeur choisie, ou « __sans » pour les lignes sans axe */
+function dansAxe(r,choix){
+  if(!choix) return true;
+  const a=(typeof axeDe==="function" && r) ? axeDe(r) : "";
+  return choix==="__sans" ? !a : a===choix;
+}
+function axesDe(lignes){
+  if(typeof axeOK!=="function" || !axeOK()) return [];
+  return [...new Set(lignes.map(r=>axeDe(r)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr",{numeric:true,sensitivity:"base"}));
+}
 function dansPlage(valeur,du,au){
   const d=dateFiltre(du), a=dateFiltre(au);
   if(d===null && a===null) return true;
@@ -6293,6 +6309,7 @@ function vueActions(p){
   const acts=toutes.filter(r=>{
     if(sel.length && !sel.includes(String(r.id))) return false;
     if(f.porteur && lire(t,r,c.colPorteur)!==f.porteur) return false;
+    if(!dansAxe(r,f.axe)) return false;
     if(!dansTranche(pct(r[c.colAvancement]),f.avct)) return false;
     if(!dansPlage(r[c.colEch],f.du,f.au)) return false;
     return true;
@@ -6300,7 +6317,7 @@ function vueActions(p){
 
   let html='<div class="barre-actions"><button class="btn" id="add-action">+ Ajouter une action</button>'+
     '<span style="color:var(--gris)">Les modifications sont enregistrées dans Grist à la sortie du champ.</span></div>'+
-    barreFiltres("fa",f,porteurs,toutes.length,acts.length,"m-fa-action","Échéance");
+    barreFiltres("fa",f,porteurs,toutes.length,acts.length,"m-fa-action","Échéance",axesDe(toutes));
   if(!acts.length){
     html+='<div class="carte"><div class="vide"><b>'+
       (toutes.length?"Aucune action ne correspond":"Aucune action pour ce projet")+'</b>'+
@@ -6393,7 +6410,7 @@ function vueTaches(p){
   }
   const f=S.fTaches;
   const sel=menuActions("m-ft-action",acts,()=>vueTaches(p));
-  const actionsVues=sel.length?acts.filter(a=>sel.includes(String(a.id))):acts;
+  const actionsVues=(sel.length?acts.filter(a=>sel.includes(String(a.id))):acts).filter(a=>dansAxe(a,f.axe));
   const toutesT=acts.reduce((n,a)=>n.concat(tachesDe(a)),[]);
   const porteurs=[...new Set(toutesT.map(r=>lire(c.tblTache,r,c.colTachePorteur)).filter(Boolean))]
     .sort((a,b)=>a.localeCompare(b,"fr"));
@@ -6408,12 +6425,12 @@ function vueTaches(p){
     }
     return true;
   };
-  const actif=!!(f.porteur||f.avct||f.du||f.au||f.q||sel.length);
+  const actif=!!(f.porteur||f.avct||f.du||f.au||f.q||f.axe||sel.length);
   const retenues=actionsVues.reduce((n,a)=>n+tachesDe(a).filter(filtre).length,0);
   const avecStatutT=!!c.colTacheStatut;
   const nbColT=avecStatutT?8:7;
 
-  let html=barreFiltres("ft",f,porteurs,toutesT.length,retenues,"m-ft-action","Échéance")
+  let html=barreFiltres("ft",f,porteurs,toutesT.length,retenues,"m-ft-action","Échéance",axesDe(acts))
     .replace('<div class="barre-filtres">','<div class="barre-filtres"><input type="search" id="ft-q" class="ft-q" placeholder="🔍 Rechercher une tâche…" value="'+esc(f.q||"")+'">');
   actionsVues.forEach(act=>{
     const ts=tachesDe(act).filter(filtre);
@@ -11849,6 +11866,7 @@ function actionsImpression(p){
   return toutes.filter(r=>{
     if(sel.length && !sel.includes(String(r.id))) return false;
     if(f.porteur && lire(t,r,c.colPorteur)!==f.porteur) return false;
+    if(!dansAxe(r,f.axe)) return false;
     if(!dansTranche(pct(r[c.colAvancement]),f.avct)) return false;
     if(!dansPlage(r[c.colEch],f.du,f.au)) return false;
     return true;
